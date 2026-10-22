@@ -16,7 +16,8 @@ SITE = 'https://' + DOMAIN + '/'
 NAME = CFG.get('site_name', 'Macro-Economic Monitor')
 OWNER = CFG.get('owner', 'Arian Mondal')
 DESC = ('Growth, inflation, jobs, poverty, public finances, trade and market prices for more than 200 economies, '
-        'explained in plain language, using official data from the World Bank and other public sources.')
+        'plus a Bangladesh monitor and a forecasting lab, explained in plain language, using official data from '
+        'the World Bank, Bangladesh Bank and other public sources.')
 ICON = ("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' "
         "font-size='90'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E")
 MINUS = '\u2212'
@@ -28,12 +29,15 @@ def read(name):
 
 
 def assemble(raw, seo):
-    js = read('app.js').replace('/*__EXT__*/', read('ext.js'))
+    bdjs = read('bd.js') if (SRC / 'bd.js').exists() else ''
+    js = read('app.js').replace('/*__EXT__*/', read('ext.js') + '\n' + bdjs)
     if '</script' in js.lower():
         raise SystemExit('The script contains </script, which would break the page.')
     css = read('styles.css') + '\n' + read('styles2.css')
     page = read('shell.html').replace('/*__CSS__*/', css).replace('/*__JS__*/', js)
     page = page.replace('/*__DATA__*/', raw.replace('</', '<\\/'))
+    bdm = ROOT / 'bd_models.json'
+    page = page.replace('/*__BD_DATA__*/', bdm.read_text(encoding='utf-8').replace('</', '<\\/') if bdm.exists() else 'null')
     if seo:
         page = page.replace('</title>', '</title>\n' + head_tags(), 1)
     return page
@@ -190,6 +194,9 @@ def main():
     og = next((p for p in (ROOT / 'assets' / 'og-image.png', ROOT / 'og-image.png') if p.exists()), None)
     if og:
         shutil.copy(og, pub / 'og-image.png')
+    for f in ['bd_catalog.json', 'bd_M.json', 'bd_Q.json', 'bd_CY.json', 'bd_FY.json']:
+        if (ROOT / f).exists():
+            shutil.copy(ROOT / f, pub / f)
     print('Built public/ with', len(codes), 'country pages and', len(urls), 'sitemap entries')
 
 

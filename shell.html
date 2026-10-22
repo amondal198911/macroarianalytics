@@ -22,6 +22,8 @@
     </button>
     <nav class="views" aria-label="Sections">
       <button type="button" data-go="overview">Overview</button>
+      <button type="button" data-go="bangladesh">Bangladesh</button>
+      <button type="button" data-go="lab">Forecast lab</button>
       <button type="button" data-go="countries">Countries</button>
       <button type="button" data-go="compare">Compare</button>
       <button type="button" data-go="explore">Explore</button>
@@ -112,6 +114,32 @@
   </div>
 
   <!-- ============ COUNTRIES ============ -->
+  <!-- ============ BANGLADESH ============ -->
+  <div class="view" id="v-bangladesh">
+    <div class="wrap">
+      <div class="page-head">
+        <h1>Bangladesh Monitor</h1>
+        <p class="lede">Prices, output, money, interest rates, the external sector, public finances and the capital market, grouped like Bangladesh Bank’s Weekly Selected Economic Indicators. Every figure is numbered and cites its source table.</p>
+        <p class="note" id="bd-vintage"></p>
+      </div>
+      <div class="bd-tabs" id="bd-tabs" role="tablist" aria-label="Sector groups"></div>
+      <div id="bd-body"></div>
+    </div>
+  </div>
+
+  <!-- ============ FORECAST LAB ============ -->
+  <div class="view" id="v-lab">
+    <div class="wrap">
+      <div class="page-head">
+        <h1>Forecast lab</h1>
+        <p class="lede">Time-series models, a structural VAR, a DSGE model and cross-country analysis, reported as journals expect: estimates with standard errors, test statistics and p-values, diagnostics, robustness and placebo checks, and out-of-sample accuracy.</p>
+        <p class="note" id="lab-est"></p>
+      </div>
+      <div class="bd-tabs" id="lab-tabs" role="tablist" aria-label="Forecast lab sections"></div>
+      <div id="lab-body"></div>
+    </div>
+  </div>
+
   <div class="view" id="v-countries">
   <div class="wrap">
     <div class="c-head">
@@ -482,7 +510,7 @@
 <footer class="foot">
   <div class="wrap foot-grid">
     <div class="foot-brand"><b>Macro&#8209;Economic Monitor</b><p>Owned by Arian Mondal. Official statistics on more than 200 economies, explained in plain language.</p><p class="note" id="foot-vintage"></p><p><a data-email href="#contact">Email Arian</a></p></div>
-    <nav aria-label="Explore the data"><h3>Explore</h3><button type="button" data-go="overview">Overview</button><button type="button" data-go="countries">Countries</button><button type="button" data-go="compare">Compare</button><button type="button" data-go="explore">Explore</button><button type="button" data-go="map">World map</button><button type="button" data-go="rankings">Rankings</button><button type="button" data-go="markets">Markets</button></nav>
+    <nav aria-label="Explore the data"><h3>Explore</h3><button type="button" data-go="overview">Overview</button><button type="button" data-go="bangladesh">Bangladesh</button><button type="button" data-go="lab">Forecast lab</button><button type="button" data-go="countries">Countries</button><button type="button" data-go="compare">Compare</button><button type="button" data-go="explore">Explore</button><button type="button" data-go="map">World map</button><button type="button" data-go="rankings">Rankings</button><button type="button" data-go="markets">Markets</button></nav>
     <nav aria-label="Learn"><h3>Learn</h3><button type="button" data-go="learn">Learn the indicators</button><button type="button" data-go="methods">Methods and notes</button><button type="button" data-go="methods" data-anchor="me-notes-h">Country notes</button><button type="button" data-go="methods" data-anchor="me-cite-h">How to cite</button><button type="button" data-go="methods" data-anchor="me-log-h">Update log</button></nav>
     <nav aria-label="About the site"><h3>About</h3><button type="button" data-go="about">About</button><button type="button" data-go="contact">Contact</button><button type="button" data-go="privacy">Privacy</button><button type="button" data-go="about" data-anchor="ab-disclaimer">Disclaimer</button></nav>
   </div>
@@ -508,6 +536,7 @@
 <div class="toast-wrap"><div class="toast" id="toast" role="status" aria-live="polite"></div></div>
 
 <script type="application/json" id="mm-data">/*__DATA__*/</script>
+<script type="application/json" id="bd-data">/*__BD_DATA__*/</script>
 <script>
 /*__JS__*/
 </script>

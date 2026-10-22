@@ -163,3 +163,67 @@ footer.foot{border-top:1px solid var(--line);margin-top:40px;background:var(--pa
 .contact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px;max-width:920px;margin-top:18px}
 .contact-grid .contact-card{margin-top:0;max-width:none}
 [data-email]{overflow-wrap:anywhere}
+
+/* ================= Bangladesh Monitor + Forecast lab ================= */
+.bd-tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:thin;padding:10px 2px;margin:4px 0 2px;position:sticky;top:var(--hdr,60px);z-index:6;background:var(--bg);box-shadow:0 1px 0 var(--line)}
+.bd-tabs button{flex:0 0 auto;border:1px solid var(--line);background:var(--paper);color:var(--ink-2);font:inherit;font-size:13.5px;font-weight:650;padding:8px 15px;border-radius:999px;cursor:pointer;transition:background .15s,color .15s}
+.bd-tabs button:hover{background:var(--hover)}
+.bd-tabs button[aria-selected="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.bd-sec{margin:20px 0 6px}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,470px),1fr));gap:14px;margin:12px 0}
+.fig{margin:0;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 14px 10px;display:flex;flex-direction:column;min-width:0;box-shadow:0 1px 0 rgba(14,28,43,.03)}
+.fig.wide{grid-column:1/-1}
+.fig figcaption{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 9px;margin:0 0 8px}
+.fig figcaption b{font-size:15.5px;color:var(--ink);font-weight:750;line-height:1.25}
+.fig-n{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--signal-ink);white-space:nowrap}
+.fig-sub{flex-basis:100%;font-size:12.5px;color:var(--muted);line-height:1.35}
+.fig .chart{width:100%;min-height:200px}
+.fig-foot{margin-top:8px;border-top:1px solid var(--grid);padding-top:7px;font-size:11.5px;color:var(--muted);line-height:1.5}
+.fig-foot p{margin:1px 0}
+.fig-foot i{font-style:italic;color:var(--ink-2);font-weight:600}
+.fig-act{display:flex;gap:6px;justify-content:flex-end;margin-top:6px}
+.fig-act:empty{display:none}
+.btn.sm{font-size:12px;padding:5px 11px;min-height:0}
+.mx-wrap{margin:16px 0}
+.mx-cap{font-weight:750;font-size:15px;margin:0 0 8px;color:var(--ink);display:flex;gap:9px;align-items:baseline;flex-wrap:wrap}
+.mx{width:100%;border-collapse:collapse;font-size:13px;background:var(--paper)}
+.mx th,.mx td{padding:7px 10px;border-bottom:1px solid var(--grid);text-align:left;vertical-align:top}
+.mx thead th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-2);font-weight:750;border-top:2px solid var(--ink);border-bottom:1px solid var(--ink);background:var(--panel);vertical-align:bottom}
+.mx tbody tr:last-child>*{border-bottom:2px solid var(--ink)}
+.mx .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mx .big{font-weight:800;font-size:14.5px;color:var(--ink)}
+.mx-l{display:block;font-weight:700;color:var(--ink)}
+.mx-s,.mx-u{display:block;font-size:11.5px;color:var(--muted);font-weight:500}
+.mx .up-good{color:#1F7A4D;font-weight:650}
+.mx .up-bad{color:var(--neg);font-weight:650}
+[data-theme="dark"] .mx .up-good{color:#5FD39A}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .mx .up-good{color:#5FD39A}}
+.mx tr.grp>th{background:var(--panel);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;padding-top:11px;border-bottom:1px solid var(--line)}
+.mx tr.hl>*{background:var(--pos-soft)}
+.mx tr.foot>*{font-size:12px;color:var(--ink-2);background:var(--panel)}
+.mx tr.gtop>*{border-top:1px solid var(--line)}
+.mx .cg{text-align:center;border-bottom:1px solid var(--line)}
+.mx td.best{font-weight:800;color:var(--ink)}
+.mx small.pi{display:block;font-size:11px;color:var(--muted);font-weight:500;white-space:nowrap}
+.mx td.rd{min-width:230px;color:var(--ink-2);font-size:12.5px;line-height:1.4}
+.mx td.muted{color:var(--muted)}
+.mx-note{font-size:11.5px;color:var(--muted);margin:7px 0 0;line-height:1.5}
+.rng{position:relative;display:block;width:96px;height:6px;border-radius:3px;background:linear-gradient(90deg,var(--pos-soft),var(--neg-soft));margin:7px 0 3px}
+.rng i{position:absolute;top:-3px;width:4px;height:12px;margin-left:-2px;background:var(--ink);border-radius:2px}
+.rng-l{display:flex;justify-content:space-between;width:96px;font-size:10px;color:var(--muted)}
+.spk{width:92px;height:24px;color:var(--ink-2);display:block}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;background:var(--chip);padding:2px 6px;border-radius:5px;white-space:nowrap;cursor:help}
+.refs ol{padding-left:24px;margin:6px 0 16px}
+.refs li{margin:7px 0;font-size:13.5px;line-height:1.55}
+.refs h3{margin:14px 0 4px}
+.cat .grow{flex:1 1 320px}
+.cat input[type=search]{width:100%}
+.cat-t tbody tr{cursor:pointer}
+.cat-t tbody tr:hover>*,.cat-t tbody tr:focus>*{background:var(--hover)}
+.cat-one{margin:18px 0 4px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px}
+.cat-one h3{margin:0 0 8px}
+.prov{display:grid;grid-template-columns:max-content 1fr;gap:5px 14px;font-size:13px;margin:0}
+.prov dt{color:var(--muted);font-weight:650}
+.prov dd{margin:0;word-break:break-word}
+#v-lab .formula p,#v-bangladesh .formula p{margin:4px 0}
+@media (max-width:640px){.mx{font-size:12.5px}.mx th,.mx td{padding:6px 8px}.fig{padding:12px 10px 8px}.fig figcaption b{font-size:14.5px}}

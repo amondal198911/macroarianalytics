@@ -1429,10 +1429,10 @@ async function saveCSV(filename, rows) {
 }
 
 /* ================= navigation ================= */
-const VIEWS = ['overview', 'countries', 'compare', 'explore', 'map', 'rankings', 'markets', 'learn', 'methods', 'about', 'contact', 'privacy'];
-const TITLES = { overview: 'Macro-Economic Monitor | by Arian Mondal', compare: 'Compare economies', explore: 'Explore relationships', map: 'World map', rankings: 'Rankings', markets: 'Markets', learn: 'Learn the indicators', methods: 'Methods and notes', about: 'About', contact: 'Contact', privacy: 'Privacy' };
+const VIEWS = ['overview', 'bangladesh', 'lab', 'countries', 'compare', 'explore', 'map', 'rankings', 'markets', 'learn', 'methods', 'about', 'contact', 'privacy'];
+const TITLES = { overview: 'Macro-Economic Monitor | by Arian Mondal', bangladesh: 'Bangladesh Monitor', lab: 'Forecast lab', compare: 'Compare economies', explore: 'Explore relationships', map: 'World map', rankings: 'Rankings', markets: 'Markets', learn: 'Learn the indicators', methods: 'Methods and notes', about: 'About', contact: 'Contact', privacy: 'Privacy' };
 const inited = {};
-const INIT = { compare: initCompare, explore: initExplore, map: initMap, rankings: initRank, markets: initMarkets, learn: initLearn, methods: initMethods, about: initAbout, contact: initContact, privacy: initPrivacy };
+const INIT = { bangladesh: initBD, lab: initLab, compare: initCompare, explore: initExplore, map: initMap, rankings: initRank, markets: initMarkets, learn: initLearn, methods: initMethods, about: initAbout, contact: initContact, privacy: initPrivacy };
 function go(view, opts) {
   opts = opts || {};
   if (!VIEWS.includes(view)) view = 'overview';
@@ -1454,6 +1454,7 @@ function go(view, opts) {
 }
 function route(hash) {
   const h = String(hash || '').replace(/^#/, '');
+  if (routeBD(h)) return;
   if (routeExt(h)) return;
   const m = /^country-([A-Za-z]{3})$/.exec(h);
   if (m && ECON[m[1].toUpperCase()]) return go('countries', { code: m[1].toUpperCase() });
