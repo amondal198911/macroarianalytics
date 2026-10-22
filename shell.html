@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Macro-Economic Monitor | by Arian Mondal</title>
+<meta name="description" content="Macro-Economic Monitor by Arian Mondal: growth, inflation, jobs, public finances, trade and market prices for more than 200 economies.">
+<script>try{var t=JSON.parse(localStorage.getItem('mm.theme'));if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&amp;display=swap">
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <button class="brand" type="button" data-go="overview" aria-label="Macro-Economic Monitor, go to overview">
+      <svg viewBox="0 0 34 22" aria-hidden="true" focusable="false"><path d="M1.5 12.5h5.2l2.6-6.4 3.4 12.4 3.6-15 3 9.2 2.3-3.2h6.6" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30.5" cy="9.5" r="2.6" fill="var(--signal)"/></svg>
+      <span class="brand-name">Macro&#8209;Economic Monitor<span class="brand-by">by Arian Mondal</span></span>
+    </button>
+    <nav class="views" aria-label="Sections">
+      <button type="button" data-go="overview">Overview</button>
+      <button type="button" data-go="countries">Countries</button>
+      <button type="button" data-go="compare">Compare</button>
+      <button type="button" data-go="explore">Explore</button>
+      <button type="button" data-go="map">World map</button>
+      <button type="button" data-go="rankings">Rankings</button>
+      <button type="button" data-go="markets">Markets</button>
+      <button type="button" data-go="learn">Learn</button>
+      <button type="button" data-go="methods">Methods</button>
+      <button type="button" data-go="about">About</button>
+    </nav>
+    <div class="top-actions">
+      <button class="tool" id="search-btn" type="button" aria-label="Search economies, indicators and pages" title="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></button>
+      <button class="theme-btn" id="theme-btn" type="button" aria-label="Switch to dark mode"></button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ============ OVERVIEW ============ -->
+  <div class="view" id="v-overview">
+    <div class="ticker" id="ticker" role="region" aria-label="Latest prices and world growth">
+      <div class="ticker-in"><div class="ticker-track" id="ticker-track"></div></div>
+      <button class="ticker-btn" id="ticker-btn" type="button" aria-label="Pause the price ticker"></button>
+    </div>
+    <section class="band" aria-labelledby="hero-title">
+      <div class="wrap band-in">
+        <div class="band-text">
+          <h1 id="hero-title">The world economy</h1>
+          <p class="lede" id="hero-lede"></p>
+          <div class="band-cta">
+            <button class="btn glow" type="button" data-go="countries">Explore a country</button>
+            <button class="btn ghost" type="button" data-go="explore">Watch the world move</button>
+          </div>
+        </div>
+        <figure class="dotmap" id="dotmap">
+          <div id="dotmap-svg"></div>
+          <div class="dot-tip" id="dot-tip" aria-hidden="true"></div>
+          <div class="dot-legend" id="dot-legend"></div>
+          <figcaption id="dotmap-cap"></figcaption>
+          <div class="dot-info" id="dot-info" aria-live="polite"></div>
+        </figure>
+      </div>
+      <div class="wrap band-foot"><dl class="vitals" id="vitals"></dl></div>
+    </section>
+    <div class="wrap">
+      <section class="block" aria-labelledby="pulse-h">
+        <div class="block-head"><div><h2 id="pulse-h">World growth</h2>
+          <p class="note">World real GDP growth each year; dips below zero are shaded red. World Bank aggregates weight economies by GDP at market exchange rates. The IMF’s headline world figure uses purchasing-power weights instead and usually comes out higher.</p></div></div>
+        <figure class="pulse" id="pulse">
+          <div id="pulse-svg"></div>
+          <div class="pulse-tip" id="pulse-tip" aria-hidden="true"></div>
+          <figcaption id="pulse-cap"></figcaption>
+        </figure>
+      </section>
+      <section class="block" aria-labelledby="in-h">
+        <div class="block-head"><div><h2 id="in-h">What the numbers say</h2><p class="note">Facts worked out from this release of the data. Tap a card to dig in.</p></div></div>
+        <div class="insights" id="insights"></div>
+      </section>
+      <section class="block" aria-labelledby="ov-mk-h">
+        <div class="block-head">
+          <div><h2 id="ov-mk-h">Markets now</h2><p class="note" id="mk-note"></p></div>
+          <button class="btn" type="button" data-go="markets">All market data</button>
+        </div>
+        <div class="mgrid" id="ov-markets"></div>
+      </section>
+
+      <section class="block" aria-labelledby="ht-h">
+        <div class="block-head">
+          <div>
+            <h2 id="ht-h">Major economies</h2>
+            <p class="note">The G20 economies, largest first, with the world and the euro area for comparison. Blue means growth or a surplus; red means contraction, a deficit, or pressure on prices and jobs. A small year shows an older figure. Tap a row to open that economy.</p>
+          </div>
+          <label class="field">Year <select id="ht-year"></select></label>
+        </div>
+        <div class="table-wrap"><table class="heat" id="heat"></table></div>
+      </section>
+
+      <section class="block" aria-labelledby="lead-title">
+        <div class="block-head"><div><h2 id="lead-title">Leaders and laggards</h2><p class="note" id="lead-note"></p></div></div>
+        <div class="leaders" id="leaders"></div>
+      </section>
+
+      <section class="block" aria-labelledby="rg-h">
+        <div class="block-head"><div><h2 id="rg-h">Regions</h2><p class="note">World Bank regions. The small line shows real GDP growth each year since 2000.</p></div></div>
+        <div class="table-wrap"><table id="regions"></table></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ============ COUNTRIES ============ -->
+  <div class="view" id="v-countries">
+  <div class="wrap">
+    <div class="c-head">
+      <div style="min-width:0">
+        <div class="c-title"><span class="flag" id="c-flag" aria-hidden="true"></span><h1 id="c-name"></h1></div>
+        <div class="c-meta" id="c-meta"></div>
+      </div>
+      <div class="c-actions">
+        <button class="switch" id="c-switch" type="button">Change economy <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+        <button class="btn" id="c-pin" type="button" aria-pressed="false">Pin</button>
+        <button class="btn" id="c-compare" type="button">Compare</button>
+        <button class="btn" id="c-share" type="button">Share</button>
+        <button class="btn" id="c-dl" type="button" data-dl hidden>Download data (CSV)</button>
+      </div>
+    </div>
+    <div class="quick chips" id="c-quick" aria-label="Pinned and popular economies"></div>
+    <p class="summary" id="c-summary"></p>
+    <div class="cnotes" id="c-notes" hidden></div>
+    <div class="ai" id="c-ai" hidden>
+      <button class="btn primary" id="c-ai-btn" type="button">Explain this economy</button>
+      <button class="btn" id="c-ai-stop" type="button" hidden>Stop</button>
+      <div class="ai-out" id="c-ai-out" aria-live="polite"></div>
+      <p class="ai-note" id="c-ai-note" hidden>Written by Claude from the figures on this page. It can make mistakes, so check it against the charts below.</p>
+    </div>
+    <div class="kpis" id="c-kpis"></div>
+    <section class="cranks" id="c-ranks" hidden></section>
+    <div class="range-bar">
+      <div class="sec-links" id="c-seclinks" aria-label="Jump to a section"></div>
+      <div class="controls" style="gap:8px"><label class="chip"><input type="checkbox" id="c-log"> Log scale for amounts</label>
+      <div class="seg" id="c-range" role="group" aria-label="Time range">
+        <button type="button" data-r="10">10 years</button><button type="button" data-r="25">25 years</button><button type="button" data-r="all">All</button>
+      </div></div>
+    </div>
+    <div id="c-sections"></div>
+  </div>
+  </div>
+
+  <!-- ============ COMPARE ============ -->
+  <div class="view" id="v-compare">
+  <div class="wrap">
+    <div class="page-head">
+      <h1>Compare economies</h1>
+      <p class="lede">Pick an indicator and up to eight economies, or start from one of the ready-made sets.</p>
+    </div>
+    <div class="panel pad" style="margin-top:18px">
+      <div class="controls">
+        <label class="field">Indicator <select id="cmp-ind"></select></label>
+        <div class="field">Time range
+          <div class="seg" id="cmp-range" role="group" aria-label="Time range">
+            <button type="button" data-r="10">10 years</button><button type="button" data-r="25">25 years</button><button type="button" data-r="all">All</button>
+          </div>
+        </div>
+      </div>
+      <div class="field" style="margin-top:12px">Scale
+          <div class="seg" id="cmp-scale" role="group" aria-label="Scale"><button type="button" data-s="lin">Normal</button><button type="button" data-s="log">Log</button><button type="button" data-s="trim">Trim extremes</button></div>
+        </div>
+      <div class="chips" id="cmp-chips" style="margin-top:14px"></div>
+      <div class="controls" style="margin-top:12px"><span class="note" style="margin:0">Ready-made sets:</span><div class="chips" id="cmp-presets"></div></div>
+      <p class="note" id="cmp-unit"></p>
+      <div class="chart tall" id="cmp-chart"></div>
+      <p class="chart-src" id="cmp-src"></p>
+      <p class="note" id="cmp-scale-note"></p>
+      <div class="controls" style="margin-top:10px"><button class="btn" id="cmp-share" type="button">Share this view</button><button class="btn" id="cmp-dl" type="button" data-dl hidden>Download image</button></div>
+    </div>
+    <section class="block">
+      <h2 id="cmp-tbl-title">Latest values</h2>
+      <div class="table-wrap" style="margin-top:12px"><table class="heat" id="cmp-table"></table></div>
+    </section>
+  </div>
+  </div>
+
+  <!-- ============ MAP ============ -->
+  <div class="view" id="v-map">
+  <div class="wrap">
+    <div class="page-head">
+      <h1>World map</h1>
+      <p class="lede">See how economies compare across the globe. Drag the slider to move through the years, or press Play to watch the story unfold.</p>
+    </div>
+    <div class="panel pad" style="margin-top:18px">
+      <div class="controls"><label class="field">Indicator <select id="map-ind"></select></label><button class="btn" id="map-share" type="button" style="align-self:flex-end">Share this view</button></div>
+      <div class="yearbar">
+        <button class="btn" id="map-play" type="button">Play</button>
+        <input type="range" id="map-year" aria-label="Year" step="1">
+        <output id="map-yr" for="map-year"></output>
+      </div>
+      <div class="mapbox" id="mapbox"><div class="maptip" id="maptip" aria-hidden="true"></div></div>
+      <div class="legend" id="map-legend"></div>
+      <div class="mapinfo" id="map-info"></div>
+      <p class="note" id="map-note"></p>
+    </div>
+    <div class="twocol" id="map-lists"></div>
+  </div>
+  </div>
+
+  <!-- ============ RANKINGS ============ -->
+  <div class="view" id="v-rankings">
+  <div class="wrap">
+    <div class="page-head">
+      <h1>Rankings</h1>
+      <p class="lede">Every economy, sorted by the indicator you choose. Tap a row to open that economy.</p>
+    </div>
+    <div class="panel pad" style="margin-top:18px">
+      <div class="controls">
+        <label class="field">Indicator <select id="rk-ind"></select></label>
+        <label class="field">Year <select id="rk-year"></select></label>
+        <label class="field">Region <select id="rk-region"></select></label>
+        <label class="field">Search <input type="search" id="rk-q" placeholder="Find an economy" autocomplete="off"></label>
+      </div>
+      <div class="controls" style="margin-top:12px">
+        <div class="seg" id="rk-sort" role="group" aria-label="Sort order"><button type="button" data-s="desc">Highest first</button><button type="button" data-s="asc">Lowest first</button></div>
+        <label class="chip"><input type="checkbox" id="rk-small"> Include economies under 1 million people</label>
+        <button class="btn" id="rk-share" type="button">Share this view</button>
+        <button class="btn" id="rk-dl" type="button" data-dl hidden>Download (CSV)</button>
+      </div>
+      <p class="note" id="rk-note"></p>
+    </div>
+    <div class="table-wrap" style="margin-top:14px"><table class="rank" id="rk-table"></table></div>
+  </div>
+  </div>
+
+  <!-- ============ MARKETS ============ -->
+  <div class="view" id="v-markets">
+  <div class="wrap">
+    <div class="page-head">
+      <h1>Markets</h1>
+      <p class="lede">Energy, gold, US interest rates and inflation, and the US dollar. Tap a price to see its history.</p>
+    </div>
+    <div class="mgrid" id="mk-tiles" style="margin-top:18px"></div>
+    <div class="panel pad" id="mk-panel" style="margin-top:14px">
+      <div class="block-head">
+        <div><h2 id="mk-title"></h2><p class="note" id="mk-desc"></p></div>
+        <div class="controls">
+          <label class="field" id="mk-cur-wrap" hidden>Currency <select id="mk-cur"></select></label>
+          <div class="seg" id="mk-range" role="group" aria-label="Time range">
+            <button type="button" data-r="1">1 year</button><button type="button" data-r="5">5 years</button><button type="button" data-r="20">20 years</button><button type="button" data-r="all">All</button>
+          </div>
+          <button class="btn" id="mk-share" type="button">Share</button>
+          <button class="btn" id="mk-img" type="button" data-dl hidden>Image</button>
+          <button class="btn" id="mk-dl" type="button" data-dl hidden>Download (CSV)</button>
+        </div>
+      </div>
+      <div class="chart tall" id="mk-chart"></div>
+      <p class="chart-src" id="mk-src"></p>
+    </div>
+    <section class="block">
+      <div class="block-head"><div><h2>The US dollar against other currencies</h2><p class="note">Units of each currency that one US dollar buys, monthly average. The changes show how each currency’s value moved against the dollar: a negative number means it weakened. Tap a row to see its chart.</p></div></div>
+      <div class="table-wrap"><table id="fx-table"></table></div>
+    </section>
+  </div>
+  </div>
+
+  <!-- ============ LEARN ============ -->
+  <div class="view" id="v-learn">
+  <div class="wrap">
+    <div class="page-head">
+      <h1>Learn the indicators</h1>
+      <p class="lede">What each number on this site means, in plain language, and why people watch it.</p>
+    </div>
+    <section class="block">
+      <h2>How to read the monitor</h2>
+      <ul class="tips prose">
+        <li>Blue means growth, a surplus or a healthy reading. Red means contraction, a deficit or strain. On the map and in tables, deeper colours are further from the middle.</li>
+        <li>Every figure carries its year. Official statistics take time to compile, so the latest year differs by country and indicator.</li>
+        <li>On country charts, the dashed grey line is the world average, so you can see whether an economy is doing better or worse than the world.</li>
+        <li>Annual figures come from the World Bank. Market prices are daily or monthly, so they are more recent.</li>
+        <li>Tap any economy’s name to open its profile, and pin the ones you follow so they stay one tap away.</li>
+      </ul>
+    </section>
+    <div id="learn-groups"></div>
+  </div>
+  </div>
+
+  <!-- ============ ABOUT ============ -->
+  <div class="view" id="v-about">
+  <div class="wrap">
+    <div class="page-head"><h1>About Macro&#8209;Economic Monitor</h1></div>
+    <div class="prose">
+      <div class="owner"><div class="mono" aria-hidden="true">AM</div><div><b>Arian Mondal</b><div class="note" style="margin:0">Owner. <a data-email href="#contact">Email Arian</a></div></div></div>
+      <p class="lede" style="font-size:18px;margin-top:16px">Macro‑Economic Monitor is an independent website owned by Arian Mondal. It brings together official statistics on growth, prices, jobs, public finances and trade for more than 200 economies, along with daily and monthly market prices, so anyone can see how the world economy is doing and understand what the numbers mean.</p>
+      <section class="block">
+        <h2>Where the data comes from</h2>
+        <ul class="sources">
+          <li><b>World Bank, World Development Indicators</b>: every annual country and regional figure. Licensed under Creative Commons Attribution 4.0 (CC BY 4.0).</li>
+          <li><b>U.S. Energy Information Administration</b>: Brent and WTI crude oil and Henry Hub natural gas prices. Public domain.</li>
+          <li><b>World Bank Commodity Price Data (the Pink Sheet)</b>: monthly gold prices. CC BY 4.0.</li>
+          <li><b>Federal Reserve</b>: the US 10-year Treasury yield (H.15) and US dollar exchange rates (H.10, via FRED). Public domain.</li>
+          <li><b>U.S. Bureau of Labor Statistics</b>: the US consumer price index, used for US inflation. Public domain.</li>
+        </ul>
+        <p class="note">The figures were gathered through DataHub’s open data packages, which mirror these sources.</p>
+      </section>
+      <section class="block">
+        <h2>How current it is</h2>
+        <p id="about-vintage"></p>
+        <p>Statistics agencies revise their numbers, sometimes by a lot. For decisions that matter, check the latest figures with the original source.</p>
+      </section>
+      <section class="block">
+        <h2>More about the site</h2>
+        <div class="controls" style="margin-top:10px"><button class="btn" type="button" data-go="methods">Methods and notes</button><button class="btn" type="button" data-go="contact">Contact</button><button class="btn" type="button" data-go="privacy">Privacy</button></div>
+      </section>
+      <section class="block" id="ab-disclaimer">
+        <h2>Disclaimer</h2>
+        <p>This website is for information and education only. It is not financial, investment or professional advice, and it comes with no warranty about the accuracy or completeness of the data.</p>
+      </section>
+    </div>
+  </div>
+  </div>
+
+  <!-- ============ EXPLORE ============ -->
+  <div class="view" id="v-explore">
+  <div class="wrap">
+    <div class="page-head">
+      <h1>Explore relationships</h1>
+      <p class="lede">Each bubble is an economy, sized by its population and coloured by region. Pick two indicators or a ready-made pair, then press Play to watch the world move.</p>
+    </div>
+    <div class="panel pad" style="margin-top:18px">
+      <div class="chips" id="ex-presets" aria-label="Ready-made pairs"></div>
+      <div class="controls" style="margin-top:14px">
+        <label class="field">Across (horizontal) <select id="ex-x"></select></label>
+        <label class="field">Up (vertical) <select id="ex-y"></select></label>
+        <div class="field">Scale
+          <div class="controls" style="gap:8px"><label class="chip"><input type="checkbox" id="ex-logx"> Log across</label><label class="chip"><input type="checkbox" id="ex-logy"> Log up</label></div>
+        </div>
+      </div>
+      <div class="yearbar">
+        <button class="btn" id="ex-play" type="button">Play</button>
+        <input type="range" id="ex-year" aria-label="Year" step="1">
+        <output id="ex-yr" for="ex-year"></output>
+      </div>
+      <div class="chart xl" id="ex-chart"></div>
+      <div class="legend" id="ex-legend"></div>
+      <p class="note" id="ex-note"></p>
+      <div class="controls" style="margin-top:12px"><button class="btn" id="ex-share" type="button">Share this view</button><button class="btn" id="ex-dl" type="button" data-dl hidden>Download image</button></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- ============ METHODS ============ -->
+  <div class="view" id="v-methods">
+  <div class="wrap">
+    <div class="page-head">
+      <h1>Methods and notes</h1>
+      <p class="lede">How the numbers on this site are gathered, calculated and checked, so you can judge how far to rely on them.</p>
+    </div>
+    <div class="prose methods">
+      <section class="block">
+        <h2>Where the numbers come from</h2>
+        <p>Annual figures for every economy, region and income group come from the World Bank’s World Development Indicators. Market prices come from the U.S. Energy Information Administration (oil and gas), the World Bank’s commodity price data (gold), the Federal Reserve (the US 10-year yield and exchange rates) and the U.S. Bureau of Labor Statistics (US consumer prices). For this release they were collected through DataHub’s open-data copies of those sources, then checked as described below.</p>
+      </section>
+      <section class="block">
+        <h2>How figures are calculated</h2>
+        <p>Most figures are shown exactly as published. These are worked out on this site:</p>
+        <p class="formula"><b>Current account, foreign direct investment and remittances, % of GDP</b><br>value in US dollars ÷ GDP in US dollars × 100, for the same year</p>
+        <p class="formula"><b>Currency change against the US dollar</b><br>(last year’s average rate ÷ this year’s average rate − 1) × 100, with rates in local currency per dollar. A negative number means the currency weakened. For euro-area members, rates from before they joined are converted to euros at the official fixed conversion rates, so their series run smoothly. Any year in which a currency changes unit, such as a redenomination or a switch to the US dollar, is left blank.</p>
+        <p class="formula"><b>US inflation, monthly</b><br>consumer price index this month ÷ the same month a year earlier − 1. October 2025 is blank because the source data has no index for that month.</p>
+        <p>GDP is shown in US dollars at current prices and population in millions. World and regional figures are the World Bank’s own aggregates. For growth, the World Bank weights economies by GDP at market exchange rates. The IMF’s headline world growth uses purchasing-power (PPP) weights instead, which give fast-growing emerging economies more weight, so its figure is usually higher.</p>
+      </section>
+      <section class="block">
+        <h2>Rounding, gaps and older figures</h2>
+        <p>Percentages are stored to two decimal places and shown to one. Missing years are left blank, never estimated. There are two labelled exceptions: tables can show a figure up to two years older, marked with a small year such as ’24, and survey-based poverty and inequality figures use each economy’s latest survey from the previous five years on maps, rankings and Explore.</p>
+      </section>
+      <section class="block">
+        <h2>Colours</h2>
+        <p>Maps and tables group values into seven bands chosen for each indicator. Blue means growth, a surplus or a healthy reading; red means contraction, a deficit or strain; for amounts such as GDP, darker means larger. The bands are shown in each map’s legend.</p>
+      </section>
+      <section class="block">
+        <h2 id="me-notes-h">Country notes</h2>
+        <p><b>Fiscal years.</b> The World Bank records national accounts for these economies by fiscal year rather than calendar year: <span id="me-fy"></span></p>
+        <p><b>Older growth figures.</b> Economies of 1 million people or more whose latest World Bank growth figure is three or more years old (latest year in brackets): <span id="me-stale"></span></p>
+        <p><b>Jobs figures.</b> Unemployment and labour-force figures are ILO modelled estimates. They make countries comparable but can differ from national surveys. Where most work is informal, unemployment says less about hardship than it does elsewhere.</p>
+        <p><b>Government debt</b> covers the central government only, and only about 40 economies report it in recent years.</p>
+      </section>
+      <section class="block">
+        <h2>Automated checks for this release</h2>
+        <p id="me-checks"></p>
+        <p class="note">The values furthest outside their expected range:</p>
+        <div class="table-wrap" style="margin-top:8px"><table id="me-flags"></table></div>
+      </section>
+      <section class="block">
+        <h2 id="me-cite-h">How to cite</h2>
+        <div class="cite" id="me-cite"></div>
+        <div class="controls" style="margin-top:10px"><button class="btn" id="me-cite-btn" type="button">Copy citation</button></div>
+        <p class="note">Please credit the original sources too. World Bank data is licensed under CC BY 4.0, which requires attribution.</p>
+      </section>
+      <section class="block">
+        <h2>Download everything</h2>
+        <p>Every annual value on this site, in one CSV file with one row per economy, indicator and year.</p>
+        <div class="controls"><button class="btn primary" id="me-dl" type="button" data-dl hidden>Download all data (CSV)</button></div>
+        <p class="note">Downloads work in Claude and on the site’s own web address.</p>
+      </section>
+      <section class="block">
+        <h2 id="me-log-h">Update log</h2>
+        <ul class="log">
+          <li><b>Version 1.2, 22 October 2026</b>Added an email address to the Contact page. Prepared the site for its own web address, with a summary page for every economy, a sitemap for search engines, ordinary downloads outside Claude and an automatic daily data update.</li>
+          <li><b>Version 1.1, 22 October 2026</b>Added Explore, an animated bubble chart with trend lines; poverty, inequality, youth unemployment, labour-force and debt-service figures; log and trimmed chart scales; chart images and data tables; links to share any view; site search; country notes; and methods, contact and privacy pages. Redesigned the home page with a price ticker, a dot map of world growth and data insights.</li>
+          <li><b>Version 1.0, 21 October 2026</b>First release: 217 economies and 15 groups, 28 indicators from 1960 to 2025, market prices, a world map, rankings and comparisons.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+  </div>
+
+  <!-- ============ CONTACT ============ -->
+  <div class="view" id="v-contact">
+  <div class="wrap">
+    <div class="page-head">
+      <h1>Contact</h1>
+      <p class="lede">Questions, corrections or ideas for Macro‑Economic Monitor? Arian would like to hear them.</p>
+    </div>
+    <div class="contact-grid">
+      <div class="contact-card">
+        <h2>Email Arian</h2>
+        <p style="margin:0">Write to <a data-email id="ct-email" href="#contact">the site’s email address</a>. If you’re reporting a data problem, please include the economy, the indicator and the year.</p>
+        <div class="controls"><a class="btn primary" data-email-btn href="#contact">Write an email</a><button class="btn" id="ct-copy" type="button">Copy the address</button></div>
+      </div>
+      <div class="contact-card" id="ct-target" hidden>
+        <h2>Leave a comment</h2>
+        <p id="ct-avail" style="margin:0"></p>
+        <button class="btn" id="ct-btn" type="button">Leave a comment</button>
+      </div>
+    </div>
+    <section class="block prose">
+      <h2>Reporting a data error</h2>
+      <p>Tell us the economy, the indicator and the year, and what you expected to see. If the error is in the original statistics, you can also contact the publisher directly:</p>
+      <ul class="sources">
+        <li><a href="https://datahelpdesk.worldbank.org" target="_blank" rel="noopener">World Bank Data Help Desk</a></li>
+        <li><a href="https://www.eia.gov" target="_blank" rel="noopener">U.S. Energy Information Administration</a></li>
+        <li><a href="https://www.federalreserve.gov" target="_blank" rel="noopener">Federal Reserve</a></li>
+        <li><a href="https://www.bls.gov" target="_blank" rel="noopener">U.S. Bureau of Labor Statistics</a></li>
+      </ul>
+    </section>
+  </div>
+  </div>
+
+  <!-- ============ PRIVACY ============ -->
+  <div class="view" id="v-privacy">
+  <div class="wrap">
+    <div class="page-head">
+      <h1>Privacy</h1>
+      <p class="lede">The short version: this site doesn’t track you or show ads, and it sets no cookies of its own.</p>
+    </div>
+    <div class="prose">
+      <section class="block">
+        <h2>What is saved on your device</h2>
+        <p>To remember your choices, the site keeps a few settings in your browser’s local storage: light or dark mode, pinned economies, the last economy you viewed, your comparison set, your chart range and log-scale choice, and whether the price ticker is paused. They stay on your device.</p>
+        <div class="controls"><button class="btn" id="pv-clear" type="button">Clear my saved settings</button></div>
+      </section>
+      <section class="block">
+        <h2>What the site sends</h2>
+        <p>The site itself sends no personal data anywhere. Like most web pages, it loads its typeface from Google Fonts and its chart library from cdnjs or jsDelivr, so those services receive an ordinary web request from your device.</p>
+      </section>
+      <section class="block">
+        <h2>Optional features in Claude</h2>
+        <p>When you open the site in Claude, three extra features may appear. Explain this economy sends that economy’s figures from this page to Claude on your own Claude account, only after you press the button and agree. Downloads create files in your browser and save them only if you confirm. Comments you leave are stored with this page on claude.ai.</p>
+      </section>
+      <section class="block">
+        <h2>Email</h2>
+        <p>If you email Arian, your message and email address arrive in Arian’s inbox like any other email.</p>
+      </section>
+      <section class="block">
+        <h2>Hosting</h2>
+        <p>The site is hosted on claude.ai, so Anthropic’s privacy policy covers that platform. For questions about this site, use the Contact page.</p>
+      </section>
+    </div>
+  </div>
+  </div>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-grid">
+    <div class="foot-brand"><b>Macro&#8209;Economic Monitor</b><p>Owned by Arian Mondal. Official statistics on more than 200 economies, explained in plain language.</p><p class="note" id="foot-vintage"></p><p><a data-email href="#contact">Email Arian</a></p></div>
+    <nav aria-label="Explore the data"><h3>Explore</h3><button type="button" data-go="overview">Overview</button><button type="button" data-go="countries">Countries</button><button type="button" data-go="compare">Compare</button><button type="button" data-go="explore">Explore</button><button type="button" data-go="map">World map</button><button type="button" data-go="rankings">Rankings</button><button type="button" data-go="markets">Markets</button></nav>
+    <nav aria-label="Learn"><h3>Learn</h3><button type="button" data-go="learn">Learn the indicators</button><button type="button" data-go="methods">Methods and notes</button><button type="button" data-go="methods" data-anchor="me-notes-h">Country notes</button><button type="button" data-go="methods" data-anchor="me-cite-h">How to cite</button><button type="button" data-go="methods" data-anchor="me-log-h">Update log</button></nav>
+    <nav aria-label="About the site"><h3>About</h3><button type="button" data-go="about">About</button><button type="button" data-go="contact">Contact</button><button type="button" data-go="privacy">Privacy</button><button type="button" data-go="about" data-anchor="ab-disclaimer">Disclaimer</button></nav>
+  </div>
+  <div class="wrap foot-legal">© 2026 Arian Mondal. All rights reserved. Data: World Bank (CC BY 4.0), U.S. Energy Information Administration, Federal Reserve, U.S. Bureau of Labor Statistics. For information only, not investment advice.</div>
+</footer>
+
+<div class="sheet" id="picker" role="dialog" aria-modal="true" aria-labelledby="picker-title" hidden>
+  <div class="sheet-card">
+    <div class="sheet-head"><h2 id="picker-title">Choose an economy</h2><button class="icon-btn" id="picker-close" type="button" aria-label="Close">×</button></div>
+    <input type="search" id="picker-q" placeholder="Search by name, for example Bangladesh" autocomplete="off" aria-label="Search economies">
+    <div class="plist" id="picker-list"></div>
+  </div>
+</div>
+
+<div class="sheet" id="share-sheet" role="dialog" aria-modal="true" aria-labelledby="share-title" hidden>
+  <div class="sheet-card small">
+    <div class="sheet-head"><h2 id="share-title">Share this view</h2><button class="icon-btn" id="share-close" type="button" aria-label="Close">×</button></div>
+    <p class="note" id="share-what" style="margin:0 16px 8px"></p>
+    <input type="text" id="share-url" readonly aria-label="Link to this view">
+    <p class="note" style="margin:0 16px 16px">Copy this link. It opens the site at exactly this view.</p>
+  </div>
+</div>
+<div class="toast-wrap"><div class="toast" id="toast" role="status" aria-live="polite"></div></div>
+
+<script type="application/json" id="mm-data">/*__DATA__*/</script>
+<script>
+/*__JS__*/
+</script>
+</body>
+</html>
