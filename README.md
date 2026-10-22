@@ -1,4 +1,4 @@
-# Macro-Economic Monitor
+# Macroeconomic Monitor
 
 Website owned by Arian Mondal: growth, inflation, jobs, poverty, public finances, trade and market prices
 for more than 200 economies, built from open official data.
