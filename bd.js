@@ -1,6 +1,7 @@
 /* ================= Bangladesh Monitor + Forecast lab ================= */
 const BDX = (() => {
 const BD = (() => { try { const n = document.getElementById('bd-data'); return n ? JSON.parse(n.textContent) : null; } catch (e) { return null; } })();
+const ALLOW_DL = false; // downloads switched off site-wide
 const pad2 = n => String(n).padStart(2, '0');
 const bdLab = (f, k) => f === 'M' ? Math.floor(k / 12) + '-' + pad2(k % 12 + 1) : f === 'Q' ? Math.floor(k / 4) + '-Q' + (k % 4 + 1) : f === 'FY' ? 'FY' + k : String(k);
 const mLabAdd = (lab, n) => { const k = +lab.slice(0, 4) * 12 + (+lab.slice(5, 7)) - 1 + n; return bdLab('M', k); };
@@ -82,6 +83,15 @@ function tsOption(TH, labels, series, o) {
       data: evs.map(e => [{ name: e[3], xAxis: e[1] }, { xAxis: labels.includes(e[2]) ? e[2] : labels[labels.length - 1] }]) };
   }
   if (o.marks && series[0]) series[0].markLine = { silent: true, symbol: 'none', label: { color: TH.muted, fontSize: 10, position: 'insideEndTop', formatter: p => p.name || '' }, lineStyle: { color: TH.muted, type: 'dashed', width: 1 }, data: o.marks };
+  if (o.warn) o.warn.forEach(w => {
+    const sr = series[w.s];
+    if (!sr || !Array.isArray(sr.data)) return;
+    const vv = d => d == null ? null : typeof d === 'object' ? (Array.isArray(d) ? d[1] : d.value) : d;
+    let i = sr.data.length - 1;
+    while (i >= 0 && vv(sr.data[i]) == null) i--;
+    if (i < 0 || !w.test(vv(sr.data[i]))) return;
+    series.push(warnPoint(labels[i], vv(sr.data[i]), w.label, sr.yAxisIndex || 0));
+  });
   const pal = o.pal || TH.pal;
   let anyEnd = false;
   series.forEach((s, k) => {
@@ -124,23 +134,28 @@ function S(name, data, o) {
   if (o.stack) s.stack = o.stack;
   return s;
 }
+function blinkOn() { return !RM && !document.documentElement.classList.contains('no-blink'); }
+function warnPoint(x, y, label, ax) {
+  return { name: 'Warning', type: blinkOn() ? 'effectScatter' : 'scatter', data: [[x, y]], yAxisIndex: ax, symbolSize: 10, z: 6, silent: true, tooltip: { show: false },
+    rippleEffect: { brushType: 'stroke', scale: 3.4, period: 2.2 }, itemStyle: { color: BADC }, label: { show: true, position: 'top', distance: 8, formatter: '⚠ ' + label, color: BADC, fontSize: 10.5, fontWeight: 800 } };
+}
 function signBars(vals, TH) { return vals.map(v => v == null ? null : { value: v, itemStyle: { color: v >= 0 ? TH.pos : TH.neg } }); }
 function bandSeries(name, lo, hi, color, op, stack) {
   return [{ name: name + ' lower', type: 'line', data: lo, stack, lineStyle: { opacity: 0 }, showSymbol: false, silent: true, tooltip: { show: false }, legendHoverLink: false, z: 1 },
     { name, type: 'line', data: hi.map((h, i) => h == null || lo[i] == null ? null : h - lo[i]), stack, lineStyle: { opacity: 0 }, showSymbol: false, itemStyle: { color, opacity: Math.min(1, op * 2.5) }, areaStyle: { color, opacity: op }, silent: true, tooltip: { show: false }, z: 1 }];
 }
 function figure(host, o) {
-  FIGN++;
+  if (o.num !== false) FIGN++;
   const f = document.createElement('figure');
   f.className = 'fig' + (o.wide ? ' wide' : '');
-  f.innerHTML = '<figcaption><span class="fig-n">Figure ' + (o.prefix || 'B') + FIGN + '</span><b>' + esc(o.title) + '</b>' + (o.sub ? '<span class="fig-sub">' + esc(o.sub) + '</span>' : '') + '</figcaption>' +
+  f.innerHTML = '<figcaption>' + (o.num === false ? (o.badge ? '<span class="fig-n">' + esc(o.badge) + '</span>' : '') : '<span class="fig-n">Figure ' + (o.prefix || 'B') + FIGN + '</span>') + '<b>' + esc(o.title) + '</b>' + (o.sub ? '<span class="fig-sub">' + esc(o.sub) + '</span>' : '') + '</figcaption>' +
     '<div class="chart" style="height:' + (o.h || 300) + 'px" role="img" aria-label="' + esc(o.title + (o.sub ? '. ' + o.sub : '')) + '"></div>' +
     '<div class="fig-foot">' + (o.notes ? '<p><i>Notes:</i> ' + esc(o.notes) + '</p>' : '') + (o.source ? '<p><i>Source:</i> ' + esc(o.source) + '</p>' : '') + '<div class="fig-act"></div></div>';
   host.append(f);
   const node = f.querySelector('.chart');
   chartOn(node, o.render);
   const act = f.querySelector('.fig-act');
-  if (STANDALONE) {
+  if (ALLOW_DL && STANDALONE) {
     act.append(smallBtn('Image', () => {
       const r = charts.get(node);
       if (!r || !r.inst) return;
@@ -163,11 +178,15 @@ function sec(host, title, lede, id) {
   return s;
 }
 function grid(host) { const g = document.createElement('div'); g.className = 'figs'; host.append(g); return g; }
-function tableWrap(host, html, cap, note) {
+let TSRC = 'Bangladesh Bank, Monthly Economic Trends and National Summary Data Page (NSDP); author’s calculations.';
+function tableWrap(host, html, cap, note, opt) {
   const d = document.createElement('div');
   d.className = 'mx-wrap';
-  d.innerHTML = (cap ? '<div class="mx-cap">' + cap + '</div>' : '') + '<div class="table-wrap"><table class="mx">' + html + '</table></div>' + (note ? '<p class="mx-note">' + note + '</p>' : '');
+  const hasSrc = /Source:/.test(note || '');
+  d.innerHTML = (cap ? '<div class="mx-cap">' + cap + '</div>' : '') + '<div class="table-wrap"><table class="mx">' + html + '</table></div>' + (note ? '<p class="mx-note">' + note + '</p>' : '') +
+    (hasSrc ? '' : '<p class="src-line"><b>Source:</b> ' + esc(TSRC) + '</p>');
   host.append(d);
+  pillify(d.querySelector('table'), opt || {});
   return d;
 }
 let TABN = 0;
@@ -194,8 +213,9 @@ function chg(unit, a, b, dir) {
   return '<td class="num ' + good + '">' + (d > 0 ? '▲ ' : d < 0 ? '▼ ' : '') + txt + '</td>';
 }
 function matrix(host, keys, caption, groupBy) {
-  let html = '<thead><tr><th scope="col">Indicator</th><th scope="col">Period</th><th scope="col" class="num">Latest</th><th scope="col" class="num">Previous</th><th scope="col" class="num">Change</th>' +
-    '<th scope="col" class="num">Year ago</th><th scope="col" class="num">Change on year</th><th scope="col" class="num">12-period average</th><th scope="col">Position in history</th><th scope="col">Trend</th><th scope="col">Source</th></tr></thead><tbody>';
+  const H = (t, full, num) => '<th scope="col"' + (num ? ' class="num"' : '') + ' title="' + full + '">' + t + '</th>';
+  let html = '<thead><tr>' + H('Indicator', 'Indicator and unit') + H('Period', 'Latest period') + H('Latest', 'Latest value', 1) + H('Prev.', 'Previous period', 1) + H('Chg', 'Change on the previous period', 1) +
+    H('Yr ago', 'Same period a year earlier', 1) + H('Chg y/y', 'Change on a year earlier', 1) + H('Avg 12', 'Average of the last 12 periods', 1) + H('Range', 'Latest value within its full history, minimum to maximum') + H('Trend', 'Recent trend') + H('Source', 'Series code; hover for the full source') + '</tr></thead><tbody>';
   let lastChunk = null;
   keys.forEach(k => {
     const s = SER(k);
@@ -208,25 +228,27 @@ function matrix(host, keys, caption, groupBy) {
     const dir = DIR[k] || 0;
     const pct = r.pct == null ? null : Math.max(0, Math.min(100, r.pct));
     html += '<tr><th scope="row"><span class="mx-l">' + esc(s.label) + '</span>' + (s.sub ? '<span class="mx-s">' + esc(s.sub) + '</span>' : '') + '<span class="mx-u">' + esc(s.unit) + '</span></th>' +
-      '<td>' + esc(r.period) + '</td><td class="num big">' + fv(s.unit, r.v) + '</td><td class="num">' + fv(s.unit, r.prev) + '</td>' + chg(s.unit, r.v, r.prev, dir) +
+      '<td>' + esc(r.period) + '</td><td class="num big"' + (pct == null ? '' : ' data-pct="' + pct + '"') + '>' + fv(s.unit, r.v) + '</td><td class="num">' + fv(s.unit, r.prev) + '</td>' + chg(s.unit, r.v, r.prev, dir) +
       '<td class="num">' + fv(s.unit, r.ya) + '</td>' + chg(s.unit, r.v, r.ya, dir) + '<td class="num">' + fv(s.unit, r.avg) + '</td>' +
       '<td class="rngc">' + (pct == null ? '' : '<span class="rng" title="Percentile ' + nf(pct, 0) + ' of ' + r.n + ' observations"><i style="left:' + pct + '%"></i></span><span class="rng-l"><small>' + fv(s.unit, r.min) + '</small><small>' + fv(s.unit, r.max) + '</small></span>') + '</td>' +
       '<td class="spkc">' + spark(k) + '</td><td class="srcc"><span class="code" title="' + esc(srcKeys([k], s.how !== 'raw')) + '">' + esc((s.src[0] || {}).code || '') + (s.src.length > 1 ? ' +' + (s.src.length - 1) : '') + '</span></td></tr>';
   });
   html += '</tbody>';
-  return tableWrap(host, html, caption, '▲▼ show the direction of change; green means a favourable move and red an unfavourable one (no colour where there is no clear “good” direction). “Position in history” marks the latest value within its full range; hover a code for its full source.');
+  return tableWrap(host, html, caption, '▲▼ show the direction of change; green means a favourable move and red an unfavourable one (no colour where there is no clear “good” direction). “Range” marks the latest value within its full history, from minimum to maximum; hover a heading for its full name and a code for its full source.');
 }
 function modelMatrix(host, keys, caption) {
   const rows = keys.map(k => BD.arima[k]).filter(Boolean);
   if (!rows.length) return;
-  let html = '<thead><tr><th scope="col">Variable</th><th scope="col">Model (AIC-selected)</th><th scope="col" class="num">Latest</th><th scope="col" class="num">+1 month</th><th scope="col" class="num">+6 months</th><th scope="col" class="num">+12 months</th>' +
-    '<th scope="col" class="num">Skill vs naive, 1m</th><th scope="col" class="num">Skill vs naive, 12m</th><th scope="col" class="num">DM p (1m)</th><th scope="col" class="num">Ljung–Box p (12)</th><th scope="col">Reading</th></tr></thead><tbody>';
+  const H = (t, full, num) => '<th scope="col"' + (num ? ' class="num"' : '') + ' title="' + full + '">' + t + '</th>';
+  let html = '<thead><tr>' + H('Variable', 'Variable and unit') + H('Model', 'Model chosen by the Akaike information criterion') + H('Latest', 'Latest value', 1) + H('+1m', 'Forecast 1 month ahead (80% interval)', 1) + H('+6m', 'Forecast 6 months ahead (80% interval)', 1) + H('+12m', 'Forecast 12 months ahead (80% interval)', 1) +
+    H('Skill 1m', 'Skill against a naive forecast, 1 month ahead', 1) + H('Skill 12m', 'Skill against a naive forecast, 12 months ahead', 1) + H('DM p', 'Diebold–Mariano p-value, 1 month ahead', 1) + H('LB p', 'Ljung–Box p-value, 12 lags', 1) + H('Reading', 'Plain-language reading') + '</tr></thead><tbody>';
   rows.forEach(a => {
     const u = a.unit, last = a.hist.v[a.hist.v.length - 1];
     const b80 = a.bands['80'];
     const cell = i => '<td class="num"><b>' + fv(u, a.fc[i]) + '</b><small class="pi">' + fv(u, b80[0][i]) + ' to ' + fv(u, b80[1][i]) + '</small></td>';
     const bt = h => (a.backtest.find(r => r.h === h) || {});
     const sk = h => { const v = bt(h).skill; return v == null ? '–' : (v > 0 ? '+' : '') + nf(v * 100, 0) + '%'; };
+    const skc = h => { const v = bt(h).skill; return v == null ? '' : v > 0.02 ? ' up-good' : v < -0.02 ? ' up-bad' : ''; };
     const lb = (a.ljungbox.find(l => l.lag === 12) || {}).p;
     const d12 = a.fc[11] - last;
     const rel = Math.abs(d12) / (Math.abs(last) || 1);
@@ -236,7 +258,7 @@ function modelMatrix(host, keys, caption) {
     if (s12 != null && s12 <= 0) read += ', or at 12 months, so treat the path as indicative';
     if (lb != null && lb < 0.05) read += '. Residual autocorrelation remains: interpret with caution';
     html += '<tr><th scope="row"><span class="mx-l">' + esc(a.label) + '</span><span class="mx-u">' + esc(u) + '</span></th><td>' + esc(a.spec) + '</td><td class="num">' + fv(u, last) + '</td>' + cell(0) + cell(5) + cell(11) +
-      '<td class="num">' + sk(1) + '</td><td class="num">' + sk(12) + '</td><td class="num">' + fp(bt(1).dm_p) + '</td><td class="num' + (lb != null && lb < 0.05 ? ' up-bad' : '') + '">' + fp(lb) + '</td><td class="rd">' + esc(read) + '.</td></tr>';
+      '<td class="num' + skc(1) + '">' + sk(1) + '</td><td class="num' + skc(12) + '">' + sk(12) + '</td><td class="num">' + fp(bt(1).dm_p) + '</td><td class="num' + (lb != null && lb < 0.05 ? ' up-bad' : '') + '">' + fp(lb) + '</td><td class="rd">' + (/caution|no better/.test(read) ? '<span class="warn-ico" aria-hidden="true">⚠ </span>' : '') + esc(read) + '.</td></tr>';
   });
   html += '</tbody>';
   tableWrap(host, html, caption, 'Point forecasts with 80% prediction intervals underneath. Skill = 1 − RMSE(model) / RMSE(naive “no change” forecast) in a rolling-origin backtest over the last 24 months, so positive is better than naive. DM = Diebold–Mariano test of equal accuracy (Harvey–Leybourne–Newbold correction). Ljung–Box tests remaining autocorrelation in the residuals. Details in the Forecast lab.');
@@ -246,7 +268,6 @@ function modelMatrix(host, keys, caption) {
 function initBD() {
   const v = $('#v-bangladesh');
   if (!BD) { v.querySelector('.wrap').innerHTML = '<p class="empty">The Bangladesh data could not be loaded.</p>'; return; }
-  $('#bd-vintage').textContent = BD.meta.vintage + '. Models estimated ' + BD.meta.estimated + '.';
   const tabs = $('#bd-tabs');
   tabs.innerHTML = CHUNKS.map(c => '<button type="button" role="tab" data-bdtab="' + c.id + '">' + esc(c.name) + '</button>').join('');
   v.addEventListener('click', e => {
@@ -263,6 +284,7 @@ function renderBD() {
   disposeIn(body);
   body.innerHTML = '';
   FIGN = 0; TABN = 0; labState.prefix = 'B';
+  TSRC = 'Bangladesh Bank, Monthly Economic Trends and National Summary Data Page (NSDP); author’s calculations.';
   $$('#bd-tabs [data-bdtab]').forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-bdtab') === bdState.tab ? 'true' : 'false'));
   const c = CHUNKS.find(x => x.id === bdState.tab) || CHUNKS[0];
   if (c.id === 'glance') return bdGlance(body);
@@ -306,7 +328,7 @@ function infFan(host, compact) {
     csv: () => [['month', 'actual', 'projection', 'lower 80', 'upper 80', 'lower 95', 'upper 95'], ...labels.map((l, i) => [l, i < hV.length ? hV[i] : '', mean[i] == null ? '' : mean[i], lo80[i] == null ? '' : lo80[i], hi80[i] == null ? '' : hi80[i], lo95[i] == null ? '' : lo95[i], hi95[i] == null ? '' : hi95[i]])],
     render: TH => tsOption(TH, labels, [S('Actual', [...hV, ...Array(fl.length).fill(null)], { color: TH.ink, w: 2.2 }),
       ...bandSeries('95% band', lo95, hi95, TH.pos, TH.dark ? 0.16 : 0.12, 'b95'), ...bandSeries('80% band', lo80, hi80, TH.pos, TH.dark ? 0.3 : 0.22, 'b80'),
-      S('Projection', mean, { color: TH.pos, dash: true, w: 2.2, end: true })], { y1: '%', dec: 2, marks: [{ yAxis: 8, name: '8%' }, { yAxis: 6, name: '6%' }] })
+      S('Projection', mean, { color: TH.pos, dash: true, w: 2.2, end: true })], { y1: '%', dec: 2, marks: [{ yAxis: 8, name: '8%' }, { yAxis: 6, name: '6%' }], warn: [{ s: 0, test: v => v > 8, label: 'Above 8%' }] })
   });
 }
 function bdPrices(body) {
@@ -316,7 +338,7 @@ function bdPrices(body) {
   figure(g, { title: 'Headline inflation', sub: '% year on year; point-to-point and 12-month average', notes: SER('infl').note,
     source: srcKeys(['infl', 'infl_avg']), csv: () => csvAligned(['infl', 'infl_avg'], M0(2010)),
     render: TH => tsOption(TH, a.labels, [S('Point-to-point', a.cols[0], { color: TH.pal[0], end: true }), S('12-month average', a.cols[1], { color: TH.pal[1], dash: true, end: true })],
-      { y1: '%', zoom: true }) });
+      { y1: '%', zoom: true, warn: [{ s: 0, test: v => v > 8, label: 'Above 8%' }] }) });
   const b = align(['food', 'nonfood'], M0(2010));
   figure(g, { title: 'Food and non-food inflation', sub: '% year on year, point-to-point', notes: 'The gap between the two lines shows whether price pressure is coming from food (supply, harvests, imports) or from broader non-food demand and costs. ' + SER('food').note,
     source: srcKeys(['food', 'nonfood']), csv: () => csvAligned(['food', 'nonfood'], M0(2010)),
@@ -372,7 +394,7 @@ function bdMoney(body) {
     render: TH => tsOption(TH, b.labels, [S('Credit–deposit ratio', b.cols[0], { area: 0.08, end: true })], { y1: '%', scale: true, marks: [{ yAxis: 100, name: '100%' }] }) });
   const c = align(['npl', 'crar']);
   figure(g, { title: 'Bank soundness: bad loans and capital', sub: 'deposit takers, % (quarterly)', notes: 'Bars: non-performing loans as a share of gross loans. Line: regulatory capital to risk-weighted assets; the dashed line marks 12.5% (10% minimum plus the 2.5% conservation buffer under Basel III).', source: srcKeys(['npl', 'crar']),
-    csv: () => csvAligned(['npl', 'crar']), render: TH => tsOption(TH, c.labels, [Object.assign(S('Non-performing loans', c.cols[0], { bar: true, color: TH.neg }), {}), Object.assign(S('Capital ratio (right)', c.cols[1], { ax: 1, color: TH.pos, w: 2.4, end: true }), { markLine: { symbol: 'none', silent: true, lineStyle: { type: 'dashed', color: TH.pos }, label: { formatter: '12.5%', color: TH.muted, fontSize: 10 }, data: [{ yAxis: 12.5 }] } })], { y1: '% of loans', y2: '% of RWA', bar: true }) });
+    csv: () => csvAligned(['npl', 'crar']), render: TH => tsOption(TH, c.labels, [Object.assign(S('Non-performing loans', c.cols[0], { bar: true, color: TH.neg }), {}), Object.assign(S('Capital ratio (right)', c.cols[1], { ax: 1, color: TH.pos, w: 2.4, end: true }), { markLine: { symbol: 'none', silent: true, lineStyle: { type: 'dashed', color: TH.pos }, label: { formatter: '12.5%', color: TH.muted, fontSize: 10 }, data: [{ yAxis: 12.5 }] } })], { y1: '% of loans', y2: '% of RWA', bar: true, warn: [{ s: 1, test: v => v < 12.5, label: 'Capital below 12.5%' }, { s: 0, test: v => v > 10, label: 'Bad loans above 10%' }] }) });
 }
 function bdRates(body) {
   const s = sec(body, 'Charts');
@@ -382,7 +404,7 @@ function bdRates(body) {
     render: TH => tsOption(TH, a.labels, [S('Call money', a.cols[0], { end: true }), S('Lending rate', a.cols[1], { end: true }), S('Deposit rate', a.cols[2], { end: true }), S('Bank rate', a.cols[3], { dash: true, step: 'end' })], { y1: '%', zoom: true }) });
   const r = align(['real_lend', 'spread'], M0(2010));
   figure(g, { title: 'Real lending rate and the spread', sub: 'percentage points', notes: SER('real_lend').note + ' Negative real rates mean borrowers repay less in real terms than they borrowed.', source: srcKeys(['real_lend', 'spread'], true),
-    csv: () => csvAligned(['real_lend', 'spread'], M0(2010)), render: TH => tsOption(TH, r.labels, [S('Real lending rate', signBars(r.cols[0], TH), { bar: true }), S('Lending–deposit spread', r.cols[1], { color: TH.ink2, end: true })], { y1: 'pp', bar: true, zoom: true }) });
+    csv: () => csvAligned(['real_lend', 'spread'], M0(2010)), render: TH => tsOption(TH, r.labels, [S('Real lending rate', signBars(r.cols[0], TH), { bar: true }), S('Lending–deposit spread', r.cols[1], { color: TH.ink2, end: true })], { y1: 'pp', bar: true, zoom: true, warn: [{ s: 0, test: v => v < 0, label: 'Negative real rate' }] }) });
   modelMatrix(body, ['call'], tcap('Model reading: call money rate'));
 }
 function bdExt(body) {
@@ -393,7 +415,7 @@ function bdExt(body) {
     render: TH => tsOption(TH, a.labels, [S('Taka per US$', a.cols[0], { color: TH.ink, w: 2.4, end: true }), S('Depreciation (right)', signBars(a.cols[1], TH).map(x => x && Object.assign(x, { itemStyle: { color: x.value > 0 ? TH.neg : TH.pos } })), { bar: true, ax: 1 })], { y1: 'Tk/US$', y2: '% y/y', scale: true, zoom: true }) });
   const b = align(['res', 'res_bpm6', 'cover'], M0(2010));
   figure(g, { title: 'Foreign exchange reserves and import cover', sub: 'US$ million (left); months of imports (right)', notes: SER('cover').note + ' ' + SER('imp').note, source: srcKeys(['res', 'res_bpm6', 'imp'], true), csv: () => csvAligned(['res', 'res_bpm6', 'cover'], M0(2010)),
-    render: TH => tsOption(TH, b.labels, [S('Gross reserves', b.cols[0], { area: 0.1, end: true, dec: 0 }), S('BPM6 reserves', b.cols[1], { end: true, dec: 0 }), Object.assign(S('Import cover (right)', b.cols[2], { ax: 1, dash: true, color: TH.pal[6] }), { markLine: { symbol: 'none', silent: true, lineStyle: { type: 'dotted', color: TH.pal[6] }, label: { formatter: '3 months', color: TH.muted, fontSize: 10 }, data: [{ yAxis: 3 }] } })], { y1: 'US$ mn', y2: 'months', zoom: true, dec: 1 }) });
+    render: TH => tsOption(TH, b.labels, [S('Gross reserves', b.cols[0], { area: 0.1, end: true, dec: 0 }), S('BPM6 reserves', b.cols[1], { end: true, dec: 0 }), Object.assign(S('Import cover (right)', b.cols[2], { ax: 1, dash: true, color: TH.pal[6] }), { markLine: { symbol: 'none', silent: true, lineStyle: { type: 'dotted', color: TH.pal[6] }, label: { formatter: '3 months', color: TH.muted, fontSize: 10 }, data: [{ yAxis: 3 }] } })], { y1: 'US$ mn', y2: 'months', zoom: true, dec: 1, warn: [{ s: 2, test: v => v < 3, label: 'Below 3 months' }] }) });
   const r = align(['remit', 'remit_g'], M0(2012));
   figure(g, { title: 'Remittances', sub: 'US$ million a month (bars) and % year on year (line)', source: srcKeys(['remit'], true), csv: () => csvAligned(['remit', 'remit_g'], M0(2012)),
     render: TH => tsOption(TH, r.labels, [S('Remittances', r.cols[0], { bar: true, color: TH.pal[2] }), S('Growth (right)', r.cols[1], { ax: 1, color: TH.ink, w: 1.6 })], { y1: 'US$ mn', y2: '% y/y', bar: true, zoom: true, zoomFrom: '2019-01', dec: 1 }) });
@@ -542,7 +564,6 @@ function initLab() {
   const v = $('#v-lab');
   if (!BD) { v.querySelector('.wrap').innerHTML = '<p class="empty">The model results could not be loaded.</p>'; return; }
   $('#lab-tabs').innerHTML = LAB_TABS.map(t => '<button type="button" role="tab" data-lab="' + t[0] + '">' + esc(t[1]) + '</button>').join('');
-  $('#lab-est').textContent = 'Estimated ' + BD.meta.estimated + ' on data to ' + BD.arima.infl.sample[1] + '.';
   v.addEventListener('click', e => {
     const b = e.target.closest('[data-lab]');
     if (b) { labState.tab = b.getAttribute('data-lab'); renderLab(); try { history.replaceState(null, '', '#lab~' + labState.tab); } catch (err) { /* framed */ } }
@@ -564,6 +585,7 @@ function renderLab(keep) {
   disposeIn(body);
   body.innerHTML = '';
   FIGN = 0; TABN = 0; labState.prefix = 'L';
+  TSRC = labState.tab === 'world' ? 'World Bank, World Development Indicators (CC BY 4.0); author’s calculations.' : labState.tab === 'dsge' ? 'Model simulation; calibration from Galí (2015) and Taylor (1993).' : 'Bangladesh Bank, Monthly Economic Trends; author’s estimates.';
   $$('#lab-tabs [data-lab]').forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-lab') === labState.tab ? 'true' : 'false'));
   ({ overview: labOverview, data: labData, arima: labArima, var: labVar, robust: labRobust, dsge: labDsge, world: labWorld, refs: labRefs })[labState.tab in { overview: 1, data: 1, arima: 1, var: 1, robust: 1, dsge: 1, world: 1, refs: 1 } ? labState.tab : 'overview'](body);
   if (keep) window.scrollTo(0, y);
@@ -694,7 +716,7 @@ function labVar(body) {
   });
   let ft = '<thead><tr><th scope="col">Variable</th><th scope="col">Horizon</th>' + V.vars.map(n => '<th scope="col" class="num">' + esc(n) + ' shock</th>').join('') + '</tr></thead><tbody>';
   V.vars.forEach((n, v) => [1, 6, 12, 24].forEach((h, k) => { ft += '<tr' + (k === 0 ? ' class="gtop"' : '') + '>' + (k === 0 ? '<th scope="rowgroup" rowspan="4">' + esc(n) + '</th>' : '') + '<td>' + h + ' month' + (h > 1 ? 's' : '') + '</td>' + V.fevd[v].map(c => '<td class="num">' + nf(c[h], 1) + '</td>').join('') + '</tr>'; }));
-  tableWrap(ir, ft + '</tbody>', tcap('Variance decomposition table (%)'), 'Each row sums to 100%.');
+  tableWrap(ir, ft + '</tbody>', tcap('Variance decomposition table (%)'), 'Each row sums to 100%.', { heat: 'col' });
   const fc = V.fc;
   let vt = '<thead><tr><th scope="col">Variable</th><th scope="col" class="num">+1 month</th><th scope="col" class="num">+3 months</th><th scope="col" class="num">+6 months</th><th scope="col" class="num">+12 months</th></tr></thead><tbody>';
   V.vars.forEach((n, i) => { vt += '<tr><th scope="row">' + esc(n) + '</th>' + [0, 2, 5, 11].map(h => '<td class="num"><b>' + nf(fc.mean[i][h], 2) + '</b><small class="pi">' + nf(fc.lo80[i][h], 1) + ' to ' + nf(fc.hi80[i][h], 1) + '</small></td>').join('') + '</tr>'; });
@@ -868,8 +890,568 @@ function routeBD(h) {
   if (m[2]) try { history.replaceState(null, '', '#' + h); } catch (err) { /* framed */ }
   return true;
 }
-return { initBD, initLab, routeBD };
+
+/* ---------- Pill-style values in every table (as in the Compare table) ---------- */
+const SEQ = ['#C9E7EF', '#9AD0E0', '#63B3D1', '#3891BE', '#256FA2', '#1B5185', '#143B66'];
+const GOODC = '#1F8A4D', BADC = '#C8473A';
+const NUMRE = /^[▲▼]?\s*[+\-−]?\s*\$?\s*\d[\d,]*(\.\d+)?(e[+\-]?\d+)?\s*(%|pp|k)?$/i, PRE = /^[<≤≥]\s*\d*\.?\d+$/;
+function gridOf(rows) {
+  const g = [];
+  rows.forEach((r, ri) => { g[ri] = g[ri] || []; let ci = 0; [...r.cells].forEach(c => { while (g[ri][ci]) ci++; const cs = c.colSpan || 1, rs = c.rowSpan || 1; for (let a = 0; a < rs; a++) for (let b = 0; b < cs; b++) { g[ri + a] = g[ri + a] || []; g[ri + a][ci + b] = c; } ci += cs; }); });
+  return g;
+}
+function mainText(td) { const b = td.querySelector(':scope > b'); if (b) return b.textContent.trim(); let t = ''; td.childNodes.forEach(n => { if (n.nodeType === 3) t += n.textContent; }); return t.trim(); }
+function numOf(t) {
+  t = t.replace(/\s*◆$/, '').replace(/\*+$/, '').trim();
+  if (PRE.test(t)) { const v = parseFloat(t.replace(/[<≤≥\s]/g, '')); return t[0] === '<' ? v / 2 : v; }
+  if (!NUMRE.test(t)) return null;
+  const v = parseFloat(t.replace(/[▲▼$,%k\s]|pp/gi, '').replace('−', '-'));
+  return isFinite(v) ? v : null;
+}
+function wrapPill(td, color, warn) {
+  const span = document.createElement('span');
+  span.className = 'cell' + (color ? '' : ' nv') + (warn ? ' warn' : '');
+  const b = td.querySelector(':scope > b');
+  if (b) { span.textContent = b.textContent; b.replaceWith(span); }
+  else {
+    let txt = '', sup = null;
+    const smalls = [];
+    [...td.childNodes].forEach(n => { if (n.nodeType === 3) txt += n.textContent; else if (n.nodeName === 'SUP') sup = n; else if (n.nodeName === 'SMALL') smalls.push(n); });
+    td.textContent = '';
+    span.textContent = txt.trim();
+    if (sup) span.append(sup);
+    td.append(span);
+    smalls.forEach(n => td.append(' ', n));
+  }
+  if (color) { span.style.background = color; span.style.color = textOn(color); }
+}
+function pillify(tbl, opt) {
+  if (!tbl) return;
+  opt = opt || {};
+  const head = gridOf(tbl.tHead ? [...tbl.tHead.rows] : []);
+  const hl = (head[head.length - 1] || []).map(c => c ? ((c.getAttribute('title') || '') + ' ' + c.textContent).toLowerCase() : '');
+  const body = [...tbl.tBodies].flatMap(b => [...b.rows]);
+  const g = gridOf(body);
+  const cols = {};
+  g.forEach(row => row.forEach((c, ci) => {
+    if (!c || c.tagName !== 'TD' || c.querySelector('.cell, svg, .pe-badge, .rng, a, button, .bartrack')) return;
+    if (row.indexOf(c) !== ci) return;
+    if (!opt.all && !c.classList.contains('num')) return;
+    if (opt.all && ci === 0) return;
+    const t = mainText(c);
+    if (t === '–' || t === '') { if (c.classList.contains('num') || opt.all) { c.textContent = ''; c.append(Object.assign(document.createElement('span'), { className: 'cell dash', textContent: '–' })); } return; }
+    const v = numOf(t);
+    if (v == null) return;
+    (cols[ci] = cols[ci] || []).push([c, v]);
+  }));
+  Object.entries(cols).forEach(([ci, cells]) => {
+    const h = hl[ci] || '';
+    const pMode = /(^|[\s(])p(\)|\s|$)|p-value|p value|\bdm p\b|\blb p\b/.test(h);
+    const sorted = cells.map(x => x[1]).sort((a, b) => a - b);
+    const heat = (opt.heat === 'col' || opt.all) && sorted.length >= 4 && !/^\s*#|rank/.test(h) && !pMode;
+    cells.forEach(([c, v]) => {
+      let col = null, warn = false;
+      if (c.classList.contains('up-bad')) { col = BADC; warn = true; }
+      else if (c.classList.contains('up-good')) col = GOODC;
+      else if (c.hasAttribute('data-pct')) col = SEQ[Math.round(Math.max(0, Math.min(100, +c.getAttribute('data-pct'))) / 100 * (SEQ.length - 1))];
+      else if (pMode) col = v < 0.01 ? SEQ[6] : v < 0.05 ? SEQ[5] : v < 0.1 ? SEQ[3] : SEQ[0];
+      else if (heat) { const r = sorted.length > 1 ? sorted.indexOf(v) / (sorted.length - 1) : 0.5; col = SEQ[Math.round(r * (SEQ.length - 1))]; }
+      wrapPill(c, col, warn);
+    });
+  });
+}
+function watchTable(sel) {
+  const t = $(sel);
+  if (!t) return;
+  let q = false;
+  const run = () => { q = false; pillify(t, { all: true }); };
+  run();
+  new MutationObserver(() => { if (!q) { q = true; requestAnimationFrame(run); } }).observe(t, { childList: true, subtree: true });
+}
+
+/* ---------- Data source under every chart, table and map ---------- */
+const SRCS = { wdi: 'World Bank, World Development Indicators (CC BY 4.0).',
+  mk: 'U.S. Energy Information Administration (oil and gas), Federal Reserve (interest rates), U.S. Bureau of Labor Statistics (US consumer prices) and gold prices, via DataHub.',
+  fx: 'Federal Reserve, foreign exchange rates (H.10), via DataHub.', methods: 'World Bank, World Development Indicators (CC BY 4.0); author’s checks.' };
+function srcFor(node) { const v = node.closest('.view'); const id = v ? v.id : ''; if (id === 'v-markets' || node.closest('#ov-markets')) return SRCS.mk; if (id === 'v-methods') return SRCS.methods; return SRCS.wdi; }
+function addSrcAfter(el, text) {
+  if (!el || !el.parentElement) return;
+  const nx = el.nextElementSibling;
+  if (nx && nx.classList.contains('src-line')) return;
+  el.insertAdjacentHTML('afterend', '<p class="src-line mm-src"><b>Source:</b> ' + esc(text) + '</p>');
+  const line = el.nextElementSibling;
+  const dedupe = () => { const par = line.parentElement; if (par && [...par.querySelectorAll('*')].some(c => c !== line && !line.contains(c) && !c.contains(line) && c.children.length === 0 && /Source:/.test(c.textContent))) line.remove(); };
+  setTimeout(dedupe, 0); setTimeout(dedupe, 600);
+}
+function staticSources() {
+  [['#heat', 'wdi'], ['#regions', 'wdi'], ['#cmp-table', 'wdi'], ['#rk-table', 'wdi'], ['#fx-table', 'fx'], ['#me-flags', 'methods'], ['#pulse', 'wdi'], ['#dotmap', 'wdi'], ['#map-note', 'wdi'], ['#ov-markets', 'mk']].forEach(([sel, k]) => {
+    const n = $(sel);
+    if (n) addSrcAfter(n.closest('.table-wrap') || n, SRCS[k]);
+  });
+  ['#regions', '#rk-table', '#fx-table', '#me-flags'].forEach(watchTable);
+}
+
+/* ---------- Sign-in (Firebase): everything except the front page and Privacy needs an account ---------- */
+const AUTH = { cfg: window.MM_AUTH || null, ready: false, user: null, pending: null, fb: null, db: null, last: '', lastAt: 0 };
+const PUBLIC_VIEWS = ['overview', 'privacy'];
+const OWNER = { state: 'no', fromUrl: null };
+(() => {
+  const m = /^#owner=([A-Za-z0-9_-]{16,})$/.exec(location.hash || '');
+  if (m) { OWNER.fromUrl = m[1]; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* framed */ } }
+  let saved = null;
+  try { saved = localStorage.getItem('mm.owner'); } catch (e) { /* private mode */ }
+  if (OWNER.fromUrl || saved) OWNER.state = 'checking';
+})();
+function ownerOK() { return OWNER.state === 'yes'; }
+async function sha256hex(t) { const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return [...new Uint8Array(d)].map(x => x.toString(16).padStart(2, '0')).join(''); }
+async function checkOwner() {
+  if (OWNER.state !== 'checking') return;
+  const want = AUTH.cfg && AUTH.cfg.owner;
+  let saved = null;
+  try { saved = localStorage.getItem('mm.owner'); } catch (e) { /* private mode */ }
+  const code = OWNER.fromUrl || saved;
+  let ok = false;
+  try { ok = !!(want && code && crypto.subtle && (await sha256hex(code)) === want); } catch (e) { ok = false; }
+  OWNER.state = ok ? 'yes' : 'no';
+  if (ok) { try { localStorage.setItem('mm.owner', code); } catch (e) { /* private mode */ } if (OWNER.fromUrl) toast('Owner pass saved: this device no longer needs to sign in.'); }
+  else { try { localStorage.removeItem('mm.owner'); } catch (e) { /* private mode */ } if (OWNER.fromUrl) toast('That owner link isn’t valid.'); }
+  renderAcct();
+  if (ok) { hideGate(); if (AUTH.pending) { const pd = AUTH.pending; AUTH.pending = null; if (pd.hash && pd.hash.length > 1) { if (location.hash === pd.hash) route(pd.hash); else location.hash = pd.hash; } else go(pd.view, pd.opts); } }
+  else if (AUTH.pending) showGate(AUTH.ready ? 'signin' : 'wait');
+}
+const SDK = v => ['app', 'auth', 'firestore'].map(n => 'https://www.gstatic.com/firebasejs/' + v + '/firebase-' + n + '-compat.js');
+function authActive() { const f = AUTH.cfg && AUTH.cfg.firebase; return !!(f && f.apiKey && f.authDomain && f.projectId && f.appId); }
+function curView() { const v = document.querySelector('.view.on'); return v ? v.id.slice(2) : ''; }
+function gateBlocks(view, opts) {
+  if (!authActive() || PUBLIC_VIEWS.includes(view)) { if (AUTH.user) logVisit(view, opts); return false; }
+  if (ownerOK()) return false;
+  if (AUTH.user) { logVisit(view, opts); return false; }
+  AUTH.pending = { view, opts: opts || {}, hash: location.hash };
+  showGate(AUTH.ready && OWNER.state !== 'checking' ? 'signin' : 'wait');
+  if (!PUBLIC_VIEWS.includes(curView())) setTimeout(() => { if (AUTH.pending && !PUBLIC_VIEWS.includes(curView())) go('overview'); }, 0);
+  return true;
+}
+function showGate(mode) {
+  const g = $('#gate');
+  if (!g) return;
+  g.hidden = false;
+  document.documentElement.classList.add('gated');
+  $('#gate-wait').hidden = mode !== 'wait';
+  $('#gate-btns').hidden = mode === 'wait';
+  $('#gate-apple').hidden = !(AUTH.cfg && AUTH.cfg.apple);
+  if (mode !== 'wait') { $('#gate-msg').textContent = mode === 'error' ? AUTH.err || '' : ''; setTimeout(() => { const b = $('#gate-google'); if (b) b.focus(); }, 30); }
+}
+function hideGate() { const g = $('#gate'); if (g) g.hidden = true; document.documentElement.classList.remove('gated'); }
+function authErr(e) {
+  const c = (e && e.code) || '';
+  if (c === 'auth/unauthorized-domain') return 'This web address isn’t on the sign-in list yet. In Firebase, add it under Authentication, then Settings, then Authorized domains.';
+  if (c === 'auth/network-request-failed') return 'There’s no connection. Check your internet and try again.';
+  if (c === 'auth/operation-not-allowed') return 'This sign-in method isn’t switched on yet in Firebase.';
+  return 'Sign-in didn’t work' + (c ? ' (' + c.replace('auth/', '') + ')' : '') + '. Please try again.';
+}
+function provider(kind) {
+  if (kind === 'apple') { const pr = new firebase.auth.OAuthProvider('apple.com'); pr.addScope('email'); pr.addScope('name'); return pr; }
+  return new firebase.auth.GoogleAuthProvider();
+}
+function signIn(kind) {
+  if (!AUTH.fb) return;
+  $('#gate-msg').textContent = '';
+  const pr = provider(kind);
+  AUTH.fb.signInWithPopup(pr).catch(e => {
+    const c = (e && e.code) || '';
+    if (c === 'auth/popup-blocked' || c === 'auth/operation-not-supported-in-this-environment') return AUTH.fb.signInWithRedirect(pr);
+    if (c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request') return;
+    $('#gate-msg').textContent = authErr(e);
+  });
+}
+function logVisit(view, opts) {
+  if (!AUTH.db || !AUTH.user) return;
+  const page = view + (opts && opts.code ? ':' + opts.code : '');
+  if (page === AUTH.last && Date.now() - AUTH.lastAt < 3000) return;
+  AUTH.last = page; AUTH.lastAt = Date.now();
+  try { AUTH.db.collection('users').doc(AUTH.user.uid).collection('visits').add({ page, at: firebase.firestore.FieldValue.serverTimestamp() }).catch(() => {}); } catch (e) { /* offline */ }
+}
+function saveUser(u) {
+  if (!AUTH.db) return;
+  try {
+    AUTH.db.collection('users').doc(u.uid).set({ name: u.displayName || '', email: u.email || '', provider: ((u.providerData || [])[0] || {}).providerId || '', joined: (u.metadata && u.metadata.creationTime) || '',
+      lastSeen: firebase.firestore.FieldValue.serverTimestamp(), sessions: firebase.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
+  } catch (e) { /* offline */ }
+}
+function renderAcct() {
+  const b = $('#acct-btn');
+  if (!b) return;
+  b.hidden = !authActive();
+  const u = AUTH.user;
+  b.classList.toggle('own', ownerOK());
+  if (ownerOK() && !u) { b.textContent = 'Owner'; b.classList.remove('in'); b.setAttribute('aria-label', 'Owner pass is on for this device'); $('#acct-name').textContent = 'Owner pass'; $('#acct-email').textContent = 'This device opens every page without signing in, and isn’t tracked.'; return; }
+  if (!u) { b.textContent = 'Sign in'; b.classList.remove('in'); b.setAttribute('aria-label', 'Sign in'); return; }
+  const nm = u.displayName || u.email || 'Account';
+  b.classList.add('in');
+  b.setAttribute('aria-label', 'Account: ' + nm);
+  b.innerHTML = u.photoURL ? '<img src="' + esc(u.photoURL) + '" alt="" referrerpolicy="no-referrer">' : '<span>' + esc(nm.trim().charAt(0).toUpperCase()) + '</span>';
+  $('#acct-name').textContent = u.displayName || 'Signed in';
+  $('#acct-email').textContent = u.email || '';
+}
+function closeMenu() { const m = $('#acct-menu'); if (m) m.hidden = true; const b = $('#acct-btn'); if (b) b.setAttribute('aria-expanded', 'false'); }
+async function deleteAccount() {
+  const u = AUTH.user;
+  if (!u || !confirm('This deletes your account and the record of pages you opened. Continue?')) return;
+  try {
+    if (AUTH.db) {
+      const ref = AUTH.db.collection('users').doc(u.uid);
+      const vs = await ref.collection('visits').get();
+      const docs = vs.docs || [];
+      for (let i = 0; i < docs.length; i += 400) { const bt = AUTH.db.batch(); docs.slice(i, i + 400).forEach(d => bt.delete(d.ref)); await bt.commit(); }
+      await ref.delete();
+    }
+    try { await u.delete(); }
+    catch (e) { if (e && e.code === 'auth/requires-recent-login') { await u.reauthenticateWithPopup(provider(((u.providerData || [])[0] || {}).providerId === 'apple.com' ? 'apple' : 'google')); await u.delete(); } else throw e; }
+    toast('Your account and record were deleted.');
+  } catch (e) { toast('That didn’t work. Please try again.'); }
+}
+function loadScript(src) { return new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = no; document.head.append(sc); }); }
+async function initAuth() {
+  if (!authActive()) return;
+  checkOwner();
+  $$('[data-auth-only]').forEach(n => { n.hidden = false; });
+  $$('[data-auth-off]').forEach(n => { n.hidden = true; });
+  renderAcct();
+  $('#gate-google').addEventListener('click', () => signIn('google'));
+  $('#gate-apple').addEventListener('click', () => signIn('apple'));
+  $('#gate-back').addEventListener('click', () => { AUTH.pending = null; hideGate(); go('overview'); });
+  $('#gate-privacy').addEventListener('click', e => { e.preventDefault(); AUTH.pending = null; hideGate(); go('privacy'); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#gate').hidden) { AUTH.pending = null; hideGate(); go('overview'); } });
+  $('#acct-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    if (!AUTH.user && !ownerOK()) { AUTH.pending = null; showGate(AUTH.ready ? 'signin' : 'wait'); return; }
+    $('#acct-out').textContent = AUTH.user ? 'Sign out' : 'Turn off the owner pass on this device';
+    $('#acct-del').hidden = !AUTH.user;
+    const m = $('#acct-menu'), open = m.hidden;
+    if (open) { const r = $('#acct-btn').getBoundingClientRect(); m.style.top = (r.bottom + 8) + 'px'; m.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; }
+    m.hidden = !open; $('#acct-btn').setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('#acct-menu')) closeMenu(); });
+  $('#acct-out').addEventListener('click', () => {
+    closeMenu();
+    if (AUTH.user) { if (AUTH.fb) AUTH.fb.signOut(); return; }
+    if (ownerOK()) { OWNER.state = 'no'; try { localStorage.removeItem('mm.owner'); } catch (e) { /* private mode */ } renderAcct(); toast('Owner pass turned off on this device.'); if (!PUBLIC_VIEWS.includes(curView())) go('overview'); }
+  });
+  $('#acct-del').addEventListener('click', () => { closeMenu(); deleteAccount(); });
+  try {
+    const v = AUTH.cfg.sdk || '10.12.2';
+    for (const src of SDK(v)) await loadScript(src);
+    firebase.initializeApp(AUTH.cfg.firebase);
+    AUTH.fb = firebase.auth();
+    AUTH.db = firebase.firestore ? firebase.firestore() : null;
+    AUTH.fb.getRedirectResult().catch(e => { AUTH.err = authErr(e); showGate('error'); });
+    AUTH.fb.onAuthStateChanged(u => {
+      const was = AUTH.user;
+      AUTH.user = u || null;
+      AUTH.ready = true;
+      renderAcct();
+      if (u) {
+        if (!was) saveUser(u);
+        hideGate();
+        if (AUTH.pending) { const pd = AUTH.pending; AUTH.pending = null; if (pd.hash && pd.hash.length > 1) { if (location.hash === pd.hash) route(pd.hash); else location.hash = pd.hash; } else go(pd.view, pd.opts); }
+        else logVisit(curView());
+      } else {
+        if (ownerOK() || OWNER.state === 'checking') return;
+        if (AUTH.pending) showGate('signin');
+        else if (!PUBLIC_VIEWS.includes(curView())) go('overview');
+        if (was) toast('You’re signed out.');
+      }
+    });
+  } catch (e) {
+    AUTH.ready = true;
+    AUTH.err = 'Sign-in couldn’t load. Check your connection, then reload the page.';
+    if (AUTH.pending) showGate('error');
+  }
+}
+
+/* ---------- Blinking warnings: on by default, with an off switch ---------- */
+function initBlink() {
+  let on = !RM;
+  try { const st = JSON.parse(localStorage.getItem('mm.blink')); if (typeof st === 'boolean') on = st && !RM; } catch (e) { /* default */ }
+  const set = v => { on = v; document.documentElement.classList.toggle('no-blink', !v); const b = $('#blink-tg'); if (b) b.textContent = v ? 'Blinking warnings: on' : 'Blinking warnings: off'; };
+  set(on);
+  const b = $('#blink-tg');
+  if (b) b.addEventListener('click', () => { set(!on); try { localStorage.setItem('mm.blink', JSON.stringify(on)); } catch (e) { /* private mode */ } liveSpot(); });
+}
+
+/* ---------- Front page: live dashboard ---------- */
+const LIVE = { int: 10, paused: false, i: 0, next: 0, tiles: [], timer: null, checked: null, offline: false, newData: false };
+const MKSRC = { brent: 'U.S. Energy Information Administration (EIA), Europe Brent spot price, via DataHub.', wti: 'U.S. Energy Information Administration (EIA), WTI spot price, via DataHub.',
+  gas: 'U.S. Energy Information Administration (EIA), Henry Hub natural gas spot price, via DataHub.', gold: 'Gold price, monthly average, via DataHub.',
+  us10y: 'Federal Reserve, 10-year Treasury constant-maturity yield, via DataHub.', uscpi: 'U.S. Bureau of Labor Statistics, consumer price index, via DataHub; author’s calculations.' };
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtPeriod(p, f) {
+  p = String(p);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(p)) return +p.slice(8) + ' ' + MON[+p.slice(5, 7) - 1] + ' ' + p.slice(0, 4);
+  if (/^\d{4}-\d{2}$/.test(p)) return MON[+p.slice(5, 7) - 1] + ' ' + p.slice(0, 4);
+  if (/^\d{4}-Q\d$/.test(p)) return p.slice(5) + ' ' + p.slice(0, 4);
+  return p;
+}
+function csvSeries(arr) { if (!Array.isArray(arr) || arr.length < 2) return []; const st = String(arr[0]); return String(arr[1]).split(',').map((v, i) => [mLabAdd(st, i), v === '' ? null : +v]).filter(x => x[1] != null && isFinite(x[1])); }
+function wdiSeries(key, code) { const s = RAW.s && RAW.s[key] && RAW.s[key][code]; if (!s) return []; return String(s[1]).split(',').map((v, i) => [String(+s[0] + i), v === '' ? null : +v]).filter(x => x[1] != null && isFinite(x[1])); }
+function sparkVals(v) {
+  v = v.filter(x => x != null && isFinite(x));
+  if (v.length < 3) return '';
+  const mn = Math.min(...v), mx = Math.max(...v), w = 120, h = 22;
+  const xy = v.map((x, i) => [(i * (w - 6) / (v.length - 1) + 3), mx === mn ? h / 2 : (h - 3) - (x - mn) / (mx - mn) * (h - 6)]);
+  const l = xy[xy.length - 1];
+  return '<svg class="spk" viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none" aria-hidden="true"><polyline points="' + xy.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ') + '" fill="none" stroke="currentColor" stroke-width="1.4" vector-effect="non-scaling-stroke"/><circle cx="' + l[0].toFixed(1) + '" cy="' + l[1].toFixed(1) + '" r="2.4" fill="var(--signal)"/></svg>';
+}
+function liveTiles() {
+  const T = [];
+  const bd = (key, label, unit, scale, dec) => {
+    const s = SER(key);
+    if (!s || !s.series) return;
+    const p = s.series;
+    const pts = p.v.map((v, i) => [bdLab(p.f, p.k0 + i), v == null ? null : v / (scale || 1)]).filter(x => x[1] != null);
+    if (pts.length > 1) T.push({ grp: 'Bangladesh', label, unit, pts, dir: DIR[key] || 0, dec, src: srcKeys([key], s.how !== 'raw'), href: '#bangladesh~' + s.chunk, freq: p.f });
+  };
+  bd('infl', 'Inflation', '% y/y', 1, 2); bd('food', 'Food inflation', '% y/y', 1, 2); bd('xr', 'Taka per US$', 'Tk', 1, 2); bd('res', 'FX reserves', 'US$ bn', 1000, 1);
+  bd('remit_g', 'Remittances', '% y/y', 1, 1); bd('exp_g', 'Exports', '% y/y', 1, 1); bd('call', 'Call money rate', '%', 1, 2); bd('pcredit', 'Private credit', '% y/y', 1, 2);
+  const w = (key, code, label, dir) => { const pts = wdiSeries(key, code); if (pts.length > 1) T.push({ grp: 'World', label, unit: '%', pts, dir, dec: 1, src: 'World Bank, World Development Indicators (CC BY 4.0).', href: '#country-' + code, freq: 'A' }); };
+  w('gdp_growth', 'WLD', 'World growth', 1); w('inflation', 'WLD', 'World inflation', -1); w('gdp_growth', 'SAS', 'South Asia growth', 1); w('gdp_growth', 'EAS', 'East Asia & Pacific growth', 1);
+  const mk = (key, label, unit, dec) => {
+    const m = RAW.mk && RAW.mk[key];
+    if (!m) return;
+    const daily = Array.isArray(m.d) && m.d.length > 20;
+    const pts = daily ? m.d.map(x => [String(x[0]), +x[1]]).filter(x => isFinite(x[1])) : csvSeries(m.m);
+    if (pts.length > 1) T.push({ grp: 'Markets', label, unit, pts, dir: 0, dec, src: MKSRC[key], href: '#markets', freq: daily ? 'D' : 'M' });
+  };
+  mk('brent', 'Brent crude', 'US$/bbl', 2); mk('wti', 'WTI crude', 'US$/bbl', 2); mk('gas', 'Natural gas', 'US$/MMBtu', 2); mk('gold', 'Gold', 'US$/oz', 0); mk('us10y', 'US 10-year yield', '%', 2); mk('uscpi', 'US inflation', '% y/y', 1);
+  return T;
+}
+function tileHTML(t, i) {
+  const n = t.pts.length, last = t.pts[n - 1], prev = t.pts[n - 2];
+  const v = last[1], d = prev ? v - prev[1] : null;
+  const lvl = !/%/.test(t.unit);
+  const c = d == null ? null : lvl ? (prev[1] ? (v / prev[1] - 1) * 100 : null) : d;
+  const cls = d == null || !t.dir ? '' : d * t.dir > 0 ? 'up-good' : d * t.dir < 0 ? 'up-bad' : '';
+  const ct = c == null ? '' : (c > 0 ? '▲ +' : c < 0 ? '▼ ' : '') + nf(c, lvl ? 1 : 2) + (lvl ? '%' : ' pp');
+  const since = { D: 'on the day', M: 'on the month', Q: 'on the quarter', A: 'on the year', FY: 'on the year' }[t.freq] || '';
+  return '<button type="button" class="lt' + (i === LIVE.i ? ' on' : '') + '" data-lt="' + i + '" aria-label="' + esc(t.label + ': ' + nf(v, t.dec) + ' ' + t.unit + ', ' + fmtPeriod(last[0])) + '"><span class="lt-l">' + esc(t.label) + '</span><span class="lt-v">' + nf(v, t.dec) + '<small> ' + esc(t.unit) + '</small></span>' +
+    '<span class="lt-c ' + cls + '" title="Change ' + since + '">' + ct + '</span><span class="lt-d">' + esc(fmtPeriod(last[0])) + '</span>' + sparkVals(t.pts.slice(-36).map(x => x[1])) + '</button>';
+}
+function liveRender() {
+  const host = $('#live-grid');
+  if (!host) return;
+  const meta = { Bangladesh: 'Bangladesh Bank, latest month', World: 'World Bank, latest year', Markets: 'latest daily or monthly price' };
+  host.innerHTML = ['Bangladesh', 'World', 'Markets'].map(g => '<div class="live-group"><h3>' + esc(g) + '<small>' + esc(meta[g]) + '</small></h3><div class="live-tiles">' + LIVE.tiles.map((t, i) => t.grp === g ? tileHTML(t, i) : '').join('') + '</div></div>').join('');
+}
+function liveWorse(t) { const n = t.pts.length; return n > 1 && t.dir ? (t.pts[n - 1][1] - t.pts[n - 2][1]) * t.dir < 0 : false; }
+function liveSpot() {
+  const host = $('#live-spot');
+  const t = LIVE.tiles[LIVE.i];
+  if (!host || !t) return;
+  disposeIn(host);
+  host.innerHTML = '';
+  const pts = t.freq === 'D' ? t.pts.slice(-260) : t.freq === 'A' ? t.pts.filter(x => +x[0] >= 1990) : t.pts.slice(-72);
+  const span = t.freq === 'D' ? 'daily, last 12 months' : t.freq === 'A' ? 'annual, since 1990' : 'monthly, last 6 years';
+  const f = figure(host, { num: false, badge: 'Spotlight ' + (LIVE.i + 1) + ' of ' + LIVE.tiles.length, wide: true, title: t.label + (t.grp === 'Bangladesh' ? ', Bangladesh' : ''), sub: t.unit + '; ' + span, h: 250, source: t.src,
+    render: TH => tsOption(TH, pts.map(x => x[0]), [S(t.label, pts.map(x => x[1]), { color: TH.pal[0], area: 0.12, end: true, dec: t.dec, w: 2.2 })], { y1: t.unit, scale: true, events: t.freq === 'M', dec: t.dec, warn: [{ s: 0, test: () => liveWorse(t), label: 'Worsening' }] }) });
+  const a = document.createElement('a');
+  a.href = t.href; a.className = 'live-open'; a.textContent = 'Open the full page →';
+  f.querySelector('.fig-act').append(a);
+}
+function liveStatus() {
+  const n = $('#live-status');
+  if (!n) return;
+  const bdp = SER('infl') && SER('infl').reading ? fmtPeriod(SER('infl').reading.period) : '';
+  const sec = LIVE.paused || !LIVE.int ? null : Math.max(0, Math.ceil((LIVE.next - Date.now()) / 1000));
+  n.innerHTML = (sec == null ? '<span class="live-off">Paused</span>' : '<span class="live-on">Live</span> · next refresh in ' + sec + ' s') + (LIVE.checked ? ' · checked ' + LIVE.checked.toLocaleTimeString('en-GB') : '');
+}
+async function liveCheck() {
+  LIVE.checked = new Date();
+  if (!/^https?:$/.test(location.protocol)) { LIVE.offline = true; return; }
+  try {
+    const r = await fetch('live.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(String(r.status));
+    const j = await r.json();
+    LIVE.offline = false;
+    if (j.built && RAW.meta && j.built !== RAW.meta.built) location.reload();
+  } catch (e) { LIVE.offline = true; }
+}
+function liveSchedule() {
+  clearTimeout(LIVE.timer);
+  const prog = $('#live-prog');
+  if (prog) { prog.style.transition = 'none'; prog.style.width = '0%'; }
+  if (LIVE.paused || !LIVE.int) { liveStatus(); return; }
+  LIVE.next = Date.now() + LIVE.int * 1000;
+  if (prog && !RM) { void prog.offsetWidth; prog.style.transition = 'width ' + LIVE.int + 's linear'; prog.style.width = '100%'; }
+  LIVE.timer = setTimeout(liveTick, LIVE.int * 1000);
+  liveStatus();
+}
+async function liveTick() {
+  const ov = $('#v-overview');
+  if (document.hidden || !ov || !ov.classList.contains('on')) { liveSchedule(); return; }
+  LIVE.i = (LIVE.i + 1) % LIVE.tiles.length;
+  $$('#live-grid .lt').forEach(b => b.classList.toggle('on', +b.getAttribute('data-lt') === LIVE.i));
+  liveSpot();
+  await liveCheck();
+  liveSchedule();
+}
+function liveSetInt(v) {
+  LIVE.int = v; LIVE.paused = false;
+  $('#live-pause').textContent = 'Pause';
+  $$('#live-int [data-int]').forEach(b => b.setAttribute('aria-pressed', String(+b.getAttribute('data-int') === v)));
+  try { localStorage.setItem('mm.live', JSON.stringify({ int: v })); } catch (e) { /* private mode */ }
+  liveSchedule();
+}
+function initLive() {
+  if (!$('#live-grid') || !BD) return;
+  LIVE.tiles = liveTiles();
+  try { const st = JSON.parse(localStorage.getItem('mm.live')); if (st && typeof st.int === 'number' && st.int >= 0 && st.int <= 3600) LIVE.int = st.int; } catch (e) { /* none saved */ }
+  const PRE = [[0, 'Off'], [5, '5 s'], [10, '10 s'], [20, '20 s'], [30, '30 s']];
+  $('#live-int').innerHTML = PRE.map(o => '<button type="button" data-int="' + o[0] + '" aria-pressed="' + (LIVE.int === o[0]) + '">' + o[1] + '</button>').join('');
+  const inp = $('#live-sec');
+  if (!PRE.some(o => o[0] === LIVE.int)) inp.value = LIVE.int;
+  $('#live-int').addEventListener('click', e => { const b = e.target.closest('[data-int]'); if (b) { inp.value = ''; liveSetInt(+b.getAttribute('data-int')); } });
+  inp.addEventListener('change', () => { const v = Math.round(+inp.value); if (v >= 2 && v <= 3600) liveSetInt(v); else if (inp.value !== '') { inp.value = ''; toast('Choose a refresh time between 2 and 3,600 seconds.'); } });
+  $('#live-pause').addEventListener('click', () => { LIVE.paused = !LIVE.paused; $('#live-pause').textContent = LIVE.paused ? 'Resume' : 'Pause'; liveSchedule(); });
+  $('#live-grid').addEventListener('click', e => { const b = e.target.closest('[data-lt]'); if (!b) return; LIVE.i = +b.getAttribute('data-lt'); $$('#live-grid .lt').forEach(x => x.classList.toggle('on', x === b)); liveSpot(); liveSchedule(); });
+  liveRender();
+  liveSpot();
+  liveCheck().then(liveStatus);
+  liveSchedule();
+  setInterval(liveStatus, 1000);
+}
+
+/* ---------- Front page: Bangladesh and its peers ---------- */
+const PEER_GROUPS = [['SAARC', ['BGD', 'IND', 'PAK', 'LKA', 'NPL', 'BTN', 'MDV', 'AFG'], '#1F8A7D'], ['Developing Asia', ['CHN', 'IDN', 'MYS', 'PHL', 'THA', 'VNM'], '#C98500'],
+  ['Developed economies', ['JPN', 'SGP', 'KOR', 'USA', 'DEU', 'GBR'], '#6B2CB0'], ['Benchmarks', ['SAS', 'EAS', 'HIC', 'WLD'], '#5B6B7A']];
+const PEER_COLS = [['gdp_growth', 'Growth', 'Real GDP growth, %', 1, 1], ['inflation', 'Inflation', 'Consumer price inflation, %', -1, 1], ['gdp_pc_ppp', 'GDP/person', 'GDP per person, PPP international $', 1, 0],
+  ['unemployment', 'Jobless', 'Unemployment, % of labour force', -1, 1], ['current_account', 'Curr. acct', 'Current account balance, % of GDP', 1, 1], ['exports', 'Exports', 'Exports of goods and services, % of GDP', 1, 1],
+  ['remittances', 'Remit.', 'Personal remittances received, % of GDP', 0, 1], ['investment', 'Investment', 'Gross capital formation, % of GDP', 1, 1]];
+const flagEmoji = iso => iso && /^[A-Za-z]{2}$/.test(iso) ? String.fromCodePoint(...iso.toUpperCase().split('').map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65)) : '🌐';
+function latestOf(key, code) { const s = RAW.s && RAW.s[key] && RAW.s[key][code]; if (!s) return null; const v = String(s[1]).split(','); for (let i = v.length - 1; i >= 0; i--) if (v[i] !== '') return [+s[0] + i, +v[i]]; return null; }
+function initPeers() {
+  const host = $('#peers-table');
+  if (!host || !RAW.s) return;
+  const EM = {};
+  RAW.econ.forEach(e => { EM[e[0]] = e; });
+  const all = PEER_GROUPS.flatMap(g => g[1]).filter(c => EM[c]);
+  const ctry = PEER_GROUPS.slice(0, 3).flatMap(g => g[1]).filter(c => EM[c]);
+  const V = {};
+  all.forEach(c => { V[c] = PEER_COLS.map(col => latestOf(col[0], c)); });
+  const modal = PEER_COLS.map((col, j) => { const n = {}; ctry.forEach(c => { const x = V[c][j]; if (x) n[x[0]] = (n[x[0]] || 0) + 1; }); const ks = Object.keys(n); return ks.length ? +ks.sort((a, b) => n[b] - n[a] || b - a)[0] : null; });
+  all.forEach(c => { V[c] = V[c].map((x, j) => x && modal[j] && x[0] < modal[j] - 4 ? null : x); });
+  const score = (j, v) => PEER_COLS[j][0] === 'inflation' ? -Math.abs(v - 3) : v;
+  const colVals = PEER_COLS.map((col, j) => ctry.map(c => V[c][j] && score(j, V[c][j][1])).filter(v => v != null).sort((a, b) => a - b));
+  const shade = (j, v) => {
+    const vals = colVals[j], col = PEER_COLS[j];
+    if (v == null || vals.length < 4) return '';
+    v = score(j, v);
+    const r = vals.filter(x => x < v).length / (vals.length - 1);
+    if (!col[3]) return 'background:rgba(31,95,168,' + (0.05 + 0.25 * r).toFixed(3) + ')';
+    const good = col[3] > 0 || col[0] === 'inflation' ? r : 1 - r, a = Math.abs(good - 0.5) * 2;
+    return 'background:rgba(' + (good >= 0.5 ? '31,138,77' : '212,88,58') + ',' + (0.05 + 0.3 * a).toFixed(3) + ')';
+  };
+  const peerColor = (j, v) => {
+    let c = null;
+    try { c = colorOf(PEER_COLS[j][0], v); } catch (e) { c = null; }
+    if (c) return c;
+    const vals = colVals[j], sv = score(j, v);
+    const r = vals.length > 1 ? vals.filter(x => x < sv).length / (vals.length - 1) : 0.5;
+    return SEQ[Math.round(r * (SEQ.length - 1))];
+  };
+  const fmtv = (j, v) => PEER_COLS[j][0] === 'gdp_pc_ppp' ? nf(v / 1000, v >= 10000 ? 0 : 1) + 'k' : nf(v, PEER_COLS[j][4]);
+  let html = '<thead><tr><th scope="col" class="pe-c" title="Economy">Economy</th>' + PEER_COLS.map((c, j) => '<th scope="col" class="num" title="' + esc(c[2]) + '">' + esc(c[1]) + '<small class="pe-y">' + (modal[j] || '') + '</small></th>').join('') + '</tr></thead><tbody>';
+  PEER_GROUPS.forEach(([g, codes, color]) => {
+    html += '<tr class="pe-g" style="--g:' + color + '"><th colspan="' + (PEER_COLS.length + 1) + '" scope="rowgroup">' + esc(g) + '</th></tr>';
+    codes.forEach(c => {
+      const e = EM[c];
+      if (!e) return;
+      const bd = c === 'BGD', agg = !!e[6];
+      html += '<tr class="pe-r' + (bd ? ' pe-bd' : '') + (agg ? ' pe-agg' : '') + '" tabindex="0" data-code="' + c + '" style="--g:' + color + '"><th scope="row" class="pe-c"><span class="pe-f" aria-hidden="true">' + flagEmoji(e[2]) + '</span>' + esc(e[1]) + (bd ? '<span class="pe-star" aria-hidden="true"> ★</span>' : '') + '</th>' +
+        PEER_COLS.map((col, j) => { const x = V[c][j]; if (!x) return '<td class="num c"><span class="cell dash">–</span></td>'; const bg = peerColor(j, x[1]); return '<td class="num c" title="' + esc(col[2] + ', ' + x[0]) + '"><span class="cell" style="background:' + bg + ';color:' + textOn(bg) + '">' + fmtv(j, x[1]) + (x[0] !== modal[j] ? '<sup>’' + String(x[0]).slice(2) + '</sup>' : '') + '</span></td>'; }).join('') + '</tr>';
+    });
+  });
+  html += '<tr class="pe-rank"><th scope="row" class="pe-c">Bangladesh rank</th>' + PEER_COLS.map((col, j) => {
+    const x = V.BGD && V.BGD[j];
+    if (!x || !col[3]) return '<td class="num"><span class="muted">–</span></td>';
+    const sx = score(j, x[1]), up = col[3] > 0 || col[0] === 'inflation';
+    const vals = colVals[j], rk = vals.filter(v => up ? v > sx : v < sx).length + 1, n = vals.length, k = Math.ceil(n / 3);
+    return '<td class="num"><span class="pe-badge' + (rk <= k ? ' top' : rk > n - k ? ' low warn-b' : '') + '" title="' + esc(col[2]) + ': rank ' + rk + ' of ' + n + '">' + rk + '<small>/' + n + '</small></span></td>';
+  }).join('') + '</tr></tbody>';
+  host.innerHTML = '<div class="table-wrap pe-wrap"><table class="mx pe">' + html + '</table></div>' +
+    '<p class="mx-note">Year under each heading: the most common latest year; a small ’23 after a value marks an older year. Green is better and red worse than most economies in the column: higher growth, income, current account, exports and investment, lower unemployment, and inflation closest to 3% count as better (blue: no better or worse direction). Values more than four years older than the rest of their column are left out. Ranks run from best (1) among the 20 economies. Benchmarks are World Bank regional and income-group aggregates. </p><p class="src-line"><b>Source:</b> World Bank, World Development Indicators (CC BY 4.0).</p>' +
+    '<p class="pe-links"><a href="#compare~gdp_growth~BGD.IND.PAK.LKA.CHN.VNM.THA.JPN">Compare growth over time →</a><a href="#map~gdp_growth~' + (modal[0] || '') + '">See the world map →</a><a href="#rank~inflation~' + (modal[1] || '') + '~asc">World rankings →</a><a href="#bangladesh">Bangladesh Monitor →</a></p>';
+  const open = r => { if (r) location.hash = 'country-' + r.getAttribute('data-code'); };
+  host.addEventListener('click', e => open(e.target.closest('tr[data-code]')));
+  host.addEventListener('keydown', e => { if (e.key === 'Enter') open(e.target.closest('tr[data-code]')); });
+}
+
+/* ---------- No copying, dragging or printing shortcuts ---------- */
+(function protect() {
+  const ok = t => t && t.closest && t.closest('input, textarea, select, [contenteditable="true"]');
+  let told = 0;
+  document.addEventListener('copy', e => { if (ok(e.target)) return; e.preventDefault(); if (Date.now() - told > 4000) { told = Date.now(); toast('Copying is turned off on this site.'); } });
+  ['cut', 'contextmenu', 'dragstart', 'selectstart'].forEach(t => document.addEventListener(t, e => { if (!ok(e.target)) e.preventDefault(); }));
+  document.addEventListener('keydown', e => { const k = (e.key || '').toLowerCase(); if ((e.ctrlKey || e.metaKey) && ['c', 'x', 's', 'p', 'u', 'a'].includes(k) && !ok(e.target)) e.preventDefault(); });
+})();
+setTimeout(() => { try { initAuth(); } catch (e) { /* sign-in optional */ } try { initBlink(); } catch (e) { /* optional */ } try { initPeers(); } catch (e) { /* table optional */ } try { initLive(); } catch (e) { /* dashboard optional */ } try { staticSources(); } catch (e) { /* optional */ } }, 0);
+return { initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks };
 })();
 function initBD() { return BDX.initBD(); }
 function initLab() { return BDX.initLab(); }
 function routeBD(h) { return BDX.routeBD(h); }
+function wmark(opt) {
+  if (!opt || typeof opt !== 'object') return opt;
+  try { addLabels(opt); } catch (e) { /* labels optional */ }
+  const T = theme();
+  const mark = { id: 'mm-wm', type: 'text', right: 10, top: 22, z: 100, silent: true, style: { text: 'macroarianalytics.com', fill: T.muted, opacity: 0.55, font: '600 10px ' + FONT } };
+  if (opt.graphic && !Array.isArray(opt.graphic) && Array.isArray(opt.graphic.elements)) { if (!opt.graphic.elements.some(x => x && x.id === 'mm-wm')) opt.graphic.elements.push(mark); }
+  else { const g = opt.graphic ? (Array.isArray(opt.graphic) ? opt.graphic : [opt.graphic]) : []; if (!g.some(x => x && x.id === 'mm-wm')) g.push(mark); opt.graphic = g; }
+  return opt;
+}
+
+/* ---------- Data labels: bars always; lines at each quarter, or each year ---------- */
+function lblFmt(v) { if (v == null || !isFinite(v)) return ''; const a = Math.abs(v), d = a >= 100 ? 0 : a >= 1 ? 1 : 2; return Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function pval(p) { const v = p.value; if (Array.isArray(v)) { if (p.encode && p.encode.y && v[p.encode.y[0]] != null) return v[p.encode.y[0]]; return v[v.length - 1]; } return v; }
+function addLabels(opt) {
+  const T = theme();
+  const xa = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
+  const ya = Array.isArray(opt.yAxis) ? opt.yAxis[0] : opt.yAxis;
+  const cats = xa && xa.type === 'category' && Array.isArray(xa.data) ? xa.data.map(String) : null;
+  const horiz = ya && ya.type === 'category';
+  let showAt = null;
+  if (cats && cats.length) {
+    const c0 = cats[0];
+    if (/^(FY)?\d{4}$/.test(c0) || /^\d{4}-Q\d$/.test(c0)) showAt = () => true;
+    else if (/^\d{4}-\d{2}$/.test(c0)) showAt = i => /-(03|06|09|12)$/.test(cats[i]);
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(c0)) showAt = i => { const m = cats[i].slice(5, 7), pm = i > 0 ? cats[i - 1].slice(5, 7) : ''; return ['01', '04', '07', '10'].includes(m) && m !== pm; };
+    else if (/^\d+$/.test(c0)) showAt = cats.length > 20 ? i => +cats[i] % 3 === 0 : () => true;
+  }
+  const timeAxis = xa && xa.type === 'time';
+  const dkey = d => { const t = Array.isArray(d) ? d[0] : d && d.value ? d.value[0] : null; if (t == null) return ''; const dt = typeof t === 'number' ? new Date(t) : new Date(String(t)); return isNaN(dt) ? '' : dt.getUTCFullYear() + '-' + String(dt.getUTCMonth() + 1).padStart(2, '0'); };
+  const base = { fontSize: 10, color: T.ink2, fontWeight: 600 };
+  (Array.isArray(opt.series) ? opt.series : opt.series ? [opt.series] : []).forEach(s => {
+    if (!s || s.silent || s.label || (s.lineStyle && s.lineStyle.opacity === 0) || / lower$/.test(s.name || '')) return;
+    if (s.type === 'bar') {
+      s.label = Object.assign({ show: true, position: horiz ? 'right' : 'top', formatter: p => lblFmt(pval(p)) }, base);
+      s.labelLayout = { hideOverlap: true };
+    } else if (s.type === 'line' && timeAxis && Array.isArray(s.data) && s.data.length) {
+      const mk = s.data.map(dkey);
+      const at = i => ['01', '04', '07', '10'].includes(mk[i].slice(5)) && (i === 0 || mk[i - 1] !== mk[i]);
+      s.label = Object.assign({ show: true, position: 'top', formatter: p => at(p.dataIndex) ? lblFmt(pval(p)) : '' }, base);
+      s.labelLayout = { hideOverlap: true };
+      s.showSymbol = true; s.showAllSymbol = true;
+      s.symbolSize = (v, p) => at(p.dataIndex) ? 4 : 0;
+    } else if (s.type === 'line' && showAt) {
+      s.label = Object.assign({ show: true, position: 'top', formatter: p => showAt(p.dataIndex) ? lblFmt(pval(p)) : '' }, base);
+      s.labelLayout = { hideOverlap: true };
+      s.showSymbol = true; s.showAllSymbol = true;
+      const sz = typeof s.symbolSize === 'number' ? s.symbolSize : 5;
+      s.symbolSize = (v, p) => showAt(p.dataIndex) ? Math.min(sz, 5) : 0;
+    }
+  });
+  return opt;
+}
+function ensureSrc(node) {
+  try { if (!node || node.closest('.fig, #live, .cat-one')) return; BDX.addSrcAfter(node, BDX.srcFor(node)); } catch (e) { /* optional */ }
+}
+function gateBlocks(view, opts) { try { return BDX.gateBlocks(view, opts); } catch (e) { return false; } }

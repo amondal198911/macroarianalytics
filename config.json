@@ -1,5 +1,17 @@
 {
   "domain": "www.macroarianalytics.com",
-  "site_name": "Macro-Economic Monitor",
-  "owner": "Arian Mondal"
+  "site_name": "Macroeconomic Monitor and Forecasting",
+  "owner": "Arian Mondal",
+  "owner_title": "Owner and editor",
+  "show_owner": false,
+  "auth": {
+    "firebase": {
+      "apiKey": "",
+      "authDomain": "",
+      "projectId": "",
+      "appId": ""
+    },
+    "apple": false,
+    "owner": "ed7f244d868fafe01f34800b4db3ec3d7482a91d54161182c8c802b47d1971ae"
+  }
 }

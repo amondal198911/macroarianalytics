@@ -391,6 +391,7 @@ const ro = 'ResizeObserver' in window ? new ResizeObserver(entries => {
   for (const en of entries) { const rec = charts.get(en.target); if (rec && rec.inst) rec.inst.resize(); }
 }) : null;
 function chartOn(node, render, opts) {
+  ensureSrc(node);
   let rec = charts.get(node);
   if (!rec) {
     rec = { render, inst: null, dirty: true, visible: !io };
@@ -421,7 +422,7 @@ function applyChart(node, rec) {
     if (rec.onInit) rec.onInit(rec.inst);
     rec.reset = true;
   }
-  rec.inst.setOption(opt, rec.merge && !rec.reset ? { notMerge: false } : true);
+  rec.inst.setOption(wmark(opt), rec.merge && !rec.reset ? { notMerge: false } : true);
   rec.reset = false;
 }
 function disposeIn(root) {
@@ -1019,7 +1020,7 @@ function showCountry(code) {
   buildSections(code);
   resetAI();
   try { history.replaceState(null, '', '#country-' + code); } catch (err) { /* framed */ }
-  document.title = e.name + ' economy | Macro-Economic Monitor';
+  document.title = e.name + ' economy | Macroeconomic Monitor and Forecasting';
 }
 function yearSpan(code, keys) {
   let first = 9999, last = 0;
@@ -1106,7 +1107,7 @@ function downloadCountry(code) {
   const rows = [['Year'].concat(keys.map(k => IND[k].label + ' (' + unitOf(k) + ')'))];
   for (let y = y0; y <= LAST; y++) rows.push([y].concat(keys.map(k => { const v = val(k, code, y); return v == null ? '' : v; })));
   rows.push([]);
-  rows.push(['Source: World Bank World Development Indicators (CC BY 4.0), via Macro-Economic Monitor. Economy: ' + e.name + ' (' + code + ')']);
+  rows.push(['Source: World Bank World Development Indicators (CC BY 4.0), via Macroeconomic Monitor and Forecasting. Economy: ' + e.name + ' (' + code + ')']);
   saveCSV('macro-monitor-' + code + '.csv', rows);
 }
 
@@ -1430,12 +1431,13 @@ async function saveCSV(filename, rows) {
 
 /* ================= navigation ================= */
 const VIEWS = ['overview', 'bangladesh', 'lab', 'countries', 'compare', 'explore', 'map', 'rankings', 'markets', 'learn', 'methods', 'about', 'contact', 'privacy'];
-const TITLES = { overview: 'Macro-Economic Monitor | by Arian Mondal', bangladesh: 'Bangladesh Monitor', lab: 'Forecast lab', compare: 'Compare economies', explore: 'Explore relationships', map: 'World map', rankings: 'Rankings', markets: 'Markets', learn: 'Learn the indicators', methods: 'Methods and notes', about: 'About', contact: 'Contact', privacy: 'Privacy' };
+const TITLES = { overview: 'Macroeconomic Monitor and Forecasting', bangladesh: 'Bangladesh Monitor', lab: 'Forecast lab', compare: 'Compare economies', explore: 'Explore relationships', map: 'World map', rankings: 'Rankings', markets: 'Markets', learn: 'Learn the indicators', methods: 'Methods and notes', about: 'About', contact: 'Contact', privacy: 'Privacy' };
 const inited = {};
 const INIT = { bangladesh: initBD, lab: initLab, compare: initCompare, explore: initExplore, map: initMap, rankings: initRank, markets: initMarkets, learn: initLearn, methods: initMethods, about: initAbout, contact: initContact, privacy: initPrivacy };
 function go(view, opts) {
   opts = opts || {};
   if (!VIEWS.includes(view)) view = 'overview';
+  if (gateBlocks(view, opts)) return;
   if (view !== 'map') stopPlay();
   if (view !== 'explore') exStop();
   $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + view));
@@ -1447,7 +1449,7 @@ function go(view, opts) {
     if (view === 'rankings') renderRank();
     if (view === 'markets') renderMarkets();
     if (view === 'explore') renderExplore();
-    document.title = view === 'overview' ? TITLES.overview : TITLES[view] + ' | Macro-Economic Monitor';
+    document.title = view === 'overview' ? TITLES.overview : TITLES[view] + ' | Macroeconomic Monitor and Forecasting';
     try { history.replaceState(null, '', '#' + view); } catch (err) { /* framed */ }
   }
   if (!opts.keep) window.scrollTo(0, 0);

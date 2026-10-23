@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Macro-Economic Monitor | by Arian Mondal</title>
-<meta name="description" content="Macro-Economic Monitor by Arian Mondal: growth, inflation, jobs, public finances, trade and market prices for more than 200 economies.">
+<title>Macroeconomic Monitor and Forecasting</title>
+<meta name="description" content="Macroeconomic Monitor and Forecasting: growth, inflation, jobs, public finances, trade and market prices for more than 200 economies.">
 <script>try{var t=JSON.parse(localStorage.getItem('mm.theme'));if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,9 +16,9 @@
 <body>
 <header class="topbar">
   <div class="topbar-in">
-    <button class="brand" type="button" data-go="overview" aria-label="Macro-Economic Monitor, go to overview">
+    <button class="brand" type="button" data-go="overview" aria-label="Macroeconomic Monitor and Forecasting, go to overview">
       <svg viewBox="0 0 34 22" aria-hidden="true" focusable="false"><path d="M1.5 12.5h5.2l2.6-6.4 3.4 12.4 3.6-15 3 9.2 2.3-3.2h6.6" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="30.5" cy="9.5" r="2.6" fill="var(--signal)"/></svg>
-      <span class="brand-name">Macro&#8209;Economic Monitor<span class="brand-by">by Arian Mondal</span></span>
+      <span class="brand-name">Macroeconomic Monitor<span class="brand-by">and Forecasting</span></span>
     </button>
     <nav class="views" aria-label="Sections">
       <button type="button" data-go="overview">Overview</button>
@@ -35,6 +35,7 @@
       <button type="button" data-go="about">About</button>
     </nav>
     <div class="top-actions">
+      <button class="acct-btn" id="acct-btn" type="button" hidden aria-haspopup="true" aria-expanded="false">Sign in</button>
       <button class="tool" id="search-btn" type="button" aria-label="Search economies, indicators and pages" title="Search (press /)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></button>
       <button class="theme-btn" id="theme-btn" type="button" aria-label="Switch to dark mode"></button>
     </div>
@@ -48,6 +49,22 @@
       <div class="ticker-in"><div class="ticker-track" id="ticker-track"></div></div>
       <button class="ticker-btn" id="ticker-btn" type="button" aria-label="Pause the price ticker"></button>
     </div>
+    <section class="live" id="live" aria-labelledby="live-h">
+      <div class="wrap">
+        <div class="live-head">
+          <div><h2 id="live-h"><span class="live-dot" aria-hidden="true"></span>Live dashboard</h2><p class="note" id="live-status" aria-live="polite"></p></div>
+          <div class="live-ctl" role="group" aria-label="Refresh interval">
+            <span class="live-lab">Refresh every</span>
+            <div class="live-seg" id="live-int"></div>
+            <label class="live-custom"><span class="sr-only">Custom interval in seconds</span><input type="number" id="live-sec" min="2" max="3600" step="1" inputmode="numeric" placeholder="sec"></label>
+            <button class="btn sm" id="live-pause" type="button">Pause</button>
+          </div>
+        </div>
+        <div class="live-bar" aria-hidden="true"><i id="live-prog"></i></div>
+        <div id="live-grid"></div>
+        <div id="live-spot"></div>
+      </div>
+    </section>
     <section class="band" aria-labelledby="hero-title">
       <div class="wrap band-in">
         <div class="band-text">
@@ -69,6 +86,10 @@
       <div class="wrap band-foot"><dl class="vitals" id="vitals"></dl></div>
     </section>
     <div class="wrap">
+      <section class="block peers" id="peers" aria-labelledby="peers-h">
+        <div class="block-head"><div><h2 id="peers-h">Bangladesh and its peers</h2><p class="note">Bangladesh beside its SAARC neighbours, developing Asia and developed economies. Latest year available; colours compare each economy with the others in the column. Tap a row to open its profile.</p></div></div>
+        <div id="peers-table"></div>
+      </section>
       <section class="block" aria-labelledby="pulse-h">
         <div class="block-head"><div><h2 id="pulse-h">World growth</h2>
           <p class="note">World real GDP growth each year; dips below zero are shaded red. World Bank aggregates weight economies by GDP at market exchange rates. The IMF’s headline world figure uses purchasing-power weights instead and usually comes out higher.</p></div></div>
@@ -79,7 +100,7 @@
         </figure>
       </section>
       <section class="block" aria-labelledby="in-h">
-        <div class="block-head"><div><h2 id="in-h">What the numbers say</h2><p class="note">Facts worked out from this release of the data. Tap a card to dig in.</p></div></div>
+        <div class="block-head"><div><h2 id="in-h">What the numbers say</h2><p class="note">Facts worked out from the latest data. Tap a card to dig in.</p></div></div>
         <div class="insights" id="insights"></div>
       </section>
       <section class="block" aria-labelledby="ov-mk-h">
@@ -120,7 +141,6 @@
       <div class="page-head">
         <h1>Bangladesh Monitor</h1>
         <p class="lede">Prices, output, money, interest rates, the external sector, public finances and the capital market, grouped like Bangladesh Bank’s Weekly Selected Economic Indicators. Every figure is numbered and cites its source table.</p>
-        <p class="note" id="bd-vintage"></p>
       </div>
       <div class="bd-tabs" id="bd-tabs" role="tablist" aria-label="Sector groups"></div>
       <div id="bd-body"></div>
@@ -133,7 +153,6 @@
       <div class="page-head">
         <h1>Forecast lab</h1>
         <p class="lede">Time-series models, a structural VAR, a DSGE model and cross-country analysis, reported as journals expect: estimates with standard errors, test statistics and p-values, diagnostics, robustness and placebo checks, and out-of-sample accuracy.</p>
-        <p class="note" id="lab-est"></p>
       </div>
       <div class="bd-tabs" id="lab-tabs" role="tablist" aria-label="Forecast lab sections"></div>
       <div id="lab-body"></div>
@@ -315,10 +334,10 @@
   <!-- ============ ABOUT ============ -->
   <div class="view" id="v-about">
   <div class="wrap">
-    <div class="page-head"><h1>About Macro&#8209;Economic Monitor</h1></div>
+    <div class="page-head"><h1>About Macroeconomic Monitor and Forecasting</h1></div>
     <div class="prose">
-      <div class="owner"><div class="mono" aria-hidden="true">AM</div><div><b>Arian Mondal</b><div class="note" style="margin:0">Owner. <a data-email href="#contact">Email Arian</a></div></div></div>
-      <p class="lede" style="font-size:18px;margin-top:16px">Macro‑Economic Monitor is an independent website owned by Arian Mondal. It brings together official statistics on growth, prices, jobs, public finances and trade for more than 200 economies, along with daily and monthly market prices, so anyone can see how the world economy is doing and understand what the numbers mean.</p>
+      
+      <p class="lede" style="font-size:18px;margin-top:16px">Macroeconomic Monitor and Forecasting is an independent website. It brings together official statistics on growth, prices, jobs, public finances and trade for more than 200 economies, along with daily and monthly market prices, so anyone can see how the world economy is doing and understand what the numbers mean.</p>
       <section class="block">
         <h2>Where the data comes from</h2>
         <ul class="sources">
@@ -338,6 +357,11 @@
       <section class="block">
         <h2>More about the site</h2>
         <div class="controls" style="margin-top:10px"><button class="btn" type="button" data-go="methods">Methods and notes</button><button class="btn" type="button" data-go="contact">Contact</button><button class="btn" type="button" data-go="privacy">Privacy</button></div>
+      </section>
+      <section class="block owner-sec" id="ownership" data-owner-gate hidden aria-labelledby="own-h">
+        <h2 id="own-h">Ownership</h2>
+        <div class="owner"><div class="mono" aria-hidden="true">{{INITIALS}}</div><div><b>{{OWNER}}</b><div class="note" style="margin:0">{{OWNER_TITLE}}</div></div></div>
+        <p>Macroeconomic Monitor and Forecasting is owned and edited by {{OWNER}}.</p>
       </section>
       <section class="block" id="ab-disclaimer">
         <h2>Disclaimer</h2>
@@ -420,7 +444,7 @@
       <section class="block">
         <h2 id="me-cite-h">How to cite</h2>
         <div class="cite" id="me-cite"></div>
-        <div class="controls" style="margin-top:10px"><button class="btn" id="me-cite-btn" type="button">Copy citation</button></div>
+        <div class="controls" style="margin-top:10px"></div>
         <p class="note">Please credit the original sources too. World Bank data is licensed under CC BY 4.0, which requires attribution.</p>
       </section>
       <section class="block">
@@ -432,7 +456,7 @@
       <section class="block">
         <h2 id="me-log-h">Update log</h2>
         <ul class="log">
-          <li><b>Version 1.2, 22 October 2026</b>Added an email address to the Contact page. Prepared the site for its own web address, with a summary page for every economy, a sitemap for search engines, ordinary downloads outside Claude and an automatic daily data update.</li>
+          <li><b>Version 1.2, 22 October 2026</b>Added an email address to the Contact page. Prepared the site for its own web address, with a summary page for every economy, a sitemap for search engines, an automatic daily data update.</li>
           <li><b>Version 1.1, 22 October 2026</b>Added Explore, an animated bubble chart with trend lines; poverty, inequality, youth unemployment, labour-force and debt-service figures; log and trimmed chart scales; chart images and data tables; links to share any view; site search; country notes; and methods, contact and privacy pages. Redesigned the home page with a price ticker, a dot map of world growth and data insights.</li>
           <li><b>Version 1.0, 21 October 2026</b>First release: 217 economies and 15 groups, 28 indicators from 1960 to 2025, market prices, a world map, rankings and comparisons.</li>
         </ul>
@@ -446,14 +470,9 @@
   <div class="wrap">
     <div class="page-head">
       <h1>Contact</h1>
-      <p class="lede">Questions, corrections or ideas for Macro‑Economic Monitor? Arian would like to hear them.</p>
+      <p class="lede">Questions about the figures are best answered by the publishers of the original statistics, listed below.</p>
     </div>
     <div class="contact-grid">
-      <div class="contact-card">
-        <h2>Email Arian</h2>
-        <p style="margin:0">Write to <a data-email id="ct-email" href="#contact">the site’s email address</a>. If you’re reporting a data problem, please include the economy, the indicator and the year.</p>
-        <div class="controls"><a class="btn primary" data-email-btn href="#contact">Write an email</a><button class="btn" id="ct-copy" type="button">Copy the address</button></div>
-      </div>
       <div class="contact-card" id="ct-target" hidden>
         <h2>Leave a comment</h2>
         <p id="ct-avail" style="margin:0"></p>
@@ -462,8 +481,9 @@
     </div>
     <section class="block prose">
       <h2>Reporting a data error</h2>
-      <p>Tell us the economy, the indicator and the year, and what you expected to see. If the error is in the original statistics, you can also contact the publisher directly:</p>
+      <p>If you spot a figure that looks wrong, the publisher of the original statistics can confirm or correct it:</p>
       <ul class="sources">
+        <li><a href="https://www.bb.org.bd" target="_blank" rel="noopener">Bangladesh Bank</a></li>
         <li><a href="https://datahelpdesk.worldbank.org" target="_blank" rel="noopener">World Bank Data Help Desk</a></li>
         <li><a href="https://www.eia.gov" target="_blank" rel="noopener">U.S. Energy Information Administration</a></li>
         <li><a href="https://www.federalreserve.gov" target="_blank" rel="noopener">Federal Reserve</a></li>
@@ -478,7 +498,8 @@
   <div class="wrap">
     <div class="page-head">
       <h1>Privacy</h1>
-      <p class="lede">The short version: this site doesn’t track you or show ads, and it sets no cookies of its own.</p>
+      <p class="lede" data-auth-off>The short version: this site doesn’t track you or show ads, and it sets no cookies of its own.</p>
+      <p class="lede" data-auth-only hidden>The short version: this site shows no ads. The front page and this notice are open to everyone. To see the other pages you sign in with Google, and the site then records your name, email address and the pages you open.</p>
     </div>
     <div class="prose">
       <section class="block">
@@ -486,21 +507,24 @@
         <p>To remember your choices, the site keeps a few settings in your browser’s local storage: light or dark mode, pinned economies, the last economy you viewed, your comparison set, your chart range and log-scale choice, and whether the price ticker is paused. They stay on your device.</p>
         <div class="controls"><button class="btn" id="pv-clear" type="button">Clear my saved settings</button></div>
       </section>
+      <section class="block" data-auth-only hidden>
+        <h2>Signing in</h2>
+        <p>Sign-in is provided by Google Firebase. When you sign in, Google shares your name, email address and profile picture with the site. The site never sees your password.</p>
+        <p>The site stores your name, email address, the date you joined, when you were last here and a list of the pages you open, with the time, in a Firebase database that only the site owner can read. The record is used to understand who uses the site and which pages they read. It is not sold or shared, and no ads are shown.</p>
+        <p>You can delete your account and the whole record at any time: open the account menu at the top right and choose Delete my account and record. Firebase keeps you signed in on this device using your browser’s storage; signing out removes that.</p>
+        <p>Apart from sign-in and this record, the site sends no personal data. Like most web pages, it loads its typeface from Google Fonts and its chart library from cdnjs or jsDelivr, and sign-in loads from Google, so those services receive an ordinary request from your browser.</p>
+      </section>
       <section class="block">
         <h2>What the site sends</h2>
-        <p>The site itself sends no personal data anywhere. Like most web pages, it loads its typeface from Google Fonts and its chart library from cdnjs or jsDelivr, so those services receive an ordinary web request from your device.</p>
+        <p data-auth-off>The site itself sends no personal data anywhere. Like most web pages, it loads its typeface from Google Fonts and its chart library from cdnjs or jsDelivr, so those services receive an ordinary web request from your device.</p>
       </section>
       <section class="block">
         <h2>Optional features in Claude</h2>
         <p>When you open the site in Claude, three extra features may appear. Explain this economy sends that economy’s figures from this page to Claude on your own Claude account, only after you press the button and agree. Downloads create files in your browser and save them only if you confirm. Comments you leave are stored with this page on claude.ai.</p>
       </section>
       <section class="block">
-        <h2>Email</h2>
-        <p>If you email Arian, your message and email address arrive in Arian’s inbox like any other email.</p>
-      </section>
-      <section class="block">
         <h2>Hosting</h2>
-        <p>The site is hosted on claude.ai, so Anthropic’s privacy policy covers that platform. For questions about this site, use the Contact page.</p>
+        <p>The site is hosted on GitHub Pages, so GitHub’s privacy statement covers the servers that deliver it. The preview copy on claude.ai is covered by Anthropic’s privacy policy.</p>
       </section>
     </div>
   </div>
@@ -509,12 +533,12 @@
 
 <footer class="foot">
   <div class="wrap foot-grid">
-    <div class="foot-brand"><b>Macro&#8209;Economic Monitor</b><p>Owned by Arian Mondal. Official statistics on more than 200 economies, explained in plain language.</p><p class="note" id="foot-vintage"></p><p><a data-email href="#contact">Email Arian</a></p></div>
+    <div class="foot-brand"><b>Macroeconomic Monitor and Forecasting</b><p>Official statistics on more than 200 economies and a dedicated Bangladesh monitor, with model-based forecasts, explained in plain language.</p><p data-owner-gate hidden>Owned by {{OWNER}}.</p></div>
     <nav aria-label="Explore the data"><h3>Explore</h3><button type="button" data-go="overview">Overview</button><button type="button" data-go="bangladesh">Bangladesh</button><button type="button" data-go="lab">Forecast lab</button><button type="button" data-go="countries">Countries</button><button type="button" data-go="compare">Compare</button><button type="button" data-go="explore">Explore</button><button type="button" data-go="map">World map</button><button type="button" data-go="rankings">Rankings</button><button type="button" data-go="markets">Markets</button></nav>
     <nav aria-label="Learn"><h3>Learn</h3><button type="button" data-go="learn">Learn the indicators</button><button type="button" data-go="methods">Methods and notes</button><button type="button" data-go="methods" data-anchor="me-notes-h">Country notes</button><button type="button" data-go="methods" data-anchor="me-cite-h">How to cite</button><button type="button" data-go="methods" data-anchor="me-log-h">Update log</button></nav>
     <nav aria-label="About the site"><h3>About</h3><button type="button" data-go="about">About</button><button type="button" data-go="contact">Contact</button><button type="button" data-go="privacy">Privacy</button><button type="button" data-go="about" data-anchor="ab-disclaimer">Disclaimer</button></nav>
   </div>
-  <div class="wrap foot-legal">© 2026 Arian Mondal. All rights reserved. Data: World Bank (CC BY 4.0), U.S. Energy Information Administration, Federal Reserve, U.S. Bureau of Labor Statistics. For information only, not investment advice.</div>
+  <div class="wrap foot-legal">© 2026 <span data-owner-gate hidden>{{OWNER}}</span><span data-owner-alt>Macroeconomic Monitor and Forecasting</span>. All rights reserved. Data: World Bank (CC BY 4.0), U.S. Energy Information Administration, Federal Reserve, U.S. Bureau of Labor Statistics. For information only, not investment advice. <button type="button" class="linklike blink-tg" id="blink-tg">Blinking warnings: on</button></div>
 </footer>
 
 <div class="sheet" id="picker" role="dialog" aria-modal="true" aria-labelledby="picker-title" hidden>
@@ -535,6 +559,26 @@
 </div>
 <div class="toast-wrap"><div class="toast" id="toast" role="status" aria-live="polite"></div></div>
 
+<div class="gate" id="gate" hidden role="dialog" aria-modal="true" aria-labelledby="gate-h">
+  <div class="gate-card">
+    <div class="gate-mark" aria-hidden="true"><svg viewBox="0 0 40 24" width="46" height="28" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13h8l3-8 5 15 4-12 3 5h7"/><circle cx="36" cy="13" r="2.6" fill="#E3A008" stroke="none"/></svg></div>
+    <h2 id="gate-h">Sign in to continue</h2>
+    <p class="gate-lede">The front page is open to everyone. Sign in to see the Bangladesh Monitor, the Forecast lab, country profiles and every other page.</p>
+    <p class="gate-wait" id="gate-wait">Checking your sign-in…</p>
+    <div class="gate-btns" id="gate-btns">
+      <button type="button" class="gbtn google" id="gate-google"><svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><span>Continue with Google</span></button>
+      <button type="button" class="gbtn apple" id="gate-apple" hidden><span>Continue with Apple</span></button>
+    </div>
+    <p class="gate-msg" id="gate-msg" role="alert"></p>
+    <p class="gate-fine">New here? Your first sign-in creates your account. By continuing, you agree that the site records your name, email address and the pages you open. <a href="#privacy" id="gate-privacy">Privacy notice</a></p>
+    <button type="button" class="btn" id="gate-back">Back to the front page</button>
+  </div>
+</div>
+<div class="acct-menu" id="acct-menu" hidden role="menu">
+  <div class="acct-who"><b id="acct-name"></b><span id="acct-email"></span></div>
+  <button type="button" role="menuitem" id="acct-out">Sign out</button>
+  <button type="button" role="menuitem" id="acct-del" class="danger">Delete my account and record</button>
+</div>
 <script type="application/json" id="mm-data">/*__DATA__*/</script>
 <script type="application/json" id="bd-data">/*__BD_DATA__*/</script>
 <script>

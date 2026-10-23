@@ -1,4 +1,4 @@
-# Macroeconomic Monitor
+# Macroeconomic Monitor and Forecasting
 
 Website owned by Arian Mondal: growth, inflation, jobs, poverty, public finances, trade and market prices
 for more than 200 economies, built from open official data.
@@ -20,7 +20,6 @@ Don't upload it to GitHub: the workflow builds it, and GitHub's upload page take
 ## Settings
 
 - Web address and site name: `config.json`
-- Email address shown on the site: `src/ext.js` (search for `arian.hu.idec`)
 
 ## Run it yourself
 
@@ -54,3 +53,28 @@ the models, replace the bd_*.json data files and run (needs Python with numpy, s
 
 Headline inflation is a linked series (CPI bases 1995–96, 2005–06 and 2021–22), switched where the bases differ
 least; Table VII's own headline series is not used because it changes base in July 2012.
+
+
+## Sign-in (Firebase)
+
+Every page except the front page and Privacy needs a Google sign-in (Apple optional). Sign-in switches on only when
+all four Firebase values are filled in config.json under "auth" -> "firebase"; with them empty the site stays open.
+Set "apple": true only after Sign in with Apple is configured in Firebase (needs the Apple Developer Program).
+
+The Firebase web values (apiKey, authDomain, projectId, appId) are designed to be public; access is controlled by
+Authorized domains and the Firestore rules below. Each signed-in visitor gets users/{uid} (name, email, provider,
+joined, lastSeen, sessions) and users/{uid}/visits (page, time). Visitors can delete their own account and record.
+
+Firestore rules:
+
+    rules_version = '2';
+    service cloud.firestore {
+      match /databases/{database}/documents {
+        match /users/{uid} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+          match /visits/{visit} {
+            allow read, create, delete: if request.auth != null && request.auth.uid == uid;
+          }
+        }
+      }
+    }

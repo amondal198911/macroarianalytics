@@ -15,6 +15,20 @@ DOMAIN = CFG['domain'].replace('https://', '').replace('http://', '').strip('/ '
 SITE = 'https://' + DOMAIN + '/'
 NAME = CFG.get('site_name', 'Macro-Economic Monitor')
 OWNER = CFG.get('owner', 'Arian Mondal')
+SHOW_OWNER = bool(CFG.get('show_owner', False))
+AUTH = CFG.get('auth') or {}
+_FB = AUTH.get('firebase') or {}
+AUTH_ON = all(str(_FB.get(k, '')).strip() for k in ('apiKey', 'authDomain', 'projectId', 'appId'))
+
+
+def auth_inject(page):
+    """Add the sign-in settings to the live site (never to the claude.ai preview)."""
+    if not AUTH_ON:
+        return page
+    cfg = {'firebase': {k: str(_FB[k]).strip() for k in ('apiKey', 'authDomain', 'projectId', 'appId')}, 'apple': bool(AUTH.get('apple')), 'sdk': AUTH.get('sdk', '10.12.2'), 'owner': str(AUTH.get('owner', ''))}
+    tag = '<script>window.MM_AUTH=' + json.dumps(cfg).replace('</', '<\\/') + ';</script>\n'
+    return page.replace('<script type="application/json" id="mm-data">', tag + '<script type="application/json" id="mm-data">', 1)
+OWNER_TITLE = CFG.get('owner_title', 'Owner and editor')
 DESC = ('Growth, inflation, jobs, poverty, public finances, trade and market prices for more than 200 economies, '
         'plus a Bangladesh monitor and a forecasting lab, explained in plain language, using official data from '
         'the World Bank, Bangladesh Bank and other public sources.')
@@ -36,6 +50,10 @@ def assemble(raw, seo):
     css = read('styles.css') + '\n' + read('styles2.css')
     page = read('shell.html').replace('/*__CSS__*/', css).replace('/*__JS__*/', js)
     page = page.replace('/*__DATA__*/', raw.replace('</', '<\\/'))
+    initials = ''.join(w[0] for w in OWNER.split()[:2]).upper()
+    page = page.replace('{{OWNER}}', E(OWNER)).replace('{{OWNER_TITLE}}', E(OWNER_TITLE)).replace('{{INITIALS}}', E(initials))
+    if SHOW_OWNER:
+        page = page.replace(' data-owner-gate hidden', ' data-owner-gate').replace(' data-owner-alt>', ' data-owner-alt hidden>')
     bdm = ROOT / 'bd_models.json'
     page = page.replace('/*__BD_DATA__*/', bdm.read_text(encoding='utf-8').replace('</', '<\\/') if bdm.exists() else 'null')
     if seo:
@@ -45,15 +63,15 @@ def assemble(raw, seo):
 
 def head_tags():
     ld = [{'@context': 'https://schema.org', '@type': 'WebSite', 'name': NAME, 'url': SITE, 'description': DESC,
-           'author': {'@type': 'Person', 'name': OWNER}},
+           'author': ({'@type': 'Person', 'name': OWNER} if SHOW_OWNER else {'@type': 'Organization', 'name': NAME})},
           {'@context': 'https://schema.org', '@type': 'Dataset', 'name': NAME + ' data',
            'description': 'Annual macroeconomic indicators for more than 200 economies, compiled from the World Bank World Development Indicators.',
            'url': SITE + '#methods', 'license': 'https://creativecommons.org/licenses/by/4.0/',
-           'creator': {'@type': 'Person', 'name': OWNER}, 'isBasedOn': 'World Bank, World Development Indicators'}]
+           'creator': ({'@type': 'Person', 'name': OWNER} if SHOW_OWNER else {'@type': 'Organization', 'name': NAME}), 'isBasedOn': 'World Bank, World Development Indicators'}]
     return '\n'.join([
         f'<link rel="canonical" href="{SITE}">', f'<link rel="icon" href="{ICON}">',
         '<meta property="og:type" content="website">', f'<meta property="og:site_name" content="{E(NAME)}">',
-        f'<meta property="og:title" content="{E(NAME)} | by {E(OWNER)}">', f'<meta property="og:description" content="{E(DESC)}">',
+        f'<meta property="og:title" content="{E(NAME)}">', f'<meta property="og:description" content="{E(DESC)}">',
         f'<meta property="og:url" content="{SITE}">', f'<meta property="og:image" content="{SITE}og-image.png">',
         '<meta name="twitter:card" content="summary_large_image">',
         '<script type="application/ld+json">' + json.dumps(ld, ensure_ascii=False).replace('</', '<\\/') + '</script>'])
@@ -152,7 +170,7 @@ def stub(code, name, region, summ, rows, built):
 <a class="btn" href="../../#country-{code}">Open the full interactive profile</a>
 <p class="src">Source: World Bank, World Development Indicators (CC BY 4.0). Data release {built}. Figures are revised by their publishers.</p>
 </main>
-<footer>© {built[:4]} {E(OWNER)}. <a href="../../#about">About</a><a href="../../#methods">Methods</a><a href="../../#contact">Contact</a><a href="../../#privacy">Privacy</a></footer>
+<footer>© {built[:4]} {E(OWNER if SHOW_OWNER else NAME)}. <a href="../../#about">About</a><a href="../../#methods">Methods</a><a href="../../#contact">Contact</a><a href="../../#privacy">Privacy</a></footer>
 </body></html>
 """
 
@@ -170,7 +188,7 @@ def main():
     if pub.exists():
         shutil.rmtree(pub)
     pub.mkdir()
-    (pub / 'index.html').write_text(assemble(raw, True), encoding='utf-8')
+    (pub / 'index.html').write_text(auth_inject(assemble(raw, True)), encoding='utf-8')
     S, built, codes = D['s'], D['meta']['built'], []
     for code, name, iso2, region, sub, _n, grp in D['econ']:
         if grp:
@@ -197,6 +215,13 @@ def main():
     for f in ['bd_catalog.json', 'bd_M.json', 'bd_Q.json', 'bd_CY.json', 'bd_FY.json']:
         if (ROOT / f).exists():
             shutil.copy(ROOT / f, pub / f)
+    try:
+        import json as _json
+        _built = _json.loads((ROOT / 'build' / 'data.json').read_text(encoding='utf-8')).get('meta', {}).get('built')
+        _bm = _json.loads((ROOT / 'bd_models.json').read_text(encoding='utf-8')).get('meta', {}) if (ROOT / 'bd_models.json').exists() else {}
+        (pub / 'live.json').write_text(_json.dumps({'built': _built, 'bd': _bm.get('estimated')}), encoding='utf-8')
+    except Exception as _e:
+        print('live.json not written:', _e)
     print('Built public/ with', len(codes), 'country pages and', len(urls), 'sitemap entries')
 
 
