@@ -5,7 +5,7 @@ const ALLOW_DL = false; // downloads switched off site-wide
 const pad2 = n => String(n).padStart(2, '0');
 const bdLab = (f, k) => f === 'M' ? Math.floor(k / 12) + '-' + pad2(k % 12 + 1) : f === 'Q' ? Math.floor(k / 4) + '-Q' + (k % 4 + 1) : f === 'FY' ? 'FY' + k : String(k);
 const mLabAdd = (lab, n) => { const k = +lab.slice(0, 4) * 12 + (+lab.slice(5, 7)) - 1 + n; return bdLab('M', k); };
-const nf = (v, d = 1) => v == null || !isFinite(v) ? '–' : Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const nf = (v, d = 2) => { if (v == null || !isFinite(v)) return '–'; const dd = d === 0 && Number.isInteger(+v) ? 0 : 2; return Number(v).toLocaleString('en-US', { minimumFractionDigits: dd, maximumFractionDigits: dd }); };
 function dpOf(unit, v) {
   if (v == null) return 1;
   const a = Math.abs(v);
@@ -14,7 +14,7 @@ function dpOf(unit, v) {
   return a >= 1000 ? 0 : a >= 10 ? 1 : 2;
 }
 const fv = (unit, v) => nf(v, dpOf(unit, v));
-const fp = p => p == null ? '–' : p < 0.001 ? '<0.001' : nf(p, 3);
+const fp = p => p == null ? '–' : p < 0.001 ? '<0.001' : Number(p).toFixed(3);
 const stars = p => p == null ? '' : p < 0.01 ? '***' : p < 0.05 ? '**' : p < 0.1 ? '*' : '';
 const SER = k => BD && BD.series[k];
 const PK = k => SER(k) && SER(k).series;
@@ -37,16 +37,12 @@ const LAB_TABS = [['overview', 'Projections'], ['data', 'Data and tests'], ['ari
 const bdState = { tab: 'glance' }, labState = { tab: 'overview', arima: 'infl', shock: 3, fevd: 0, ci: '95', het: 0, desc_ci: '95' };
 let FIGN = 0;
 
+const BBS_RE = /^ET\.(CPI|CPI_B|NA_KEY|QGDP|INDPROD)\.|^ET\.SEI_B\.00[1-8]$/;
+function agencyOf(s) { if (BBS_RE.test(s.code || '')) return 'BBS'; if (/dots/i.test((s.prov || '') + ' ' + (s.code || ''))) return 'IMF'; return 'Bangladesh Bank'; }
 function srcText(list, calc) {
-  const seen = new Set(), parts = [];
-  (list || []).forEach(s => {
-    const pub = s.pub === 'Economic Trends' ? 'Bangladesh Bank, Monthly Economic Trends' : s.pub === 'NSDP' ? 'Bangladesh Bank, National Summary Data Page (NSDP)' : 'Bangladesh Bank, ' + s.pub;
-    const ed = s.newest ? ' (' + s.newest.replace(/ Table.*$/, '').replace(/,.*$/, '') + ' edition)' : '';
-    const t = pub + ed + ', ' + String(s.table || '').replace(/^ET /, '');
-    if (!seen.has(t)) { seen.add(t); parts.push(t); }
-  });
-  const codes = (list || []).map(s => s.code).join(', ');
-  return parts.join('; ') + (codes ? ' [series ' + codes + ']' : '') + (calc ? '; author’s calculations.' : '.');
+  const ag = [];
+  (list || []).forEach(s => { const x = agencyOf(s); if (!ag.includes(x)) ag.push(x); });
+  return (ag.length ? ag.join(', ') : 'Bangladesh Bank') + (calc === 'model' ? '; model estimates' : '') + '.';
 }
 function srcKeys(keys, calc) { const list = []; keys.forEach(k => (SER(k) ? SER(k).src : []).forEach(s => { if (!list.some(x => x.code === s.code)) list.push(s); })); return srcText(list, calc); }
 function align(keys, from) {
@@ -75,11 +71,20 @@ function valAxis(TH, name, o) {
 }
 function tsOption(TH, labels, series, o) {
   o = o || {};
-  const monthly = labels.length && /^\d{4}-\d{2}$/.test(labels[0]);
-  const evs = monthly && o.events !== false ? EVENTS.filter(e => e[1] >= labels[0] && e[1] <= labels[labels.length - 1]) : [];
+  if (FSTATE && labels.length) {
+    const t = tsTransform(labels.map(String), series, FSTATE);
+    if (t) {
+      const mapL = l => (l ? t.keyOf(String(l)) : l);
+      labels = t.labels; series = t.series;
+      o = Object.assign({}, o, { zoomFrom: o.zoomFrom ? mapL(o.zoomFrom) : o.zoomFrom, _evmap: mapL, marks: o.marks ? o.marks.map(m => m.xAxis ? Object.assign({}, m, { xAxis: mapL(m.xAxis) }) : m) : o.marks });
+    }
+  }
+  const evMap = o._evmap || (l => l);
+  const natL = labels.length ? natFreqOf(labels[0]) : null;
+  const evs = (natL === 'M' || ((natL === 'Q' || natL === 'A') && o._evmap)) && o.events !== false ? EVENTS.map(e => [e[0], evMap(e[1]), evMap(e[2]), e[3]]).filter(e => labels.includes(e[1])) : [];
   if (evs.length && series[0]) {
     series[0].markArea = { silent: true, itemStyle: { color: TH.dark ? 'rgba(255,255,255,.055)' : 'rgba(14,28,43,.055)' },
-      label: { show: window.innerWidth >= 900, color: TH.muted, fontSize: 10, position: 'insideTop', distance: 3 },
+      label: { show: FWIDE && window.innerWidth >= 900, color: TH.muted, fontSize: 10, position: 'insideTop', distance: 3 },
       data: evs.map(e => [{ name: e[3], xAxis: e[1] }, { xAxis: labels.includes(e[2]) ? e[2] : labels[labels.length - 1] }]) };
   }
   if (o.marks && series[0]) series[0].markLine = { silent: true, symbol: 'none', label: { color: TH.muted, fontSize: 10, position: 'insideEndTop', formatter: p => p.name || '' }, lineStyle: { color: TH.muted, type: 'dashed', width: 1 }, data: o.marks };
@@ -99,13 +104,7 @@ function tsOption(TH, labels, series, o) {
     const val = d => d == null ? null : typeof d === 'object' ? (Array.isArray(d) ? d[1] : d.value) : d;
     let i = s.data.length - 1;
     while (i >= 0 && val(s.data[i]) == null) i--;
-    if (i >= 0) {
-      const v = val(s.data[i]);
-      const col = (s.itemStyle && s.itemStyle.color) || pal[k % pal.length];
-      s.markPoint = { symbol: 'circle', symbolSize: 6, silent: true, animation: false, itemStyle: { color: col, borderColor: TH.paper, borderWidth: 1 },
-        label: { show: true, position: o.y2 ? 'top' : 'right', distance: 5, formatter: nf(v, s._end), color: col, fontSize: 11, fontWeight: 700 }, data: [{ coord: [i, v] }] };
-      anyEnd = true;
-    }
+    if (i >= 0) anyEnd = true;
     delete s._end;
   });
   const zoom = o.zoom && labels.length > 40;
@@ -132,6 +131,7 @@ function S(name, data, o) {
   if (o.area) s.areaStyle = { opacity: o.area === true ? 0.1 : o.area };
   if (o.end) s._end = o.dec == null ? 1 : o.dec;
   if (o.stack) s.stack = o.stack;
+  if (o.agg) s._agg = o.agg;
   return s;
 }
 function blinkOn() { return !RM && !document.documentElement.classList.contains('no-blink'); }
@@ -144,6 +144,57 @@ function bandSeries(name, lo, hi, color, op, stack) {
   return [{ name: name + ' lower', type: 'line', data: lo, stack, lineStyle: { opacity: 0 }, showSymbol: false, silent: true, tooltip: { show: false }, legendHoverLink: false, z: 1 },
     { name, type: 'line', data: hi.map((h, i) => h == null || lo[i] == null ? null : h - lo[i]), stack, lineStyle: { opacity: 0 }, showSymbol: false, itemStyle: { color, opacity: Math.min(1, op * 2.5) }, areaStyle: { color, opacity: op }, silent: true, tooltip: { show: false }, z: 1 }];
 }
+const FL = { D: 'Day', M: 'Month', Q: 'Quarter', Y: 'Year' };
+let FSTATE = null, FWIDE = false;
+const FIGREG = [];
+const BDG = { freq: 'M', span: 'all' };
+function natFreqOf(l) { l = String(l); return /^\d{4}-\d{2}-\d{2}$/.test(l) ? 'D' : /^\d{4}-\d{2}$/.test(l) ? 'M' : /^\d{4}-Q\d$/.test(l) ? 'Q' : /^FY\d{4}$/.test(l) ? 'FY' : /^\d{4}$/.test(l) ? 'A' : null; }
+function availF(nat) { return nat === 'D' ? ['D', 'M', 'Q', 'Y'] : nat === 'M' ? ['M', 'Q', 'Y'] : nat === 'Q' ? ['Q', 'Y'] : ['Y']; }
+function natDefault(nat) { return nat === 'FY' || nat === 'A' ? 'Y' : nat; }
+function tsTransform(labels, series, st) {
+  const nat = natFreqOf(labels[0]);
+  if (!nat) return null;
+  const tgt = st.freq;
+  if ((tgt === natDefault(nat)) && st.span === 'all') return null;
+  const qOf = l => l.slice(0, 4) + '-Q' + (Math.floor((+l.slice(5, 7) - 1) / 3) + 1);
+  const keyOf = l => {
+    if (nat === 'D') return tgt === 'M' ? l.slice(0, 7) : tgt === 'Q' ? qOf(l) : tgt === 'Y' ? l.slice(0, 4) : l;
+    if (nat === 'M') return tgt === 'Q' ? qOf(l) : tgt === 'Y' ? l.slice(0, 4) : l;
+    if (nat === 'Q') return tgt === 'Y' ? l.slice(0, 4) : l;
+    return l;
+  };
+  const yearOf = l => +(String(l).match(/\d{4}/) || [0])[0];
+  const groups = [], idx = new Map();
+  labels.forEach((l, i) => { const k = keyOf(l); if (!idx.has(k)) { idx.set(k, groups.length); groups.push({ k, is: [] }); } groups[idx.get(k)].is.push(i); });
+  let keep = groups;
+  if (st.span !== 'all' && groups.length) { const ly = yearOf(groups[groups.length - 1].k), n = +st.span; keep = groups.filter(g => yearOf(g.k) > ly - n); }
+  const vOf = d => d == null ? null : typeof d === 'object' ? (Array.isArray(d) ? d[1] : d.value) : d;
+  const out = series.map(se => {
+    if (!Array.isArray(se.data) || se.data.length !== labels.length) return se;
+    const agg = se._agg || 'avg';
+    const data = keep.map(g => {
+      const items = g.is.map(i => se.data[i]);
+      const vs = items.map(vOf).filter(v => v != null && isFinite(v));
+      if (!vs.length) return null;
+      const v = agg === 'last' ? vs[vs.length - 1] : vs.reduce((x, y) => x + y, 0) / vs.length;
+      const objs = items.filter(x => x != null && typeof x === 'object' && !Array.isArray(x) && x.itemStyle);
+      if (objs.length) { const ref = objs.find(x => Math.sign(vOf(x)) === Math.sign(v)) || objs[0]; return { value: v, itemStyle: ref.itemStyle }; }
+      return v;
+    });
+    return Object.assign({}, se, { data });
+  });
+  return { labels: keep.map(g => g.k), series: out, keyOf };
+}
+function ctlHTML(nat, st) {
+  const fs = nat === 'D' ? ['D', 'M', 'Q', 'Y'] : ['M', 'Q', 'Y'], av = availF(nat);
+  return '<div class="seg2" data-k="freq" role="group" aria-label="Frequency">' + fs.map(f => '<button type="button" data-v="' + f + '"' + (av.includes(f) ? '' : ' disabled title="Not available for this series"') + ' aria-pressed="' + (st.freq === f) + '">' + FL[f] + '</button>').join('') + '</div>' +
+    '<div class="seg2" data-k="span" role="group" aria-label="Time span">' + [['10', '10 years'], ['25', '25 years'], ['all', 'All']].map(([v, t]) => '<button type="button" data-v="' + v + '" aria-pressed="' + (st.span === v) + '">' + t + '</button>').join('') + '</div>';
+}
+function syncCtl(box, st) { box.querySelectorAll('.seg2 button').forEach(b => b.setAttribute('aria-pressed', String(st[b.parentElement.getAttribute('data-k')] === b.getAttribute('data-v')))); }
+function rerender(node) { const rc = charts.get(node); if (rc) { rc.dirty = true; rc.reset = true; applyChart(node, rc); } }
+function applyGlobal() {
+  FIGREG.filter(x => document.body.contains(x.node)).forEach(x => { const av = availF(x.nat); x.st.freq = av.includes(BDG.freq) ? BDG.freq : natDefault(x.nat); x.st.span = BDG.span; syncCtl(x.ctl, x.st); rerender(x.node); });
+}
 function figure(host, o) {
   if (o.num !== false) FIGN++;
   const f = document.createElement('figure');
@@ -153,7 +204,21 @@ function figure(host, o) {
     '<div class="fig-foot">' + (o.notes ? '<p><i>Notes:</i> ' + esc(o.notes) + '</p>' : '') + (o.source ? '<p><i>Source:</i> ' + esc(o.source) + '</p>' : '') + '<div class="fig-act"></div></div>';
   host.append(f);
   const node = f.querySelector('.chart');
-  chartOn(node, o.render);
+  let nat = o.ts;
+  if (nat === undefined) {
+    try { const op = o.render(theme()); const xa = op && (Array.isArray(op.xAxis) ? op.xAxis[0] : op.xAxis); nat = xa && xa.type === 'category' && Array.isArray(xa.data) && xa.data.length ? natFreqOf(xa.data[0]) : null; } catch (e) { nat = null; }
+  }
+  if (nat) {
+    const st = o.state || { freq: availF(nat).includes(BDG.freq) ? BDG.freq : natDefault(nat), span: BDG.span };
+    if (!availF(nat).includes(st.freq)) st.freq = natDefault(nat);
+    const ctl = document.createElement('div');
+    ctl.className = 'fctl';
+    ctl.innerHTML = ctlHTML(nat, st);
+    f.querySelector('figcaption').after(ctl);
+    ctl.addEventListener('click', e => { const b = e.target.closest('.seg2 button'); if (!b || b.disabled) return; st[b.parentElement.getAttribute('data-k')] = b.getAttribute('data-v'); syncCtl(ctl, st); rerender(node); });
+    FIGREG.push({ node, st, nat, ctl });
+    chartOn(node, TH => { FSTATE = st; FWIDE = !!o.wide; try { return o.render(TH); } finally { FSTATE = null; FWIDE = false; } });
+  } else chartOn(node, TH => { FWIDE = !!o.wide; try { return o.render(TH); } finally { FWIDE = false; } });
   const act = f.querySelector('.fig-act');
   if (ALLOW_DL && STANDALONE) {
     act.append(smallBtn('Image', () => {
@@ -178,13 +243,13 @@ function sec(host, title, lede, id) {
   return s;
 }
 function grid(host) { const g = document.createElement('div'); g.className = 'figs'; host.append(g); return g; }
-let TSRC = 'Bangladesh Bank, Monthly Economic Trends and National Summary Data Page (NSDP); author’s calculations.';
+let TSRC = 'Bangladesh Bank.';
 function tableWrap(host, html, cap, note, opt) {
   const d = document.createElement('div');
   d.className = 'mx-wrap';
   const hasSrc = /Source:/.test(note || '');
   d.innerHTML = (cap ? '<div class="mx-cap">' + cap + '</div>' : '') + '<div class="table-wrap"><table class="mx">' + html + '</table></div>' + (note ? '<p class="mx-note">' + note + '</p>' : '') +
-    (hasSrc ? '' : '<p class="src-line"><b>Source:</b> ' + esc(TSRC) + '</p>');
+    (hasSrc ? '' : '<p class="src-line"><b>Source:</b> ' + esc((opt && opt.src) || TSRC) + '</p>');
   host.append(d);
   pillify(d.querySelector('table'), opt || {});
   return d;
@@ -231,10 +296,10 @@ function matrix(host, keys, caption, groupBy) {
       '<td>' + esc(r.period) + '</td><td class="num big"' + (pct == null ? '' : ' data-pct="' + pct + '"') + '>' + fv(s.unit, r.v) + '</td><td class="num">' + fv(s.unit, r.prev) + '</td>' + chg(s.unit, r.v, r.prev, dir) +
       '<td class="num">' + fv(s.unit, r.ya) + '</td>' + chg(s.unit, r.v, r.ya, dir) + '<td class="num">' + fv(s.unit, r.avg) + '</td>' +
       '<td class="rngc">' + (pct == null ? '' : '<span class="rng" title="Percentile ' + nf(pct, 0) + ' of ' + r.n + ' observations"><i style="left:' + pct + '%"></i></span><span class="rng-l"><small>' + fv(s.unit, r.min) + '</small><small>' + fv(s.unit, r.max) + '</small></span>') + '</td>' +
-      '<td class="spkc">' + spark(k) + '</td><td class="srcc"><span class="code" title="' + esc(srcKeys([k], s.how !== 'raw')) + '">' + esc((s.src[0] || {}).code || '') + (s.src.length > 1 ? ' +' + (s.src.length - 1) : '') + '</span></td></tr>';
+      '<td class="spkc">' + spark(k) + '</td><td class="srcc"><span class="src-ag" title="' + esc('Series ' + s.src.map(x => x.code).join(', ')) + '">' + esc(srcKeys([k]).replace(/\.$/, '')) + '</span></td></tr>';
   });
   html += '</tbody>';
-  return tableWrap(host, html, caption, '▲▼ show the direction of change; green means a favourable move and red an unfavourable one (no colour where there is no clear “good” direction). “Range” marks the latest value within its full history, from minimum to maximum; hover a heading for its full name and a code for its full source.');
+  return tableWrap(host, html, caption, '▲▼ show the direction of change; green means a favourable move and red an unfavourable one (no colour where there is no clear “good” direction). “Range” marks the latest value within its full history, from minimum to maximum; hover a heading for its full name and a source for its series code.');
 }
 function modelMatrix(host, keys, caption) {
   const rows = keys.map(k => BD.arima[k]).filter(Boolean);
@@ -261,7 +326,7 @@ function modelMatrix(host, keys, caption) {
       '<td class="num' + skc(1) + '">' + sk(1) + '</td><td class="num' + skc(12) + '">' + sk(12) + '</td><td class="num">' + fp(bt(1).dm_p) + '</td><td class="num' + (lb != null && lb < 0.05 ? ' up-bad' : '') + '">' + fp(lb) + '</td><td class="rd">' + (/caution|no better/.test(read) ? '<span class="warn-ico" aria-hidden="true">⚠ </span>' : '') + esc(read) + '.</td></tr>';
   });
   html += '</tbody>';
-  tableWrap(host, html, caption, 'Point forecasts with 80% prediction intervals underneath. Skill = 1 − RMSE(model) / RMSE(naive “no change” forecast) in a rolling-origin backtest over the last 24 months, so positive is better than naive. DM = Diebold–Mariano test of equal accuracy (Harvey–Leybourne–Newbold correction). Ljung–Box tests remaining autocorrelation in the residuals. Details in the Forecast lab.');
+  tableWrap(host, html, caption, 'Point forecasts with 80% prediction intervals underneath. Skill = 1 − RMSE(model) / RMSE(naive “no change” forecast) in a rolling-origin backtest over the last 24 months, so positive is better than naive. DM = Diebold–Mariano test of equal accuracy (Harvey–Leybourne–Newbold correction). Ljung–Box tests remaining autocorrelation in the residuals. Details in the Forecast lab.', { src: srcKeys(rows.map(a => a.key), 'model') });
 }
 
 /* ---------- Bangladesh view ---------- */
@@ -284,11 +349,17 @@ function renderBD() {
   disposeIn(body);
   body.innerHTML = '';
   FIGN = 0; TABN = 0; labState.prefix = 'B';
-  TSRC = 'Bangladesh Bank, Monthly Economic Trends and National Summary Data Page (NSDP); author’s calculations.';
+  TSRC = 'Bangladesh Bank, BBS.';
   $$('#bd-tabs [data-bdtab]').forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-bdtab') === bdState.tab ? 'true' : 'false'));
   const c = CHUNKS.find(x => x.id === bdState.tab) || CHUNKS[0];
   if (c.id === 'glance') return bdGlance(body);
   if (c.id === 'catalog') return bdCatalog(body);
+  const gc = document.createElement('div');
+  gc.className = 'gctl';
+  gc.innerHTML = '<span>All charts on this page</span>' + ctlHTML('M', BDG);
+  gc.addEventListener('click', e => { const b = e.target.closest('.seg2 button'); if (!b || b.disabled) return; BDG[b.parentElement.getAttribute('data-k')] = b.getAttribute('data-v'); syncCtl(gc, BDG); applyGlobal(); });
+  body.append(gc);
+  TSRC = srcKeys(c.keys);
   const s = sec(body, c.name, c.lede);
   matrix(s, c.keys, tcap('Key indicators: ' + c.name.toLowerCase()));
   ({ prices: bdPrices, real: bdReal, money: bdMoney, rates: bdRates, ext: bdExt, fiscal: bdFiscal, cap: bdCap })[c.id](body);
@@ -324,7 +395,7 @@ function infFan(host, compact) {
   figure(host, {
     prefix: labState.prefix, wide: !compact, title: 'Headline inflation: outturn and projection', sub: '% year on year, point-to-point; ensemble of ARIMA and SVAR with 80% and 95% bands', h: compact ? 300 : 360,
     notes: 'Projection combines ARIMA and SVAR forecasts with weights inversely proportional to their backtest mean squared errors (Bates and Granger, 1969). Bands use the backtest forecast-error spread at each horizon. Shaded periods mark major shocks.',
-    source: srcKeys(['infl'], true),
+    source: srcKeys(['infl'], 'model'),
     csv: () => [['month', 'actual', 'projection', 'lower 80', 'upper 80', 'lower 95', 'upper 95'], ...labels.map((l, i) => [l, i < hV.length ? hV[i] : '', mean[i] == null ? '' : mean[i], lo80[i] == null ? '' : lo80[i], hi80[i] == null ? '' : hi80[i], lo95[i] == null ? '' : lo95[i], hi95[i] == null ? '' : hi95[i]])],
     render: TH => tsOption(TH, labels, [S('Actual', [...hV, ...Array(fl.length).fill(null)], { color: TH.ink, w: 2.2 }),
       ...bandSeries('95% band', lo95, hi95, TH.pos, TH.dark ? 0.16 : 0.12, 'b95'), ...bandSeries('80% band', lo80, hi80, TH.pos, TH.dark ? 0.3 : 0.22, 'b80'),
@@ -415,7 +486,7 @@ function bdExt(body) {
     render: TH => tsOption(TH, a.labels, [S('Taka per US$', a.cols[0], { color: TH.ink, w: 2.4, end: true }), S('Depreciation (right)', signBars(a.cols[1], TH).map(x => x && Object.assign(x, { itemStyle: { color: x.value > 0 ? TH.neg : TH.pos } })), { bar: true, ax: 1 })], { y1: 'Tk/US$', y2: '% y/y', scale: true, zoom: true }) });
   const b = align(['res', 'res_bpm6', 'cover'], M0(2010));
   figure(g, { title: 'Foreign exchange reserves and import cover', sub: 'US$ million (left); months of imports (right)', notes: SER('cover').note + ' ' + SER('imp').note, source: srcKeys(['res', 'res_bpm6', 'imp'], true), csv: () => csvAligned(['res', 'res_bpm6', 'cover'], M0(2010)),
-    render: TH => tsOption(TH, b.labels, [S('Gross reserves', b.cols[0], { area: 0.1, end: true, dec: 0 }), S('BPM6 reserves', b.cols[1], { end: true, dec: 0 }), Object.assign(S('Import cover (right)', b.cols[2], { ax: 1, dash: true, color: TH.pal[6] }), { markLine: { symbol: 'none', silent: true, lineStyle: { type: 'dotted', color: TH.pal[6] }, label: { formatter: '3 months', color: TH.muted, fontSize: 10 }, data: [{ yAxis: 3 }] } })], { y1: 'US$ mn', y2: 'months', zoom: true, dec: 1, warn: [{ s: 2, test: v => v < 3, label: 'Below 3 months' }] }) });
+    render: TH => tsOption(TH, b.labels, [S('Gross reserves', b.cols[0], { area: 0.1, end: true, dec: 0, agg: 'last' }), S('BPM6 reserves', b.cols[1], { end: true, dec: 0, agg: 'last' }), Object.assign(S('Import cover (right)', b.cols[2], { ax: 1, dash: true, color: TH.pal[6] }), { markLine: { symbol: 'none', silent: true, lineStyle: { type: 'dotted', color: TH.pal[6] }, label: { formatter: '3 months', color: TH.muted, fontSize: 10 }, data: [{ yAxis: 3 }] } })], { y1: 'US$ mn', y2: 'months', zoom: true, dec: 1, warn: [{ s: 2, test: v => v < 3, label: 'Below 3 months' }] }) });
   const r = align(['remit', 'remit_g'], M0(2012));
   figure(g, { title: 'Remittances', sub: 'US$ million a month (bars) and % year on year (line)', source: srcKeys(['remit'], true), csv: () => csvAligned(['remit', 'remit_g'], M0(2012)),
     render: TH => tsOption(TH, r.labels, [S('Remittances', r.cols[0], { bar: true, color: TH.pal[2] }), S('Growth (right)', r.cols[1], { ax: 1, color: TH.ink, w: 1.6 })], { y1: 'US$ mn', y2: '% y/y', bar: true, zoom: true, zoomFrom: '2019-01', dec: 1 }) });
@@ -436,7 +507,7 @@ function bdExt(body) {
     html += '<tr' + (p.country === 'Bangladesh' ? ' class="hl"' : '') + '><th scope="row">' + esc(p.country) + '</th><td class="num">' + nf(p.v, 0) + '</td><td>' + esc(p.period) + '</td><td class="num">' + nf(f.v, 2) + '</td><td>' + esc(f.period || '') + '</td></tr>';
   });
   html += '</tbody>';
-  tableWrap(body, html, tcap('South Asian peers: reserves and exchange rates'), 'Source: Bangladesh Bank, Monthly Economic Trends, Table XXVII: Important economic indicators of SAARC countries (latest quarter available for each). Exchange rates are in each country’s own currency per US dollar.');
+  tableWrap(body, html, tcap('South Asian peers: reserves and exchange rates'), 'Latest quarter available for each economy. Exchange rates are in each country’s own currency per US dollar.');
 }
 function bdFiscal(body) {
   const s = sec(body, 'Charts');
@@ -446,7 +517,7 @@ function bdFiscal(body) {
     csv: () => csvAligned(['govcredit'], M0(2012)), render: TH => tsOption(TH, a.labels, [S('Net bank credit to government', a.cols[0], { area: 0.1, end: true, color: TH.pal[5] })], { y1: '% y/y', zoom: true }) });
   const n = align(['nsav_net', 'nsav_out']);
   figure(g, { title: 'National savings certificates', sub: 'Tk crore: net sales a month (bars) and outstanding stock (line)', notes: 'Net sales below zero mean redemptions exceed new sales, so the government must borrow elsewhere.', source: srcKeys(['nsav_net', 'nsav_out']),
-    csv: () => csvAligned(['nsav_net', 'nsav_out']), render: TH => tsOption(TH, n.labels, [S('Net sales', signBars(n.cols[0], TH), { bar: true }), S('Outstanding (right)', n.cols[1], { ax: 1, color: TH.ink, end: true, dec: 0 })], { y1: 'Tk crore', y2: 'Tk crore', bar: true, scale2: true, dec: 0 }) });
+    csv: () => csvAligned(['nsav_net', 'nsav_out']), render: TH => tsOption(TH, n.labels, [S('Net sales', signBars(n.cols[0], TH), { bar: true }), S('Outstanding (right)', n.cols[1], { ax: 1, color: TH.ink, end: true, dec: 0, agg: 'last' })], { y1: 'Tk crore', y2: 'Tk crore', bar: true, scale2: true, dec: 0 }) });
   if (SER('tax')) {
     const t = align(['tax', 'tax_g'], M0(2012));
     figure(g, { title: 'NBR tax revenue', sub: 'Tk crore a month (bars) and % year on year (line)', source: srcKeys(['tax'], true), csv: () => csvAligned(['tax', 'tax_g'], M0(2012)),
@@ -458,10 +529,10 @@ function bdCap(body) {
   const g = grid(s);
   const a = align(['mcap', 'mcap_g'], M0(2010));
   figure(g, { title: 'Market capitalisation', sub: 'Tk crore (line) and % year on year (bars)', source: srcKeys(['mcap'], true), csv: () => csvAligned(['mcap', 'mcap_g'], M0(2010)),
-    render: TH => tsOption(TH, a.labels, [S('Market capitalisation', a.cols[0], { color: TH.ink, w: 2.2, end: true, dec: 0 }), S('Growth (right)', signBars(a.cols[1], TH), { bar: true, ax: 1 })], { y1: 'Tk crore', y2: '% y/y', zoom: true, dec: 1 }) });
+    render: TH => tsOption(TH, a.labels, [S('Market capitalisation', a.cols[0], { color: TH.ink, w: 2.2, end: true, dec: 0, agg: 'last' }), S('Growth (right)', signBars(a.cols[1], TH), { bar: true, ax: 1 })], { y1: 'Tk crore', y2: '% y/y', zoom: true, dec: 1 }) });
   const sc = BD.mcap_sectors.slice().sort((x, y) => y.v - x.v);
   const tot = sc.reduce((x, y) => x + y.v, 0);
-  figure(g, { title: 'Market capitalisation by sector', sub: 'share of total, ' + (sc[0] || {}).period, h: 340, notes: 'Box size is proportional to market value.', source: 'Bangladesh Bank, Monthly Economic Trends, ' + ((SER('mcap').src[0] || {}).table || '').replace(/^ET /, '') + ' [series ET.MCAP.001–015]; author’s calculations.',
+  figure(g, { title: 'Market capitalisation by sector', sub: 'share of total, ' + (sc[0] || {}).period, h: 340, notes: 'Box size is proportional to market value.', source: 'Bangladesh Bank.',
     csv: () => [['sector', 'Tk crore', 'share %'], ...sc.map(x => [x.name, x.v, x.v / tot * 100])],
     render: TH => ({ aria: { enabled: true }, animation: !RM, textStyle: { fontFamily: FONT }, tooltip: { backgroundColor: TH.paper, borderColor: TH.line, textStyle: { color: TH.ink }, formatter: p => esc(p.name) + '<br><b>' + nf(p.value, 0) + '</b> Tk crore (' + nf(p.value / tot * 100, 1) + '%)' },
       series: [{ type: 'treemap', roam: false, nodeClick: false, breadcrumb: { show: false }, top: 4, bottom: 4, left: 4, right: 4, data: sc.map((x, i) => ({ name: x.name, value: x.v, itemStyle: { color: TH.pal[i % TH.pal.length], borderColor: TH.paper, borderWidth: 2, gapWidth: 2 } })),
@@ -553,7 +624,7 @@ async function catShow(code) {
     const st = arr[0], vals = arr.slice(1);
     const k0 = f === 'M' ? +st.slice(0, 4) * 12 + (+st.slice(5, 7)) - 1 : f === 'Q' ? +st.slice(0, 4) * 4 + (+st.slice(-1)) - 1 : f === 'FY' ? +st.slice(2) : +st;
     const labels = vals.map((v, i) => bdLab(f, k0 + i));
-    figure(g, { prefix: 'C', title: r[3].split('|').slice(-2).join(' | '), sub: fl + (r[4] ? ', ' + r[4] : ''), source: 'Bangladesh Bank, ' + (r[1] === 'NSDP' ? 'National Summary Data Page (NSDP)' : r[1]) + ', ' + r[2] + ' [series ' + r[0] + '].',
+    figure(g, { prefix: 'C', title: r[3].split('|').slice(-2).join(' | '), sub: fl + (r[4] ? ', ' + r[4] : ''), source: agencyOf({ code: r[0], prov: r[6] }) + '.',
       csv: () => [['period', r[0]], ...labels.map((l, i) => [l, vals[i]])], render: TH => tsOption(TH, labels, [S(r[0], vals, { end: true, area: 0.08 })], { y1: r[4] || '', zoom: labels.length > 60, scale: true, events: f === 'M' }) });
   });
   host.scrollIntoView({ block: 'start', behavior: RM ? 'auto' : 'smooth' });
@@ -585,7 +656,7 @@ function renderLab(keep) {
   disposeIn(body);
   body.innerHTML = '';
   FIGN = 0; TABN = 0; labState.prefix = 'L';
-  TSRC = labState.tab === 'world' ? 'World Bank, World Development Indicators (CC BY 4.0); author’s calculations.' : labState.tab === 'dsge' ? 'Model simulation; calibration from Galí (2015) and Taylor (1993).' : 'Bangladesh Bank, Monthly Economic Trends; author’s estimates.';
+  TSRC = labState.tab === 'world' ? 'World Bank; model estimates.' : labState.tab === 'dsge' ? 'Model simulation.' : 'Bangladesh Bank, BBS; model estimates.';
   $$('#lab-tabs [data-lab]').forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-lab') === labState.tab ? 'true' : 'false'));
   ({ overview: labOverview, data: labData, arima: labArima, var: labVar, robust: labRobust, dsge: labDsge, world: labWorld, refs: labRefs })[labState.tab in { overview: 1, data: 1, arima: 1, var: 1, robust: 1, dsge: 1, world: 1, refs: 1 } ? labState.tab : 'overview'](body);
   if (keep) window.scrollTo(0, y);
@@ -639,7 +710,7 @@ function labArima(body) {
   const b = a.bands[labState.ci];
   figure(g, { prefix: 'L', wide: true, title: a.label + ': ' + a.spec, sub: a.unit + '; last 8 years, fitted values and 12-month forecast with ' + labState.ci + '% band', h: 360,
     notes: 'Sample ' + a.sample[0] + ' to ' + a.sample[1] + ' (' + a.nobs + ' observations).' + (a.log ? ' Estimated in logs; forecasts are medians transformed back to levels.' : '') + (a.seasonal ? ' Seasonal ARIMA with a 12-month cycle.' : ''),
-    source: srcKeys([a.key], true),
+    source: srcKeys([a.key], 'model'),
     csv: () => [['month', 'actual', 'fitted', 'forecast', 'lower', 'upper'], ...labels.map((l, i) => [l, i < hl.length ? a.hist.v[i] : '', i < hl.length ? a.fitted[i] : '', i >= hl.length ? a.fc[i - hl.length] : '', i >= hl.length ? b[0][i - hl.length] : '', i >= hl.length ? b[1][i - hl.length] : ''])],
     render: TH => tsOption(TH, labels, [S('Actual', [...a.hist.v, ...Array(fl.length).fill(null)], { color: TH.ink, w: 2 }), S('Fitted', [...a.fitted, ...Array(fl.length).fill(null)], { color: TH.pal[1], dash: true, w: 1.4 }),
       ...bandSeries(labState.ci + '% band', [...pad, last, ...b[0]], [...pad, last, ...b[1]], TH.pos, TH.dark ? 0.24 : 0.18, 'band'), S('Forecast', [...pad, last, ...a.fc], { color: TH.pos, w: 2.4, end: true, dec: 2 })], { y1: a.unit, scale: true, dec: 2 }) });
@@ -693,7 +764,7 @@ function labVar(body) {
   tableWrap(col, dg, tcap('Model diagnostics'), 'Residual autocorrelation and fat tails are common with overlapping year-on-year rates and shock-driven samples. They are why the robustness, subsample and placebo checks matter, and why bands are wide.');
   const g = grid(s);
   figure(g, { prefix: 'L', title: 'Granger causality matrix', sub: 'p-values: does the column variable help predict the row variable?', h: 330,
-    notes: 'F-tests that all lags of one variable are jointly zero in another’s equation (Granger, 1969). Darker cells are stronger evidence; *** p<0.01, ** p<0.05, * p<0.1.', source: srcKeys(V.keys, true),
+    notes: 'F-tests that all lags of one variable are jointly zero in another’s equation (Granger, 1969). Darker cells are stronger evidence; *** p<0.01, ** p<0.05, * p<0.1.', source: srcKeys(V.keys, 'model'),
     csv: () => [['cause', 'effect', 'F', 'p'], ...V.granger.map(x => [V.vars[x.cause], V.vars[x.effect], x.f, x.p])],
     render: TH => { const M = V.vars.map((_, i) => V.vars.map((_, j) => { if (i === j) return null; const r = V.granger.find(x => x.cause === j && x.effect === i); return r ? -Math.log10(Math.max(r.p, 1e-6)) : null; }));
       return heat(TH, V.vars, M, (i, j) => { const r = V.granger.find(x => x.cause === j && x.effect === i); return r ? fp(r.p) + stars(r.p) : ''; },
@@ -701,7 +772,7 @@ function labVar(body) {
   const f12 = V.fevd[labState.fevd];
   const hs = Array.from({ length: 25 }, (_, i) => i);
   figure(g, { prefix: 'L', title: 'Forecast-error variance decomposition: ' + V.vars[labState.fevd], sub: '% of forecast-error variance explained by each shock, horizons 0–24 months', h: 330,
-    notes: 'Recursive (Cholesky) identification in the order shown in the legend.', source: srcKeys(V.keys, true),
+    notes: 'Recursive (Cholesky) identification in the order shown in the legend.', source: srcKeys(V.keys, 'model'),
     csv: () => [['horizon', ...V.vars], ...hs.map(h => [h, ...f12.map(c => c[h])])],
     render: TH => tsOption(TH, hs.map(String), V.vars.map((n, i) => S(n, f12[i], { stack: 'f', area: 0.85, w: 0.5 })), { y1: '%', min: 0, events: false, dec: 1 }) });
   ctrl(s, sel('fevd', V.vars.map((n, i) => [i, n]), labState.fevd, 'Variance decomposition for') + sel('shock', V.vars.map((n, i) => [i, n]), labState.shock, 'Impulse responses to a shock in'));
@@ -711,7 +782,7 @@ function labVar(body) {
     const sh = labState.shock;
     const m = V.irf.mean[r][sh], lo = V.irf.lo[r][sh], hi = V.irf.hi[r][sh];
     figure(g2, { prefix: 'L', title: 'Response of ' + resp.toLowerCase(), sub: 'to a ' + V.vars[sh].toLowerCase() + ' shock; percentage points, months after the shock', h: 250,
-      source: srcKeys(V.keys, true), csv: () => [['month', 'response', 'lower 90', 'upper 90'], ...m.map((v, i) => [i, v, lo[i], hi[i]])],
+      source: srcKeys(V.keys, 'model'), csv: () => [['month', 'response', 'lower 90', 'upper 90'], ...m.map((v, i) => [i, v, lo[i], hi[i]])],
       render: TH => tsOption(TH, hs.map(String), [...bandSeries('90% band', lo, hi, TH.pos, TH.dark ? 0.26 : 0.18, 'b'), Object.assign(S('Response', m, { color: TH.pos, w: 2.2 }), { markLine: { symbol: 'none', silent: true, label: { show: false }, lineStyle: { color: TH.ink2, width: 1 }, data: [{ yAxis: 0 }] } })], { y1: 'pp', events: false, dec: 3 }) });
   });
   let ft = '<thead><tr><th scope="col">Variable</th><th scope="col">Horizon</th>' + V.vars.map(n => '<th scope="col" class="num">' + esc(n) + ' shock</th>').join('') + '</tr></thead><tbody>';
@@ -742,10 +813,10 @@ function labRobust(body) {
   tableWrap(s, st + '</tbody>', tcap('Heterogeneity over time: subsample estimates'), subNote);
   const g = grid(s);
   const rl_ = R.rolling;
-  figure(g, { prefix: 'L', title: 'Rolling inflation persistence', sub: 'AR(1) coefficient over 60-month windows with 95% band', notes: 'Values near 1 mean shocks to inflation fade very slowly.', source: srcKeys(['infl'], true),
+  figure(g, { prefix: 'L', title: 'Rolling inflation persistence', sub: 'AR(1) coefficient over 60-month windows with 95% band', notes: 'Values near 1 mean shocks to inflation fade very slowly.', source: srcKeys(['infl'], 'model'),
     csv: () => [['window end', 'AR(1)', 'lower 95', 'upper 95'], ...rl_.map(r => [r[0], r[1], r[2], r[3]])],
     render: TH => tsOption(TH, rl_.map(r => r[0]), [...bandSeries('95% band', rl_.map(r => r[2]), rl_.map(r => r[3]), TH.pos, 0.18, 'b'), S('AR(1) coefficient', rl_.map(r => r[1]), { color: TH.pos, w: 2.2, end: true, dec: 2 })], { y1: 'coefficient', scale: true, marks: [{ yAxis: 1, name: 'unit root' }], dec: 3 }) });
-  figure(g, { prefix: 'L', title: 'Rolling correlation: inflation and Taka depreciation', sub: '36-month windows', notes: 'A rising correlation is consistent with stronger exchange-rate pass-through.', source: srcKeys(['infl', 'xr_dep'], true),
+  figure(g, { prefix: 'L', title: 'Rolling correlation: inflation and Taka depreciation', sub: '36-month windows', notes: 'A rising correlation is consistent with stronger exchange-rate pass-through.', source: srcKeys(['infl', 'xr_dep'], 'model'),
     csv: () => [['window end', 'correlation'], ...rl_.map(r => [r[0], r[4]])],
     render: TH => tsOption(TH, rl_.map(r => r[0]), [S('Correlation', signBars(rl_.map(r => r[4]), TH), { bar: true })], { y1: 'r', bar: true, min: -1, dec: 2 }) });
   const p = sec(body, 'Placebo tests', 'If the exchange-rate finding were spurious, it should also appear when the timing of the exchange rate is scrambled, or when the “driver” is pure noise.');
@@ -753,7 +824,7 @@ function labRobust(body) {
   const e = P.hist.edges, c = P.hist.counts;
   const mids = c.map((_, i) => (e[i] + e[i + 1]) / 2);
   figure(g2, { prefix: 'L', title: 'Placebo distribution of the Granger F-statistic', sub: P.n_shift + ' circular shifts of the Taka depreciation series', h: 300,
-    notes: 'Shifting the series in time keeps its own dynamics but breaks its timing relative to inflation. Placebo p-value = share of placebo F-statistics at least as large as the actual one: ' + fp(P.p_placebo) + '.', source: srcKeys(['infl', 'xr_dep'], true),
+    notes: 'Shifting the series in time keeps its own dynamics but breaks its timing relative to inflation. Placebo p-value = share of placebo F-statistics at least as large as the actual one: ' + fp(P.p_placebo) + '.', source: srcKeys(['infl', 'xr_dep'], 'model'),
     csv: () => [['F bin mid', 'count'], ...mids.map((m, i) => [m, c[i]])],
     render: TH => ({ aria: { enabled: true }, animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 18, top: 24, bottom: 6, containLabel: true },
       tooltip: { trigger: 'axis', backgroundColor: TH.paper, borderColor: TH.line, textStyle: { color: TH.ink } },
@@ -783,7 +854,7 @@ function labDsge(body) {
   const hs = Array.from({ length: 17 }, (_, i) => String(i));
   Object.entries(D.irf).forEach(([name, r]) => {
     figure(g, { prefix: 'L', title: name + ' shock', sub: 'responses over 16 quarters; output gap in %, inflation and policy rate in annualised pp', h: 260,
-      notes: 'Shock persistence ρ = ' + r.rho + '.', source: 'Model simulation; calibration from Galí (2015) and Taylor (1993).',
+      notes: 'Shock persistence ρ = ' + r.rho + '.', source: 'Model simulation.',
       csv: () => [['quarter', 'output gap', 'inflation', 'policy rate'], ...hs.map((h, i) => [h, r.x[i], r.pi[i], r.i[i]])],
       render: TH => tsOption(TH, hs, [S('Output gap', r.x, { w: 2.2 }), S('Inflation', r.pi, { w: 2.2 }), S('Policy rate', r.i, { dash: true, w: 2 })].map((x, i) => i === 0 ? Object.assign(x, { markLine: { symbol: 'none', silent: true, label: { show: false }, lineStyle: { color: TH.ink2, width: 1 }, data: [{ yAxis: 0 }] } }) : x), { y1: '%/pp', events: false, dec: 3 }) });
   });
@@ -795,7 +866,7 @@ function labWorld(body) {
   ctrl(s, sel('het', W.het.measures.map((x, i) => [i, x.label]), labState.het, 'Measure'));
   const g = grid(s);
   figure(g, { prefix: 'L', title: m.label, sub: 'by region; one observation per economy', h: 320, notes: 'Boxes span the interquartile range, the line marks the median and whiskers extend to 1.5 × IQR. The dashed line marks Bangladesh. Economies with any year above 100% inflation are excluded.',
-    source: 'World Bank, World Development Indicators (CC BY 4.0); author’s calculations.', csv: () => [['region', 'n', 'lower whisker', 'Q1', 'median', 'Q3', 'upper whisker'], ...m.rows.map(r => [r.region, r.n, ...r.box])],
+    source: 'World Bank.', csv: () => [['region', 'n', 'lower whisker', 'Q1', 'median', 'Q3', 'upper whisker'], ...m.rows.map(r => [r.region, r.n, ...r.box])],
     render: TH => ({ aria: { enabled: true }, animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 18, top: 16, bottom: 6, containLabel: true },
       tooltip: { trigger: 'item', backgroundColor: TH.paper, borderColor: TH.line, textStyle: { color: TH.ink }, formatter: p => { const r = m.rows[p.dataIndex]; return r ? '<b>' + esc(r.region) + '</b> (n = ' + r.n + ')<br>median ' + nf(r.box[2], 2) + '<br>IQR ' + nf(r.box[1], 2) + ' to ' + nf(r.box[3], 2) : ''; } },
       xAxis: { type: 'category', data: m.rows.map(r => r.region + ' (' + r.n + ')'), ...axisBase(TH), axisLabel: { color: TH.ink2, fontSize: 11 } }, yAxis: valAxis(TH, '', { scale: true }),
@@ -809,7 +880,7 @@ function labWorld(body) {
   const g2 = grid(c);
   const regs = ['Africa', 'Americas', 'Asia', 'Europe', 'Oceania'], rc = ['#D4583A', '#1F5FA8', '#C98500', '#6B2CB0', '#1F8A7D'];
   figure(g2, { prefix: 'L', wide: true, title: 'β-convergence, 2000–2024', sub: 'average real growth of GDP per person (%) against log GDP per person in 2000 (PPP)', h: 380,
-    notes: 'Each dot is an economy, coloured by region. Fitted line with 95% confidence band from OLS. Growth per person = real GDP growth minus population growth.', source: 'World Bank, World Development Indicators (CC BY 4.0); author’s calculations.',
+    notes: 'Each dot is an economy, coloured by region. Fitted line with 95% confidence band from OLS. Growth per person = real GDP growth minus population growth.', source: 'World Bank.',
     csv: () => [['code', 'economy', 'region', 'ln GDP per person 2000', 'growth per person %'], ...C.pts.map(p => [p[2], p[3], p[4], p[0], p[1]])],
     render: TH => ({ aria: { enabled: true }, animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 18, top: 36, bottom: 6, containLabel: true },
       legend: { top: 0, left: 0, textStyle: { color: TH.ink2, fontSize: 12 }, data: regs.map((r, k) => ({ name: r, itemStyle: { color: rc[k] } })) },
@@ -827,15 +898,15 @@ function labWorld(body) {
   terms.forEach((t, i) => { const j = C.m1.rows.findIndex(r => r.term === t); rt += '<tr><th scope="row">' + esc(t) + '</th>' + (j >= 0 ? row(C.m1, j) : '<td class="num muted">–</td>') + row(C.m2, i) + '</tr>'; });
   rt += '<tr class="foot"><th scope="row">Observations</th><td class="num">' + C.m1.n + '</td><td class="num">' + C.m2.n + '</td></tr><tr class="foot"><th scope="row">R²</th><td class="num">' + nf(C.m1.r2, 3) + '</td><td class="num">' + nf(C.m2.r2, 3) + '</td></tr><tr class="foot"><th scope="row">F-test p-value</th><td class="num">' + fp(C.m1.f_p) + '</td><td class="num">' + fp(C.m2.f_p) + '</td></tr>';
   tableWrap(c, rt + '</tbody>', tcap('β-convergence regressions'), 'OLS with heteroskedasticity-robust (HC1) standard errors in parentheses; *** p<0.01, ** p<0.05, * p<0.1. Column (2) adds the Solow determinants of the steady state (Mankiw, Romer and Weil, 1992)' + (Math.abs(C.m2.rows[1].coef) > Math.abs(C.m1.rows[1].coef) ? ': convergence is faster once investment and population growth are held equal' : '') + '. Implied unconditional half-life: about ' + nf(C.half_life, 0) + ' years.');
-  figure(g2, { prefix: 'L', title: 'σ-convergence', sub: 'cross-country standard deviation of log GDP per person (PPP)', source: 'World Bank, World Development Indicators (CC BY 4.0); author’s calculations.',
+  figure(g2, { prefix: 'L', title: 'σ-convergence', sub: 'cross-country standard deviation of log GDP per person (PPP)', source: 'World Bank.',
     csv: () => [['year', 'SD of log GDP per person', 'economies'], ...C.sigma],
     render: TH => tsOption(TH, C.sigma.map(r => String(r[0])), [S('Dispersion', C.sigma.map(r => r[1]), { area: 0.1, end: true, dec: 3 })], { y1: 'SD', scale: true, events: false, dec: 3 }) });
   ridgeFig(g2, W.ridge, { prefix: 'L', title: 'World inflation distribution (“mountain map”)', sub: 'kernel density across economies, selected years; values clipped to −5% to 25%', xname: '%',
-    notes: 'Compare the 2021–2023 ridges with earlier years: a whole ridge moving right means a broad-based surge, while a long right tail alone means a few outliers. Light lines mark medians.', source: 'World Bank, World Development Indicators (CC BY 4.0); author’s calculations.' });
+    notes: 'Compare the 2021–2023 ridges with earlier years: a whole ridge moving right means a broad-based surge, while a long right tail alone means a few outliers. Light lines mark medians.', source: 'World Bank.' });
   const K = W.corr;
   const cs = sec(body, 'How indicators move together across countries', 'Spearman rank correlations across economies in ' + K.year + '.');
   const g3 = grid(cs);
-  figure(g3, { prefix: 'L', wide: true, title: 'Correlation matrix, ' + K.year, sub: 'Spearman ρ across economies; stars mark significance', h: 420, notes: 'Rank correlations are robust to outliers. Each cell uses all economies with both values (pairwise).', source: 'World Bank, World Development Indicators (CC BY 4.0); author’s calculations.',
+  figure(g3, { prefix: 'L', wide: true, title: 'Correlation matrix, ' + K.year, sub: 'Spearman ρ across economies; stars mark significance', h: 420, notes: 'Rank correlations are robust to outliers. Each cell uses all economies with both values (pairwise).', source: 'World Bank.',
     csv: () => [['', ...K.labels], ...K.labels.map((l, i) => [l, ...K.rho[i]])],
     render: TH => heat(TH, K.labels, K.rho, (i, j) => i === j ? '' : nf(K.rho[i][j], 2) + stars(K.p[i][j]), { min: -1, max: 1, colors: T => [T.neg, T.paper, T.pos], tip: (i, j) => K.labels[i] + ' × ' + K.labels[j] + ': ρ = ' + nf(K.rho[i][j], 3) + ', p = ' + fp(K.p[i][j]) + ', n = ' + K.n[i][j] }) });
   const f = sec(body, 'Cross-country projections', 'ARMA models for annual real GDP growth and inflation, chosen by AIC, three years ahead with 80% intervals. Mechanical statistical projections, not official forecasts.');
@@ -970,9 +1041,7 @@ function watchTable(sel) {
 }
 
 /* ---------- Data source under every chart, table and map ---------- */
-const SRCS = { wdi: 'World Bank, World Development Indicators (CC BY 4.0).',
-  mk: 'U.S. Energy Information Administration (oil and gas), Federal Reserve (interest rates), U.S. Bureau of Labor Statistics (US consumer prices) and gold prices, via DataHub.',
-  fx: 'Federal Reserve, foreign exchange rates (H.10), via DataHub.', methods: 'World Bank, World Development Indicators (CC BY 4.0); author’s checks.' };
+const SRCS = { wdi: 'World Bank.', mk: 'EIA, World Bank, Federal Reserve, BLS.', fx: 'Federal Reserve.', methods: 'World Bank.' };
 function srcFor(node) { const v = node.closest('.view'); const id = v ? v.id : ''; if (id === 'v-markets' || node.closest('#ov-markets')) return SRCS.mk; if (id === 'v-methods') return SRCS.methods; return SRCS.wdi; }
 function addSrcAfter(el, text) {
   if (!el || !el.parentElement) return;
@@ -1180,10 +1249,8 @@ function initBlink() {
 }
 
 /* ---------- Front page: live dashboard ---------- */
-const LIVE = { int: 10, paused: false, i: 0, next: 0, tiles: [], timer: null, checked: null, offline: false, newData: false };
-const MKSRC = { brent: 'U.S. Energy Information Administration (EIA), Europe Brent spot price, via DataHub.', wti: 'U.S. Energy Information Administration (EIA), WTI spot price, via DataHub.',
-  gas: 'U.S. Energy Information Administration (EIA), Henry Hub natural gas spot price, via DataHub.', gold: 'Gold price, monthly average, via DataHub.',
-  us10y: 'Federal Reserve, 10-year Treasury constant-maturity yield, via DataHub.', uscpi: 'U.S. Bureau of Labor Statistics, consumer price index, via DataHub; author’s calculations.' };
+const LIVE = { int: 10, paused: false, i: 0, next: 0, tiles: [], timer: null, checked: null, offline: false, newData: false, st: { freq: 'M', span: 'all' } };
+const MKSRC = { brent: 'EIA.', wti: 'EIA.', gas: 'EIA.', gold: 'World Bank.', us10y: 'Federal Reserve.', uscpi: 'BLS.' };
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 function fmtPeriod(p, f) {
   p = String(p);
@@ -1213,7 +1280,7 @@ function liveTiles() {
   };
   bd('infl', 'Inflation', '% y/y', 1, 2); bd('food', 'Food inflation', '% y/y', 1, 2); bd('xr', 'Taka per US$', 'Tk', 1, 2); bd('res', 'FX reserves', 'US$ bn', 1000, 1);
   bd('remit_g', 'Remittances', '% y/y', 1, 1); bd('exp_g', 'Exports', '% y/y', 1, 1); bd('call', 'Call money rate', '%', 1, 2); bd('pcredit', 'Private credit', '% y/y', 1, 2);
-  const w = (key, code, label, dir) => { const pts = wdiSeries(key, code); if (pts.length > 1) T.push({ grp: 'World', label, unit: '%', pts, dir, dec: 1, src: 'World Bank, World Development Indicators (CC BY 4.0).', href: '#country-' + code, freq: 'A' }); };
+  const w = (key, code, label, dir) => { const pts = wdiSeries(key, code); if (pts.length > 1) T.push({ grp: 'World', label, unit: '%', pts, dir, dec: 1, src: 'World Bank.', href: '#country-' + code, freq: 'A' }); };
   w('gdp_growth', 'WLD', 'World growth', 1); w('inflation', 'WLD', 'World inflation', -1); w('gdp_growth', 'SAS', 'South Asia growth', 1); w('gdp_growth', 'EAS', 'East Asia & Pacific growth', 1);
   const mk = (key, label, unit, dec) => {
     const m = RAW.mk && RAW.mk[key];
@@ -1251,7 +1318,7 @@ function liveSpot() {
   host.innerHTML = '';
   const pts = t.freq === 'D' ? t.pts.slice(-260) : t.freq === 'A' ? t.pts.filter(x => +x[0] >= 1990) : t.pts.slice(-72);
   const span = t.freq === 'D' ? 'daily, last 12 months' : t.freq === 'A' ? 'annual, since 1990' : 'monthly, last 6 years';
-  const f = figure(host, { num: false, badge: 'Spotlight ' + (LIVE.i + 1) + ' of ' + LIVE.tiles.length, wide: true, title: t.label + (t.grp === 'Bangladesh' ? ', Bangladesh' : ''), sub: t.unit + '; ' + span, h: 250, source: t.src,
+  const f = figure(host, { state: LIVE.st, num: false, badge: 'Spotlight ' + (LIVE.i + 1) + ' of ' + LIVE.tiles.length, wide: true, title: t.label + (t.grp === 'Bangladesh' ? ', Bangladesh' : ''), sub: t.unit + '; ' + span, h: 250, source: t.src,
     render: TH => tsOption(TH, pts.map(x => x[0]), [S(t.label, pts.map(x => x[1]), { color: TH.pal[0], area: 0.12, end: true, dec: t.dec, w: 2.2 })], { y1: t.unit, scale: true, events: t.freq === 'M', dec: t.dec, warn: [{ s: 0, test: () => liveWorse(t), label: 'Worsening' }] }) });
   const a = document.createElement('a');
   a.href = t.href; a.className = 'live-open'; a.textContent = 'Open the full page →';
@@ -1358,7 +1425,7 @@ function initPeers() {
     const r = vals.length > 1 ? vals.filter(x => x < sv).length / (vals.length - 1) : 0.5;
     return SEQ[Math.round(r * (SEQ.length - 1))];
   };
-  const fmtv = (j, v) => PEER_COLS[j][0] === 'gdp_pc_ppp' ? nf(v / 1000, v >= 10000 ? 0 : 1) + 'k' : nf(v, PEER_COLS[j][4]);
+  const fmtv = (j, v) => nf(v, 2);
   let html = '<thead><tr><th scope="col" class="pe-c" title="Economy">Economy</th>' + PEER_COLS.map((c, j) => '<th scope="col" class="num" title="' + esc(c[2]) + '">' + esc(c[1]) + '<small class="pe-y">' + (modal[j] || '') + '</small></th>').join('') + '</tr></thead><tbody>';
   PEER_GROUPS.forEach(([g, codes, color]) => {
     html += '<tr class="pe-g" style="--g:' + color + '"><th colspan="' + (PEER_COLS.length + 1) + '" scope="rowgroup">' + esc(g) + '</th></tr>';
@@ -1378,7 +1445,7 @@ function initPeers() {
     return '<td class="num"><span class="pe-badge' + (rk <= k ? ' top' : rk > n - k ? ' low warn-b' : '') + '" title="' + esc(col[2]) + ': rank ' + rk + ' of ' + n + '">' + rk + '<small>/' + n + '</small></span></td>';
   }).join('') + '</tr></tbody>';
   host.innerHTML = '<div class="table-wrap pe-wrap"><table class="mx pe">' + html + '</table></div>' +
-    '<p class="mx-note">Year under each heading: the most common latest year; a small ’23 after a value marks an older year. Green is better and red worse than most economies in the column: higher growth, income, current account, exports and investment, lower unemployment, and inflation closest to 3% count as better (blue: no better or worse direction). Values more than four years older than the rest of their column are left out. Ranks run from best (1) among the 20 economies. Benchmarks are World Bank regional and income-group aggregates. </p><p class="src-line"><b>Source:</b> World Bank, World Development Indicators (CC BY 4.0).</p>' +
+    '<p class="mx-note">Year under each heading: the most common latest year; a small ’23 after a value marks an older year. Green is better and red worse than most economies in the column: higher growth, income, current account, exports and investment, lower unemployment, and inflation closest to 3% count as better (blue: no better or worse direction). Values more than four years older than the rest of their column are left out. Ranks run from best (1) among the 20 economies. Benchmarks are World Bank regional and income-group aggregates. </p><p class="src-line"><b>Source:</b> World Bank.</p>' +
     '<p class="pe-links"><a href="#compare~gdp_growth~BGD.IND.PAK.LKA.CHN.VNM.THA.JPN">Compare growth over time →</a><a href="#map~gdp_growth~' + (modal[0] || '') + '">See the world map →</a><a href="#rank~inflation~' + (modal[1] || '') + '~asc">World rankings →</a><a href="#bangladesh">Bangladesh Monitor →</a></p>';
   const open = r => { if (r) location.hash = 'country-' + r.getAttribute('data-code'); };
   host.addEventListener('click', e => open(e.target.closest('tr[data-code]')));
@@ -1394,13 +1461,14 @@ function initPeers() {
   document.addEventListener('keydown', e => { const k = (e.key || '').toLowerCase(); if ((e.ctrlKey || e.metaKey) && ['c', 'x', 's', 'p', 'u', 'a'].includes(k) && !ok(e.target)) e.preventDefault(); });
 })();
 setTimeout(() => { try { initAuth(); } catch (e) { /* sign-in optional */ } try { initBlink(); } catch (e) { /* optional */ } try { initPeers(); } catch (e) { /* table optional */ } try { initLive(); } catch (e) { /* dashboard optional */ } try { staticSources(); } catch (e) { /* optional */ } }, 0);
-return { initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks };
+return { initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender };
 })();
 function initBD() { return BDX.initBD(); }
 function initLab() { return BDX.initLab(); }
 function routeBD(h) { return BDX.routeBD(h); }
 function wmark(opt) {
   if (!opt || typeof opt !== 'object') return opt;
+  try { beautify(opt); } catch (e) { /* styling optional */ }
   try { addLabels(opt); } catch (e) { /* labels optional */ }
   const T = theme();
   const mark = { id: 'mm-wm', type: 'text', right: 10, top: 22, z: 100, silent: true, style: { text: 'macroarianalytics.com', fill: T.muted, opacity: 0.55, font: '600 10px ' + FONT } };
@@ -1409,15 +1477,20 @@ function wmark(opt) {
   return opt;
 }
 
-/* ---------- Data labels: bars always; lines at each quarter, or each year ---------- */
-function lblFmt(v) { if (v == null || !isFinite(v)) return ''; const a = Math.abs(v), d = a >= 100 ? 0 : a >= 1 ? 1 : 2; return Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
-function pval(p) { const v = p.value; if (Array.isArray(v)) { if (p.encode && p.encode.y && v[p.encode.y[0]] != null) return v[p.encode.y[0]]; return v[v.length - 1]; } return v; }
+/* ---------- Data labels: clear, never piled up; latest value with its period ---------- */
+const MONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function lbl2(v) { return v == null || !isFinite(v) ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function perLbl(c) { c = String(c); if (/^\d{4}-\d{2}-\d{2}$/.test(c)) return +c.slice(8) + ' ' + MONS[+c.slice(5, 7) - 1] + ' ' + c.slice(0, 4); if (/^\d{4}-\d{2}$/.test(c)) return MONS[+c.slice(5, 7) - 1] + ' ' + c.slice(0, 4); if (/^\d{4}-Q\d$/.test(c)) return c.slice(5) + ' ' + c.slice(0, 4); return c; }
+function vOfD(d) { if (d == null || d === '-') return null; if (typeof d === 'object') { const v = Array.isArray(d) ? d[d.length - 1] : (Array.isArray(d.value) ? d.value[d.value.length - 1] : d.value); return v == null || v === '-' || !isFinite(+v) ? null : +v; } return isFinite(+d) ? +d : null; }
+function tKey(d) { const t = Array.isArray(d) ? d[0] : d && Array.isArray(d.value) ? d.value[0] : null; if (t == null) return ''; const dt = typeof t === 'number' ? new Date(t) : new Date(String(t)); return isNaN(dt) ? '' : dt.toISOString().slice(0, 10); }
 function addLabels(opt) {
   const T = theme();
   const xa = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
   const ya = Array.isArray(opt.yAxis) ? opt.yAxis[0] : opt.yAxis;
   const cats = xa && xa.type === 'category' && Array.isArray(xa.data) ? xa.data.map(String) : null;
+  const timeAxis = xa && xa.type === 'time';
   const horiz = ya && ya.type === 'category';
+  const hasY2 = Array.isArray(opt.yAxis) && opt.yAxis.length > 1;
   let showAt = null;
   if (cats && cats.length) {
     const c0 = cats[0];
@@ -1426,32 +1499,116 @@ function addLabels(opt) {
     else if (/^\d{4}-\d{2}-\d{2}$/.test(c0)) showAt = i => { const m = cats[i].slice(5, 7), pm = i > 0 ? cats[i - 1].slice(5, 7) : ''; return ['01', '04', '07', '10'].includes(m) && m !== pm; };
     else if (/^\d+$/.test(c0)) showAt = cats.length > 20 ? i => +cats[i] % 3 === 0 : () => true;
   }
-  const timeAxis = xa && xa.type === 'time';
-  const dkey = d => { const t = Array.isArray(d) ? d[0] : d && d.value ? d.value[0] : null; if (t == null) return ''; const dt = typeof t === 'number' ? new Date(t) : new Date(String(t)); return isNaN(dt) ? '' : dt.getUTCFullYear() + '-' + String(dt.getUTCMonth() + 1).padStart(2, '0'); };
+  const list = Array.isArray(opt.series) ? opt.series : opt.series ? [opt.series] : [];
+  const ok = s => s && !s.silent && !s.label && !(s.lineStyle && s.lineStyle.opacity === 0) && !/ lower$/.test(s.name || '');
   const base = { fontSize: 10, color: T.ink2, fontWeight: 600 };
-  (Array.isArray(opt.series) ? opt.series : opt.series ? [opt.series] : []).forEach(s => {
-    if (!s || s.silent || s.label || (s.lineStyle && s.lineStyle.opacity === 0) || / lower$/.test(s.name || '')) return;
-    if (s.type === 'bar') {
-      s.label = Object.assign({ show: true, position: horiz ? 'right' : 'top', formatter: p => lblFmt(pval(p)) }, base);
-      s.labelLayout = { hideOverlap: true };
-    } else if (s.type === 'line' && timeAxis && Array.isArray(s.data) && s.data.length) {
-      const mk = s.data.map(dkey);
-      const at = i => ['01', '04', '07', '10'].includes(mk[i].slice(5)) && (i === 0 || mk[i - 1] !== mk[i]);
-      s.label = Object.assign({ show: true, position: 'top', formatter: p => at(p.dataIndex) ? lblFmt(pval(p)) : '' }, base);
-      s.labelLayout = { hideOverlap: true };
+  const lastOf = a => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return i; return -1; };
+  const endLabel = (s, i, v, isBar) => {
+    const d = s.data[i];
+    const per = cats ? perLbl(cats[i]) : timeAxis ? perLbl(tKey(d)) : '';
+    const item = d != null && typeof d === 'object' && !Array.isArray(d) ? d : { value: d };
+    item.label = { show: true, rotate: 0, position: isBar ? (horiz ? 'right' : 'top') : (hasY2 ? 'top' : 'right'), distance: 7, formatter: '{v|' + lbl2(v) + '}' + (per ? '\n{p|' + per + '}' : ''),
+      rich: { v: { fontSize: 11.5, fontWeight: 800, color: T.ink, lineHeight: 15 }, p: { fontSize: 9.5, color: T.muted, lineHeight: 12 } }, backgroundColor: T.paper, borderColor: T.line, borderWidth: 1, borderRadius: 4, padding: [2, 5] };
+    s.data[i] = item;
+  };
+  const lines = list.filter(s => s.type === 'line' && ok(s) && Array.isArray(s.data));
+  if (lines.length && (showAt || timeAxis)) {
+    const at = timeAxis ? (s, i) => { const k = tKey(s.data[i]).slice(0, 7), pk = i > 0 ? tKey(s.data[i - 1]).slice(0, 7) : ''; return ['01', '04', '07', '10'].includes(k.slice(5)) && k !== pk; } : (s, i) => showAt(i);
+    const V = lines.map(s => s.data.map(vOfD));
+    const allv = V.flat().filter(v => v != null);
+    const rng = allv.length ? (Math.max(...allv) - Math.min(...allv)) || 1 : 1;
+    const near = rng * 0.06;
+    const tangled = new Set();
+    for (let a = 0; a < lines.length; a++) for (let b = a + 1; b < lines.length; b++) {
+      if ((lines[a].yAxisIndex || 0) !== (lines[b].yAxisIndex || 0)) continue;
+      let cross = 0, prev = 0;
+      const dist = [];
+      const n = Math.min(V[a].length, V[b].length);
+      for (let i = 0; i < n; i++) { const x = V[a][i], y = V[b][i]; if (x == null || y == null) continue; const df = x - y; dist.push(Math.abs(df)); const sg = Math.sign(df); if (sg && prev && sg !== prev) cross++; if (sg) prev = sg; }
+      dist.sort((p, q) => p - q);
+      const med = dist.length ? dist[Math.floor(dist.length / 2)] : Infinity;
+      if (cross >= 3 && med < rng * 0.15) { tangled.add(a); tangled.add(b); }
+    }
+    const keep = lines.map((s, a) => { const K = new Set(); if (!tangled.has(a)) V[a].forEach((v, i) => { if (v != null && at(s, i)) K.add(i); }); return K; });
+    lines.forEach((s, a) => { [...keep[a]].forEach(i => { for (let b = 0; b < a; b++) { if ((lines[b].yAxisIndex || 0) !== (s.yAxisIndex || 0)) continue; const y = V[b][i]; if (y != null && Math.abs(y - V[a][i]) < near && keep[b].has(i)) { keep[a].delete(i); break; } } }); });
+    lines.forEach((s, a) => {
+      const last = lastOf(V[a]);
+      const K = keep[a];
+      K.delete(last);
+      const vertical = K.size > 14;
+      s.label = Object.assign({ show: true, position: 'top', distance: vertical ? 5 : 6, rotate: vertical ? 90 : 0, align: vertical ? 'left' : 'center', verticalAlign: vertical ? 'middle' : 'bottom',
+        formatter: p => K.has(p.dataIndex) ? lbl2(vOfD(p.data != null && typeof p.data === 'object' ? p.data : p.value)) : '' }, base);
+      s.labelLayout = p => p.dataIndex === last ? { moveOverlap: 'shiftY' } : { hideOverlap: true };
       s.showSymbol = true; s.showAllSymbol = true;
-      s.symbolSize = (v, p) => at(p.dataIndex) ? 4 : 0;
-    } else if (s.type === 'line' && showAt) {
-      s.label = Object.assign({ show: true, position: 'top', formatter: p => showAt(p.dataIndex) ? lblFmt(pval(p)) : '' }, base);
-      s.labelLayout = { hideOverlap: true };
-      s.showSymbol = true; s.showAllSymbol = true;
-      const sz = typeof s.symbolSize === 'number' ? s.symbolSize : 5;
-      s.symbolSize = (v, p) => showAt(p.dataIndex) ? Math.min(sz, 5) : 0;
+      const sz = typeof s.symbolSize === 'number' ? Math.min(s.symbolSize, 5) : 4;
+      s.symbolSize = (v, p) => p.dataIndex === last ? 7 : K.has(p.dataIndex) ? sz : 0;
+      if (last >= 0) endLabel(s, last, V[a][last], false);
+    });
+    if (!hasY2) { const g = Array.isArray(opt.grid) ? opt.grid[0] : opt.grid; if (g && typeof g === 'object' && !(g.right >= 74)) g.right = 74; }
+  }
+  list.filter(s => s.type === 'bar' && ok(s) && Array.isArray(s.data)).forEach(s => {
+    const vals = s.data.map(vOfD);
+    const last = lastOf(vals);
+    const n = vals.filter(v => v != null).length;
+    const vertical = !horiz && n > 16;
+    s.label = Object.assign({ show: true, position: horiz ? 'right' : 'top', rotate: vertical ? 90 : 0, align: vertical ? 'left' : 'center', verticalAlign: vertical ? 'middle' : 'bottom', distance: 4,
+      formatter: p => p.dataIndex === last ? '' : lbl2(vOfD(p.value)) }, base);
+    s.labelLayout = { hideOverlap: true };
+    if (last >= 0 && cats) endLabel(s, last, vals[last], true);
+  });
+  return opt;
+}
+function hexA(c, a) {
+  if (typeof c !== 'string') return null;
+  if (c[0] === '#') { let h = c.slice(1); if (h.length === 3) h = h.split('').map(x => x + x).join(''); const n = parseInt(h.slice(0, 6), 16); return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')'; }
+  const m = c.match(/[\d.]+/g);
+  return m && m.length >= 3 ? 'rgba(' + m[0] + ',' + m[1] + ',' + m[2] + ',' + a + ')' : null;
+}
+function beautify(opt) {
+  const T = theme();
+  const list = Array.isArray(opt.series) ? opt.series : opt.series ? [opt.series] : [];
+  const pal = Array.isArray(opt.color) ? opt.color : T.pal;
+  const vis = list.filter(s => s && s.type === 'line' && !s.silent && !(s.lineStyle && s.lineStyle.opacity === 0));
+  list.forEach((s, k) => {
+    if (!s || s.silent) return;
+    if (s.type === 'line' && !(s.lineStyle && s.lineStyle.opacity === 0)) {
+      s.lineStyle = Object.assign({}, s.lineStyle);
+      if (!(s.lineStyle.width > 2.6)) s.lineStyle.width = s.lineStyle.type === 'dashed' ? 2.2 : 2.6;
+      s.emphasis = Object.assign({ focus: 'series', lineStyle: { width: 3.6 } }, s.emphasis);
+      s.blur = Object.assign({ lineStyle: { opacity: 0.18 }, itemStyle: { opacity: 0.18 }, label: { opacity: 0.15 }, areaStyle: { opacity: 0.04 } }, s.blur);
+      if (vis.length === 1 && !s.stack && (!s.areaStyle || typeof s.areaStyle.color !== 'object')) {
+        const c = (s.lineStyle && s.lineStyle.color) || (s.itemStyle && s.itemStyle.color) || pal[k % pal.length];
+        const top = hexA(c, 0.3), bot = hexA(c, 0);
+        if (top) s.areaStyle = { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: top }, { offset: 1, color: bot }] } };
+      }
+    } else if (s.type === 'bar') {
+      s.emphasis = Object.assign({ focus: 'series' }, s.emphasis);
+      s.itemStyle = Object.assign({ borderRadius: [3, 3, 0, 0] }, s.itemStyle);
     }
   });
+  const ax = x => (Array.isArray(x) ? x : x ? [x] : []).forEach(a => { if (a && typeof a === 'object') a.axisLabel = Object.assign({}, a.axisLabel, { fontSize: 12 }); });
+  ax(opt.xAxis); ax(opt.yAxis);
+  (Array.isArray(opt.legend) ? opt.legend : opt.legend ? [opt.legend] : []).forEach(l => { if (l && typeof l === 'object') { l.textStyle = Object.assign({}, l.textStyle, { fontSize: 13 }); l.itemWidth = Math.max(l.itemWidth || 0, 16); l.itemHeight = Math.max(l.itemHeight || 0, 6); } });
   return opt;
 }
 function ensureSrc(node) {
   try { if (!node || node.closest('.fig, #live, .cat-one')) return; BDX.addSrcAfter(node, BDX.srcFor(node)); } catch (e) { /* optional */ }
 }
 function gateBlocks(view, opts) { try { return BDX.gateBlocks(view, opts); } catch (e) { return false; } }
+const CARD_ST = new Set();
+function cardCtl(st, box) {
+  const d = document.createElement('div');
+  d.className = 'fctl';
+  const view = () => ({ freq: 'Y', span: st.r || cRange });
+  d.innerHTML = BDX.ctlHTML('A', view());
+  d.addEventListener('click', e => { const b = e.target.closest('.seg2 button'); if (!b || b.disabled || b.parentElement.getAttribute('data-k') !== 'span') return; st.r = b.getAttribute('data-v'); BDX.syncCtl(d, view()); BDX.rerender(box); });
+  CARD_ST.add({ st, d, view });
+  return d;
+}
+function resetCardRanges() { CARD_ST.forEach(x => { if (!document.body.contains(x.d)) { CARD_ST.delete(x); return; } x.st.r = null; BDX.syncCtl(x.d, x.view()); }); }
+function shortSrc(t) {
+  t = String(t || '');
+  const out = [];
+  [[/World Bank/i, 'World Bank'], [/Energy Information|\bEIA\b/i, 'EIA'], [/Federal Reserve/i, 'Federal Reserve'], [/Labor Statistics|\bBLS\b/i, 'BLS'], [/\bIMF\b|International Monetary/i, 'IMF'], [/Asian Development|\bADB\b/i, 'ADB'], [/Bangladesh Bank/i, 'Bangladesh Bank'], [/\bBBS\b|Bureau of Statistics/i, 'BBS']].forEach(([re, n]) => { if (re.test(t) && !out.includes(n)) out.push(n); });
+  return out.length ? out.join(', ') : t.split(/[,(]/)[0].trim();
+}

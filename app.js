@@ -259,10 +259,11 @@ const PROFILE = [
 const NF = {};
 const nf = d => NF[d] || (NF[d] = new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
 function num(v, d) {
+  if (!(d === 0 && Number.isInteger(+v))) d = 2;
   if (Number(v.toFixed(d)) === 0) v = 0;
   return nf(d).format(v).replace('-', MINUS);
 }
-function trimNum(v) { return num(v, Math.abs(v) >= 100 || Number.isInteger(v) ? 0 : 1).replace(/\.0$/, ''); }
+function trimNum(v) { return nf(Math.abs(v) >= 100 || Number.isInteger(v) ? 0 : 1).format(v).replace('-', MINUS).replace(/\.0$/, ''); }
 const CNF = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 const compact = v => CNF.format(v).replace('-', MINUS);
 function sig(v) {
@@ -276,7 +277,7 @@ function fmt(key, v) {
   if (f === 'usdbn') return a >= 1000 ? '$' + num(v / 1000, a >= 10000 ? 1 : 2) + ' tn' : a >= 1 ? '$' + num(v, a >= 100 ? 0 : 1) + ' bn' : '$' + num(v * 1000, 0) + ' m';
   if (f === 'usd') return '$' + num(v, 0);
   if (f === 'mn') return a >= 1000 ? num(v / 1000, 2) + ' bn' : a >= 1 ? num(v, a >= 100 ? 0 : 1) + ' m' : num(v * 1000, 0) + 'k';
-  if (f === 'fx') return sig(v);
+  if (f === 'fx') return num(v, 2);
   if (f === 'idx') return num(v, 1);
   return String(v);
 }
@@ -822,7 +823,7 @@ const FXD = {};
 for (const c in RAW.mk.fx) FXD[c] = mkData(RAW.mk.fx[c]);
 function mkFmt(k, v) {
   const m = MK[k];
-  if (m.kind === 'fx') return sig(v);
+  if (m.kind === 'fx') return num(v, 2);
   return (m.pre || '') + num(v, m.dec) + (m.suf || '');
 }
 function mkChange(k, cur, old) {
@@ -871,7 +872,7 @@ function renderMarkets() {
   $('#mk-title').textContent = mkSel === 'fx' ? 'US dollar in ' + CUR[fxCur] + ' (' + fxCur + ')' : m.name;
   $('#mk-desc').textContent = m.desc;
   $('#mk-cur-wrap').hidden = mkSel !== 'fx';
-  $('#mk-src').textContent = 'Source: ' + m.src + '. Latest: ' + mkFmt(mkSel, D.last.v) + ', ' + (D.last.daily ? fmtDay(D.last.d) : fmtMonth(D.last.d)) + '.';
+  $('#mk-src').textContent = 'Source: ' + shortSrc(m.src) + '.';
   $$('#mk-range button').forEach(b => b.setAttribute('aria-pressed', b.getAttribute('data-r') === mkRange ? 'true' : 'false'));
   chartOn($('#mk-chart'), TH => mkOption(TH));
 }
@@ -944,7 +945,7 @@ function initCountries() {
   });
   $('#c-range').addEventListener('click', e => {
     const b = e.target.closest('button[data-r]'); if (!b) return;
-    cRange = b.getAttribute('data-r'); store.set('mm.range', cRange); syncRange();
+    cRange = b.getAttribute('data-r'); store.set('mm.range', cRange); syncRange(); resetCardRanges();
     for (const [node, rec] of charts) if ($('#c-sections').contains(node)) { rec.dirty = true; if (rec.visible) applyChart(node, rec); }
   });
   $('#c-dl').addEventListener('click', () => downloadCountry(curCountry));
@@ -1026,7 +1027,8 @@ function yearSpan(code, keys) {
   let first = 9999, last = 0;
   for (const k of keys) { const s = S[k] && S[k][code]; if (!s) continue; first = Math.min(first, s.y0); last = Math.max(last, s.y0 + s.v.length - 1); }
   if (!last) return [];
-  const n = cRange === 'all' ? 999 : Number(cRange);
+  const rr = arguments[2] || cRange;
+  const n = rr === 'all' ? 999 : Number(rr);
   let end = LAST, start = Math.max(first, end - n + 1);
   if (last < start) { end = last; start = Math.max(first, end - n + 1); }
   return range(start, end);
@@ -1055,17 +1057,18 @@ function latestLine(code, sp) {
 function chartCard(code, sp) {
   const k0 = sp.k[0];
   const box = el('div', { class: 'chart' });
+  const st = { r: null };
   const card = el('article', { class: 'chart-card' },
-    el('h3', { text: sp.title }), el('div', { class: 'unit', text: sp.unit || IND[k0].unit }),
+    el('h3', { text: sp.title }), el('div', { class: 'unit', text: sp.unit || IND[k0].unit }), cardCtl(st, box),
     el('div', { class: 'latest', text: latestLine(code, sp) }), box,
-    el('p', { class: 'chart-src', text: 'Source: ' + (sp.k.length > 1 ? WB : IND[k0].src) + '.' }));
-  chartOn(box, TH => profileOption(code, sp, TH));
+    el('p', { class: 'chart-src', text: 'Source: ' + shortSrc(sp.k.length > 1 ? WB : IND[k0].src) + '.' }));
+  chartOn(box, TH => profileOption(code, Object.assign({}, sp, { _r: st.r }), TH));
   cardTools(card, box, { table: () => profileTable(code, sp), title: sp.title + ', ' + ECON[code].name, sub: () => sp.unit || IND[k0].unit,
     file: 'macro-monitor-' + code + '-' + sp.k[0] + '.png', src: sp.k.length > 1 ? WB : IND[k0].src });
   return card;
 }
 function profileOption(code, sp, TH) {
-  const years = yearSpan(code, sp.k);
+  const years = yearSpan(code, sp.k, sp._r);
   if (!years.length) return null;
   const series = [];
   sp.k.forEach((k, i) => {
