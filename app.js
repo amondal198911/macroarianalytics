@@ -1434,10 +1434,10 @@ async function saveCSV(filename, rows) {
 }
 
 /* ================= navigation ================= */
-const VIEWS = ['overview', 'bangladesh', 'lab', 'countries', 'compare', 'explore', 'map', 'rankings', 'markets', 'learn', 'methods', 'about', 'contact', 'privacy'];
-const TITLES = { overview: 'Macroeconomic Monitor and Forecasting', bangladesh: 'Bangladesh Monitor', lab: 'Forecast lab', compare: 'Compare economies', explore: 'Explore relationships', map: 'World map', rankings: 'Rankings', markets: 'Markets', learn: 'Learn the indicators', methods: 'Methods and notes', about: 'About', contact: 'Contact', privacy: 'Privacy' };
+const VIEWS = ['overview', 'bangladesh', 'lab', 'faq', 'countries', 'compare', 'explore', 'map', 'rankings', 'markets', 'learn', 'methods', 'about', 'contact', 'privacy'];
+const TITLES = { overview: 'Macroeconomic Monitor and Forecasting', bangladesh: 'Bangladesh Monitor', lab: 'Forecast lab', faq: 'Frequently asked questions', compare: 'Compare economies', explore: 'Explore relationships', map: 'World map', rankings: 'Rankings', markets: 'Markets', learn: 'Learn the indicators', methods: 'Methods and notes', about: 'About', contact: 'Contact', privacy: 'Privacy' };
 const inited = {};
-const INIT = { bangladesh: initBD, lab: initLab, compare: initCompare, explore: initExplore, map: initMap, rankings: initRank, markets: initMarkets, learn: initLearn, methods: initMethods, about: initAbout, contact: initContact, privacy: initPrivacy };
+const INIT = { bangladesh: initBD, lab: initLab, compare: initCompare, explore: initExplore, map: initMap, rankings: initRank, markets: initMarkets, learn: initLearnX, faq: initFAQ, methods: initMethods, about: initAbout, contact: initContact, privacy: initPrivacy };
 function go(view, opts) {
   opts = opts || {};
   if (!VIEWS.includes(view)) view = 'overview';
@@ -1496,7 +1496,7 @@ initOverviewExt();
 route(location.hash);
 
 function loadScript(src) {
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.async = true; s.crossOrigin = 'anonymous'; s.onload = res; s.onerror = rej; document.head.append(s); });
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.async = true; s.crossOrigin = 'anonymous'; if (src.indexOf('echarts') > -1) s.integrity = 'sha384-pPi0zxBAoDu6+JXW/C68UZLvBUUtU+7zonhif43rqj7pxsGyqyqzcian2Rj37Rss'; s.onload = res; s.onerror = rej; document.head.append(s); });
 }
 function startECharts() {
   echartsState = 'loading';

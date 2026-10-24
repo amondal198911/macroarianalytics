@@ -38,7 +38,7 @@ const STD = {
   infl: { lo: 2, hi: 6, txt: '2–6%', src: 'Reserve Bank of India target band (4% ± 2%), a common emerging-market benchmark' },
   gdp: { lo: 0, txt: 'above 0%', src: 'Below zero the economy is contracting' },
   cover: { lo: 3, txt: 'at least 3 months', src: 'IMF rule of thumb for reserve adequacy' },
-  crar: { lo: 12.5, txt: 'at least 12.5%', src: 'Basel III: 10% minimum plus 2.5% conservation buffer (BIS)' },
+  crar: { lo: 12.5, txt: 'at least 12.5%', src: 'Bangladesh Bank’s Basel III rule: 10% minimum plus a 2.5% conservation buffer (the global Basel III floor is 8% plus 2.5%)' },
   npl: { hi: 8, txt: 'at most 8%', src: 'European Banking Authority risk thresholds (above 8% is high risk)' },
   credit: { lo: 0, hi: 20, txt: '0–20%', src: 'Credit-boom threshold of 20% a year (Dell’Ariccia and others, 2012, IMF)' },
   real: { lo: 0, txt: 'above 0%', src: 'Negative real interest rates signal financial repression (McKinnon, 1973)' },
@@ -490,7 +490,7 @@ function bdMoney(body) {
   figure(g, { title: 'Credit–deposit ratio of banks', sub: '%', notes: 'Above 100% banks are lending more than they hold in deposits and must rely on other funding.', source: srcKeys(['cdr']), csv: () => csvAligned(['cdr'], M0(2010)),
     render: TH => tsOption(TH, b.labels, [S('Credit–deposit ratio', b.cols[0], { area: 0.08, end: true })], { y1: '%', scale: true, marks: [{ yAxis: 100, name: '100%' }] }) });
   const c = align(['npl', 'crar']);
-  figure(g, { title: 'Bank soundness: bad loans and capital', sub: 'deposit takers, % (quarterly)', notes: 'Bars: non-performing loans as a share of gross loans. Line: regulatory capital to risk-weighted assets; the dashed line marks 12.5% (10% minimum plus the 2.5% conservation buffer under Basel III).', source: srcKeys(['npl', 'crar']),
+  figure(g, { title: 'Bank soundness: bad loans and capital', sub: 'deposit takers, % (quarterly)', notes: 'Bars: non-performing loans as a share of gross loans. Line: regulatory capital to risk-weighted assets; the dashed line marks 12.5% (Bangladesh Bank’s 10% minimum plus the 2.5% conservation buffer under Basel III).', source: srcKeys(['npl', 'crar']),
     csv: () => csvAligned(['npl', 'crar']), render: TH => tsOption(TH, c.labels, [Object.assign(S('Non-performing loans', c.cols[0], { bar: true, color: TH.neg, std: 'npl' }), {}), Object.assign(S('Capital ratio (right)', c.cols[1], { ax: 1, color: TH.pos, w: 2.4, end: true, std: 'crar' }), { markLine: { symbol: 'none', silent: true, lineStyle: { type: 'dashed', color: TH.pos }, label: { formatter: '12.5%', color: TH.muted, fontSize: 10 }, data: [{ yAxis: 12.5 }] } })], { y1: '% of loans', y2: '% of RWA', bar: true }) });
 }
 function bdRates(body) {
@@ -990,8 +990,19 @@ function labRefs(body) {
   s.append(ol);
 }
 function routeBD(h) {
-  const m = /^(bangladesh|lab)(?:~([a-z]+))?$/.exec(h);
+  const m = /^(bangladesh|lab|learn|faq)(?:~([a-z0-9-]+))?$/.exec(h);
   if (!m) return false;
+  if (m[1] === 'learn' || m[1] === 'faq') {
+    const was2 = inited[m[1]];
+    if (m[1] === 'learn') LEARN_OPEN = m[2] || null;
+    go(m[1]);
+    if (m[2]) {
+      if (m[1] === 'learn' && was2) openTerm(m[2]);
+      if (m[1] === 'faq') setTimeout(() => { const d = document.getElementById('faq-' + m[2]); if (d) { d.open = true; d.scrollIntoView({ block: 'start' }); } }, 50);
+      try { history.replaceState(null, '', '#' + h); } catch (err) { /* framed */ }
+    }
+    return true;
+  }
   if (m[1] === 'bangladesh' && m[2] && CHUNKS.some(c => c.id === m[2])) bdState.tab = m[2];
   if (m[1] === 'lab' && m[2] && LAB_TABS.some(t => t[0] === m[2])) labState.tab = m[2];
   const was = inited[m[1]];
@@ -1416,7 +1427,7 @@ function resultsCards(bdOnly) {
   C.push({ t: 'Inflation outlook', big: nf(f12.mean, 2) + '%', s: 'Projected for ' + fmtPeriod(mLabAdd(BD.ensemble.start, e.length - 1)) + ', from ' + nf(now, 2) + '% now (80% range ' + nf(f12.lo80, 2) + '–' + nf(f12.hi80, 2) + '%). The benchmark band is 2–6%; the chance inflation is still above 8% is ' + nf(f12.p_gt8 * 100, 2) + '%.', go: '#lab~overview', bad: stdOut(STD.infl, f12.mean) });
   C.push({ t: 'What moves prices', big: sig(gp(2)) ? 'Interest rates' : sig(gp(3)) ? 'The Taka' : 'Own momentum', s: 'The call money rate ' + (sig(gp(2)) ? 'helps' : 'does not help') + ' predict inflation (p = ' + fp(gp(2)) + '); Taka depreciation ' + (sig(gp(3)) ? 'helps' : 'adds little') + ' (p = ' + fp(gp(3)) + '); money growth ' + (sig(gp(1)) ? 'helps' : 'adds little') + ' (p = ' + fp(gp(1)) + ').', go: '#lab~var' });
   if (after.length || before.length) C.push({ t: 'A change since 2020', big: 'Regime shift', s: (after.length ? 'Since 2020, ' + after.join(' and ') + ' predict' + (after.length > 1 ? '' : 's') + ' inflation. ' : '') + (before.length ? 'Before 2020, ' + before.join(' and ') + ' did, but no longer does.' : ''), go: '#lab~robust' });
-  if (npl && crar) C.push({ t: 'Banking stress', big: nf(npl.v, 2) + '%', s: 'Bad loans as a share of all loans (' + fmtPeriod(npl.period) + '), against an 8% high-risk benchmark. Banks’ capital ratio is ' + nf(crar.v, 2) + '%, against the 12.5% Basel III requirement.', go: '#bangladesh~money', bad: stdOut(STD.npl, npl.v) || stdOut(STD.crar, crar.v) });
+  if (npl && crar) C.push({ t: 'Banking stress', big: nf(npl.v, 2) + '%', s: 'Bad loans as a share of all loans (' + fmtPeriod(npl.period) + '), against an 8% high-risk benchmark. Banks’ capital ratio is ' + nf(crar.v, 2) + '%, against Bangladesh Bank’s 12.5% requirement.', go: '#bangladesh~money', bad: stdOut(STD.npl, npl.v) || stdOut(STD.crar, crar.v) });
   if (cov) C.push({ t: 'External buffers', big: nf(cov.v, 2) + ' months', s: 'Foreign exchange reserves cover ' + nf(cov.v, 2) + ' months of imports (' + fmtPeriod(cov.period) + '), against the IMF’s 3-month benchmark.', go: '#bangladesh~ext', bad: stdOut(STD.cover, cov.v) });
   if (!bdOnly) {
     if (PEER_RANKS.gdp_growth) C.push({ t: 'Bangladesh among its peers', big: '#' + PEER_RANKS.gdp_growth[0] + ' of ' + PEER_RANKS.gdp_growth[1], s: 'Rank for growth among the 20 economies in the table; ' + (PEER_RANKS.inflation ? '#' + PEER_RANKS.inflation[0] + ' for inflation (closest to 3% ranks best).' : ''), go: '#peers' });
@@ -1489,6 +1500,687 @@ function addWatermark() {
   d.className = 'wm-layer';
   d.setAttribute('aria-hidden', 'true');
   document.body.append(d);
+}
+
+/* ---------- Learn: reference for every key term on the site ---------- */
+const LSRC = {
+  SNA08: 'European Commission, IMF, OECD, United Nations and World Bank (2009). System of National Accounts 2008. United Nations.',
+  BPM6: 'IMF (2009). Balance of Payments and International Investment Position Manual, Sixth Edition (BPM6). International Monetary Fund.',
+  CPI20: 'IMF, ILO, Eurostat, UNECE, OECD and World Bank (2020). Consumer Price Index Manual: Concepts and Methods. International Monetary Fund.',
+  MFSM16: 'IMF (2016). Monetary and Financial Statistics Manual and Compilation Guide. International Monetary Fund.',
+  GFSM14: 'IMF (2014). Government Finance Statistics Manual 2014. International Monetary Fund.',
+  FSI19: 'IMF (2019). Financial Soundness Indicators Compilation Guide. International Monetary Fund.',
+  BASEL: 'Basel Committee on Banking Supervision (2011). Basel III: A global regulatory framework for more resilient banks and banking systems. Bank for International Settlements.',
+  ILO13: 'ILO (2013). Resolution concerning statistics of work, employment and labour underutilization. 19th International Conference of Labour Statisticians.',
+  WDI: 'World Bank. World Development Indicators (CC BY 4.0). https://data.worldbank.org',
+  ICP: 'World Bank (2024). Purchasing Power Parities and the Size of World Economies: Results from the 2021 International Comparison Program.',
+  PIP: 'World Bank. Poverty and Inequality Platform. https://pip.worldbank.org',
+  WPP24: 'United Nations DESA (2024). World Population Prospects 2024.',
+  WUP18: 'United Nations DESA (2019). World Urbanization Prospects: The 2018 Revision.',
+  IGME: 'UN Inter-agency Group for Child Mortality Estimation (UN IGME). Levels and Trends in Child Mortality.',
+  UIS: 'UNESCO Institute for Statistics. Literacy rate, adult (15+). https://uis.unesco.org',
+  SDG7: 'IEA, IRENA, UNSD, World Bank and WHO. Tracking SDG 7: The Energy Progress Report.',
+  IRIIP: 'United Nations Statistics Division (2010). International Recommendations for the Index of Industrial Production 2010.',
+  IDS: 'World Bank. International Debt Statistics.',
+  IMF11: 'IMF (2011). Assessing Reserve Adequacy. IMF Policy Paper.',
+  OECDFDI: 'OECD (2008). OECD Benchmark Definition of Foreign Direct Investment, Fourth Edition.',
+  EIA: 'U.S. Energy Information Administration. Spot prices for crude oil and natural gas.',
+  FED: 'Board of Governors of the Federal Reserve System. Selected Interest Rates (H.15) and Foreign Exchange Rates (H.10).',
+  BLS: 'U.S. Bureau of Labor Statistics. Consumer Price Index for All Urban Consumers (CPI-U).',
+  PINK: 'World Bank. Commodity Price Data (the Pink Sheet). CC BY 4.0.',
+  BB: 'Bangladesh Bank. Monthly Economic Trends and Major Economic Indicators. https://www.bb.org.bd',
+  BBS: 'Bangladesh Bureau of Statistics (BBS). https://bbs.gov.bd',
+  EU: 'Treaty on the Functioning of the European Union, Protocol (No 12) on the excessive deficit procedure (reference values of 3% and 60% of GDP).',
+  FISHER11: 'Fisher, I. (1911). The Purchasing Power of Money. Macmillan.',
+  FISHER30: 'Fisher, I. (1930). The Theory of Interest. Macmillan.',
+  FISHER35: 'Fisher, R. A. (1935). The Design of Experiments. Oliver and Boyd.',
+  KONUS: 'Konüs, A. A. (1939). The problem of the true index of the cost of living. Econometrica, 7(1), 10–29.',
+  CASSEL: 'Cassel, G. (1918). Abnormal deviations in international exchanges. Economic Journal, 28(112), 413–415.',
+  BALASSA: 'Balassa, B. (1964). The purchasing-power parity doctrine: A reappraisal. Journal of Political Economy, 72(6), 584–596.',
+  SOLOW: 'Solow, R. M. (1956). A contribution to the theory of economic growth. Quarterly Journal of Economics, 70(1), 65–94.',
+  OKUN: 'Okun, A. M. (1962). Potential GNP: Its measurement and significance. Proceedings of the Business and Economic Statistics Section, American Statistical Association, 98–104.',
+  FGT: 'Foster, J., Greer, J., & Thorbecke, E. (1984). A class of decomposable poverty measures. Econometrica, 52(3), 761–766.',
+  GINI: 'Gini, C. (1912). Variabilità e mutabilità. Tipografia di Paolo Cuppini.',
+  MISHKIN: 'Mishkin, F. S. (2019). The Economics of Money, Banking and Financial Markets (12th ed.). Pearson.',
+  DELL: 'Dell’Ariccia, G., Igan, D., Laeven, L., Tong, H., Bakker, B., & Vandenbussche, J. (2012). Policies for macrofinancial stability: How to deal with credit booms. IMF Staff Discussion Note 12/06.',
+  MCK: 'McKinnon, R. I. (1973). Money and Capital in Economic Development. Brookings Institution.',
+  GK97: 'Goldberg, P. K., & Knetter, M. M. (1997). Goods prices and exchange rates: What have we learned? Journal of Economic Literature, 35(3), 1243–1272.',
+  FR96: 'Frankel, J. A., & Rose, A. K. (1996). Currency crashes in emerging markets: An empirical treatment. Journal of International Economics, 41(3–4), 351–366.',
+  FREUND: 'Freund, C. (2005). Current account adjustment in industrial countries. Journal of International Money and Finance, 24(8), 1278–1298.',
+  CB02: 'Casella, G., & Berger, R. L. (2002). Statistical Inference (2nd ed.). Duxbury.',
+  NEYMAN: 'Neyman, J. (1937). Outline of a theory of statistical estimation based on the classical theory of probability. Philosophical Transactions of the Royal Society A, 236, 333–380.',
+  WL16: 'Wasserstein, R. L., & Lazar, N. A. (2016). The ASA statement on p-values: Context, process, and purpose. The American Statistician, 70(2), 129–133.',
+  PEARSON: 'Pearson, K. (1896). Mathematical contributions to the theory of evolution III: Regression, heredity and panmixia. Philosophical Transactions of the Royal Society A, 187, 253–318.',
+  SPEARMAN: 'Spearman, C. (1904). The proof and measurement of association between two things. American Journal of Psychology, 15(1), 72–101.',
+  WOOLD: 'Wooldridge, J. M. (2020). Introductory Econometrics: A Modern Approach (7th ed.). Cengage.',
+  WHITE: 'White, H. (1980). A heteroskedasticity-consistent covariance matrix estimator and a direct test for heteroskedasticity. Econometrica, 48(4), 817–838.',
+  MW85: 'MacKinnon, J. G., & White, H. (1985). Some heteroskedasticity-consistent covariance matrix estimators with improved finite sample properties. Journal of Econometrics, 29(3), 305–325.',
+  DF79: 'Dickey, D. A., & Fuller, W. A. (1979). Distribution of the estimators for autoregressive time series with a unit root. Journal of the American Statistical Association, 74(366), 427–431.',
+  SD84: 'Said, S. E., & Dickey, D. A. (1984). Testing for unit roots in autoregressive-moving average models of unknown order. Biometrika, 71(3), 599–607.',
+  KPSS: 'Kwiatkowski, D., Phillips, P. C. B., Schmidt, P., & Shin, Y. (1992). Testing the null hypothesis of stationarity against the alternative of a unit root. Journal of Econometrics, 54(1–3), 159–178.',
+  GN74: 'Granger, C. W. J., & Newbold, P. (1974). Spurious regressions in econometrics. Journal of Econometrics, 2(2), 111–120.',
+  BOX: 'Box, G. E. P., Jenkins, G. M., Reinsel, G. C., & Ljung, G. M. (2015). Time Series Analysis: Forecasting and Control (5th ed.). Wiley.',
+  HYND: 'Hyndman, R. J., & Athanasopoulos, G. (2021). Forecasting: Principles and Practice (3rd ed.). OTexts.',
+  AIC: 'Akaike, H. (1974). A new look at the statistical model identification. IEEE Transactions on Automatic Control, 19(6), 716–723.',
+  SCHWARZ: 'Schwarz, G. (1978). Estimating the dimension of a model. Annals of Statistics, 6(2), 461–464.',
+  HQ: 'Hannan, E. J., & Quinn, B. G. (1979). The determination of the order of an autoregression. Journal of the Royal Statistical Society B, 41(2), 190–195.',
+  LB: 'Ljung, G. M., & Box, G. E. P. (1978). On a measure of lack of fit in time series models. Biometrika, 65(2), 297–303.',
+  HK06: 'Hyndman, R. J., & Koehler, A. B. (2006). Another look at measures of forecast accuracy. International Journal of Forecasting, 22(4), 679–688.',
+  TASH: 'Tashman, L. J. (2000). Out-of-sample tests of forecasting accuracy: An analysis and review. International Journal of Forecasting, 16(4), 437–450.',
+  DM95: 'Diebold, F. X., & Mariano, R. S. (1995). Comparing predictive accuracy. Journal of Business & Economic Statistics, 13(3), 253–263.',
+  HLN: 'Harvey, D., Leybourne, S., & Newbold, P. (1997). Testing the equality of prediction mean squared errors. International Journal of Forecasting, 13(2), 281–291.',
+  BG69: 'Bates, J. M., & Granger, C. W. J. (1969). The combination of forecasts. Operational Research Quarterly, 20(4), 451–468.',
+  BFW: 'Britton, E., Fisher, P., & Whitley, J. (1998). The Inflation Report projections: Understanding the fan chart. Bank of England Quarterly Bulletin, 38(1), 30–37.',
+  SIMS: 'Sims, C. A. (1980). Macroeconomics and reality. Econometrica, 48(1), 1–48.',
+  LUT: 'Lütkepohl, H. (2005). New Introduction to Multiple Time Series Analysis. Springer.',
+  HAM: 'Hamilton, J. D. (1994). Time Series Analysis. Princeton University Press.',
+  GRANGER: 'Granger, C. W. J. (1969). Investigating causal relations by econometric models and cross-spectral methods. Econometrica, 37(3), 424–438.',
+  KW: 'Kruskal, W. H., & Wallis, W. A. (1952). Use of ranks in one-criterion variance analysis. Journal of the American Statistical Association, 47(260), 583–621.',
+  BSM: 'Barro, R. J., & Sala-i-Martin, X. (1992). Convergence. Journal of Political Economy, 100(2), 223–251.',
+  MRW: 'Mankiw, N. G., Romer, D., & Weil, D. N. (1992). A contribution to the empirics of economic growth. Quarterly Journal of Economics, 107(2), 407–437.',
+  SILV: 'Silverman, B. W. (1986). Density Estimation for Statistics and Data Analysis. Chapman and Hall.',
+  SCOTT: 'Scott, D. W. (1992). Multivariate Density Estimation: Theory, Practice, and Visualization. Wiley.',
+  GALI: 'Galí, J. (2015). Monetary Policy, Inflation, and the Business Cycle (2nd ed.). Princeton University Press.',
+  SW07: 'Smets, F., & Wouters, R. (2007). Shocks and frictions in US business cycles: A Bayesian DSGE approach. American Economic Review, 97(3), 586–606.',
+  CALVO: 'Calvo, G. A. (1983). Staggered prices in a utility-maximizing framework. Journal of Monetary Economics, 12(3), 383–398.',
+  TAYLOR: 'Taylor, J. B. (1993). Discretion versus policy rules in practice. Carnegie-Rochester Conference Series on Public Policy, 39, 195–214.',
+  WOOD: 'Woodford, M. (2003). Interest and Prices: Foundations of a Theory of Monetary Policy. Princeton University Press.',
+  PHIL: 'Phillips, A. W. (1958). The relation between unemployment and the rate of change of money wage rates in the United Kingdom, 1861–1957. Economica, 25(100), 283–299.',
+  HF96: 'Hyndman, R. J., & Fan, Y. (1996). Sample quantiles in statistical packages. The American Statistician, 50(4), 361–365.',
+  JB: 'Jarque, C. M., & Bera, A. K. (1980). Efficient tests for normality, homoscedasticity and serial independence of regression residuals. Economics Letters, 6(3), 255–259.',
+  RBI: 'Reserve Bank of India. Flexible inflation targeting framework: CPI inflation target of 4% with a band of ±2% (RBI Act, 1934, Section 45ZA).',
+  EBA: 'European Banking Authority. Risk Dashboard: thresholds for the non-performing loan ratio.',
+  NE: 'Natural Earth. Free vector and raster map data (public domain). https://www.naturalearthdata.com'
+};
+const Lr = k => { try { const s = SER(k); return (s && s.reading) || {}; } catch (e) { return {}; } };
+const Lw = (k, c) => { try { return latestOf(k, c || 'BGD') || [null, null]; } catch (e) { return [null, null]; } };
+const Lp = k => { try { return ((RAW.prof || {}).BGD || {})[k] || [null, null]; } catch (e) { return [null, null]; } };
+const L2 = v => (v == null || !isFinite(v) ? '–' : nf(v, 2));
+const GLOSS = [
+  // ---------------- Output and growth
+  { id: 'gdp', t: 'Gross domestic product (GDP)', c: 'Output and growth', d: 'The market value of all final goods and services produced within an economy in a period, whoever owns the firms that produce them.',
+    f: 'GDP = C + I + G + (X − M) &nbsp;(spending) = Σ value added (production) = Σ incomes (income)',
+    m: 'Statistics offices compile GDP from business surveys, administrative and tax records under the System of National Accounts, and reconcile the three approaches. The World Bank converts it to US dollars at official exchange rates.',
+    x: () => { const g = Lw('gdp_usd'); return g[1] == null ? '' : 'Bangladesh’s GDP was $' + L2(g[1]) + ' billion in ' + g[0] + ' (current US$).'; },
+    th: 'Every taka spent on a final product is income for someone who added value along the supply chain, so production, spending and income measure the same total (the circular flow).',
+    p: 'Value added counts each stage once. Wheat sold for 1, flour for 3 and bread for 5 add value of 1 + 2 + 2 = 5, exactly the value of the final bread; adding all sales (1 + 3 + 5 = 9) would double-count.',
+    pro: ['One comprehensive, internationally comparable measure of economic size.', 'The three approaches cross-check each other.'],
+    con: ['Leaves out unpaid household work and the depletion of natural resources.', 'Informal activity is hard to measure; US-dollar GDP also moves with exchange rates.'],
+    n: 'Gross national income (GNI) adds net primary income from abroad. Workers’ remittances are mostly secondary income, so they raise disposable income rather than GDP.', u: ['Countries', '#countries'], s: ['SNA08', 'WDI'] },
+  { id: 'growth', t: 'Real GDP growth', c: 'Output and growth', d: 'The percentage change in GDP after removing price changes, that is, in volume terms.',
+    f: 'g<sub>t</sub> = (Y<sub>t</sub> ÷ Y<sub>t−1</sub> − 1) × 100, with Y at constant (chain-linked) prices',
+    m: 'Volumes are valued at the previous year’s prices and chain-linked. The World Bank reports annual growth; BBS also publishes quarterly year-on-year growth.',
+    x: () => { const g = Lw('gdp_growth'), q = Lr('gdp_q'); return (g[1] == null ? '' : 'Bangladesh grew ' + L2(g[1]) + '% in ' + g[0] + ' (World Bank). ') + (q.v == null ? '' : 'Quarterly growth was ' + L2(q.v) + '% year on year in ' + fmtPeriod(q.period) + ' (BBS).'); },
+    th: 'In the Solow model, long-run growth in output per person comes from technological progress; more capital and labour raise output but with diminishing returns.',
+    p: 'Rule of 70: at a growth rate g, output doubles when (1 + g)<sup>T</sup> = 2, so T = ln 2 ÷ ln(1 + g) ≈ 0.693 ÷ g. With g in per cent, T ≈ 70 ÷ g years (7% growth doubles output in about 10 years).',
+    pro: ['Removes inflation, so it shows real changes in production.', 'The standard gauge of the business cycle.'],
+    con: ['Revised often; a new base year (Bangladesh moved to 2015–16) changes levels and growth rates.', 'Says nothing about who benefits.'],
+    n: 'Bangladesh’s fiscal year runs July to June; the World Bank assigns fiscal-year figures to calendar years by its own rule.', u: ['Real sector', '#bangladesh~real'], s: ['SNA08', 'WDI', 'SOLOW'] },
+  { id: 'gdppc', t: 'GDP per person (per capita)', c: 'Output and growth', d: 'GDP divided by the mid-year population: a rough measure of average income.',
+    f: 'GDP per person = GDP ÷ population',
+    m: 'Shown in current US dollars (market exchange rates) and in PPP international dollars.',
+    x: () => { const a = Lw('gdp_pc'), b = Lw('gdp_pc_ppp'); return a[1] == null ? '' : 'Bangladesh: $' + L2(a[1]) + ' at market exchange rates and $' + L2(b[1]) + ' at PPP (' + b[0] + ').'; },
+    th: 'Living standards depend on output per person, which rises over time only through higher productivity.',
+    pro: ['Simple and comparable across economies.', 'Closely linked to health, education and other outcomes.'],
+    con: ['An average that hides inequality.', 'The market-rate version swings with exchange rates.'],
+    n: 'Use the PPP version to compare living standards and the market-rate version to compare purchasing power in world markets.', u: ['Compare', '#compare'], s: ['WDI'] },
+  { id: 'ppp', t: 'Purchasing power parity (PPP)', c: 'Output and growth', d: 'A conversion rate that equalises the purchasing power of currencies, so one PPP dollar buys the same basket of goods everywhere.',
+    f: 'PPP<sub>c</sub> = P<sub>c</sub> ÷ P<sub>US</sub> &nbsp;(basket price in local currency ÷ its US price); &nbsp;GDP<sub>PPP</sub> = GDP<sub>local</sub> ÷ PPP<sub>c</sub>',
+    m: 'The International Comparison Program prices hundreds of comparable products in every country; the latest benchmark year is 2021.',
+    x: () => { const a = Lw('gdp_pc'), b = Lw('gdp_pc_ppp'); return a[1] && b[1] ? 'Bangladesh’s GDP per person is $' + L2(a[1]) + ' at market rates but $' + L2(b[1]) + ' at PPP, so its price level is about ' + L2(a[1] / b[1] * 100) + '% of the US level.' : ''; },
+    th: 'Absolute PPP (Cassel, 1918) says exchange rates move to equalise price levels. It holds poorly in the short run; poorer countries have lower price levels because their non-traded services are cheaper (the Balassa–Samuelson effect).',
+    pro: ['Corrects for differences in price levels when comparing living standards.', 'Based on actual price surveys.'],
+    con: ['Products are hard to match across very different economies.', 'Benchmarks come every few years and are extrapolated in between.'],
+    n: 'PPP rates are for comparing volumes, not for converting money in a bank.', u: ['Explore', '#explore'], s: ['ICP', 'CASSEL', 'BALASSA'] },
+  { id: 'invest', t: 'Investment (gross capital formation)', c: 'Output and growth', d: 'Spending on fixed assets such as buildings, machinery and infrastructure, plus changes in inventories, as a share of GDP.',
+    f: 'Investment ratio = gross capital formation ÷ GDP × 100',
+    m: 'Taken from the national accounts (expenditure side).',
+    x: () => { const r = Lr('inv_gdp'); return r.v == null ? '' : 'Bangladesh invested ' + L2(r.v) + '% of GDP in ' + r.period + ' (BBS).'; },
+    th: 'Capital accumulation raises output per worker (Solow, 1956), though with diminishing returns.',
+    pro: ['Signals future productive capacity.', 'Moves strongly over the business cycle.'],
+    con: ['Says nothing about how productive the investment is.', 'Mixes public and private spending.'],
+    n: 'A high ratio with slow growth suggests inefficient investment.', u: ['Real sector', '#bangladesh~real'], s: ['SNA08', 'SOLOW'] },
+  { id: 'savings', t: 'Gross national savings', c: 'Output and growth', d: 'National disposable income not spent on final consumption, as a share of GDP.',
+    f: 'S = GNDI − C − G; &nbsp;and S − I = CA (current-account balance)',
+    m: 'From the national accounts and balance of payments.',
+    x: () => { const s = Lr('sav_gdp'), i = Lr('inv_gdp'); return s.v == null ? '' : 'Bangladesh saved ' + L2(s.v) + '% of GDP and invested ' + L2(i.v) + '% in ' + s.period + '.'; },
+    th: 'A country that saves more than it invests lends the difference to the rest of the world.',
+    p: 'Y = C + I + G + (X − M) and GNDI = Y + net income and transfers from abroad. Then S = GNDI − C − G = I + (X − M + net income + net transfers) = I + CA, so S − I = CA.',
+    pro: ['Links domestic behaviour to the external balance.', 'Shows how investment is financed.'],
+    con: ['Measured as a residual, so errors accumulate.', 'Includes remittance income, which can be volatile.'],
+    n: 'The identity holds by accounting, not by behaviour: it shows what must add up, not what causes what.', u: ['Real sector', '#bangladesh~real'], s: ['SNA08', 'BPM6'] },
+  { id: 'iip', t: 'Industrial production index', c: 'Output and growth', d: 'A monthly index of output volume in manufacturing, mining and electricity, relative to a base year set to 100.',
+    f: 'IIP<sub>t</sub> = Σ w<sub>i</sub> (q<sub>i,t</sub> ÷ q<sub>i,0</sub>) × 100, &nbsp;weights w<sub>i</sub> = base-year value-added shares',
+    m: 'BBS surveys a fixed sample of establishments each month.',
+    x: () => { const r = Lr('iip'); return r.v == null ? '' : 'Industrial production grew ' + L2(r.v) + '% year on year in ' + fmtPeriod(r.period) + '.'; },
+    th: 'Industry is the most cyclical part of output, so the index gives an early read on the economy.',
+    pro: ['Timely and monthly.', 'Internationally standard method.'],
+    con: ['Covers mostly large and medium firms.', 'Weights age between base-year updates.'], u: ['Real sector', '#bangladesh~real'], s: ['IRIIP', 'BBS'] },
+  // ---------------- Prices
+  { id: 'inflation', t: 'Inflation (consumer price index)', c: 'Prices', d: 'The rate at which the general level of consumer prices rises, measured by the change in the consumer price index (CPI).',
+    f: 'π<sub>t</sub> = (CPI<sub>t</sub> ÷ CPI<sub>t−12</sub> − 1) × 100; &nbsp;CPI<sub>t</sub> = Σ w<sub>i</sub> (p<sub>i,t</sub> ÷ p<sub>i,0</sub>) × 100 (Laspeyres)',
+    m: 'Prices of a fixed basket are collected every month; the weights come from household expenditure surveys. Bangladesh’s current CPI has a 2021–22 base.',
+    x: () => { const r = Lr('infl'); return r.v == null ? '' : 'Bangladesh’s headline inflation was ' + L2(r.v) + '% in ' + fmtPeriod(r.period) + ', outside the 2–6% benchmark band.'; },
+    th: 'The quantity theory (MV = PY) implies that, in the long run, money growing faster than real output raises prices.',
+    p: 'A fixed-basket (Laspeyres) index overstates the rise in the cost of living: consumers can switch to goods that became relatively cheaper, so the cheapest way to keep the same living standard costs no more than the old basket at new prices (Konüs, 1939).',
+    pro: ['Monthly, widely understood and the basis of most inflation targets.', 'Covers the goods households actually buy.'],
+    con: ['Substitution and quality-change bias.', 'Base-year changes break the series if not linked.'],
+    n: 'The CPI differs from the GDP deflator, which covers all domestic output and excludes imports.', u: ['Prices and inflation', '#bangladesh~prices'], s: ['CPI20', 'FISHER11', 'KONUS'] },
+  { id: 'p2p', t: 'Point-to-point and 12-month average inflation', c: 'Prices', d: 'Point-to-point inflation compares this month’s CPI with the same month a year earlier; the 12-month average compares the average CPI of the last 12 months with the 12 months before.',
+    f: 'π<sup>avg</sup><sub>t</sub> = (Σ<sub>k=0..11</sub> CPI<sub>t−k</sub> ÷ Σ<sub>k=12..23</sub> CPI<sub>t−k</sub> − 1) × 100',
+    m: 'BBS and Bangladesh Bank publish both every month.',
+    x: () => { const a = Lr('infl'), b = Lr('infl_avg'); return a.v == null ? '' : 'In ' + fmtPeriod(a.period) + ': ' + L2(a.v) + '% point-to-point and ' + L2(b.v) + '% as a 12-month average.'; },
+    th: 'Averaging smooths monthly noise but reacts slowly, so it lags turning points by several months.',
+    pro: ['Point-to-point is timely.', 'The average is stable and suits annual targets.'],
+    con: ['Point-to-point is noisy and affected by base effects.', 'The average hides recent changes.'],
+    n: 'When point-to-point inflation is below the 12-month average, inflation has started to ease.', u: ['Prices and inflation', '#bangladesh~prices'], s: ['CPI20', 'BB'] },
+  { id: 'food', t: 'Food and non-food inflation', c: 'Prices', d: 'Inflation of the food and non-food parts of the CPI basket.',
+    f: 'π ≈ w<sub>food</sub> π<sub>food</sub> + (1 − w<sub>food</sub>) π<sub>non-food</sub>',
+    m: 'BBS publishes the two sub-indices with their own weights.',
+    x: () => { const a = Lr('food'), b = Lr('nonfood'); return a.v == null ? '' : 'In ' + fmtPeriod(a.period) + ', food inflation was ' + L2(a.v) + '% and non-food ' + L2(b.v) + '%.'; },
+    th: 'Food prices respond to harvests, world commodity prices and the exchange rate; non-food prices reflect demand, wages and administered prices.',
+    pro: ['Shows where price pressure comes from.', 'Food matters most for poorer households.'],
+    con: ['Weights reflect an average household.', 'Food prices are volatile.'],
+    n: 'Food has a large weight in Bangladesh’s CPI, so food shocks move headline inflation strongly.', u: ['Prices and inflation', '#bangladesh~prices'], s: ['CPI20', 'BBS'] },
+  { id: 'linking', t: 'CPI base years and linking', c: 'Prices', d: 'Statistics offices update the basket and base year periodically; old and new series must be linked to make a long history without artificial jumps.',
+    f: 'I<sup>link</sup><sub>t</sub> = I<sup>old</sup><sub>t</sub> (t ≤ s); &nbsp;I<sup>new</sup><sub>t</sub> × I<sup>old</sup><sub>s</sub> ÷ I<sup>new</sup><sub>s</sub> (t &gt; s)',
+    m: 'This site links Bangladesh’s 1995–96, 2005–06 and 2021–22 bases, switching in the month where the two bases differ least (0.03 points, February 2013).',
+    th: 'Linking keeps growth rates within each base and rescales levels at the joining point.',
+    pro: ['Gives one consistent long series.', 'Avoids the artificial fall of over 3 points in Table VII’s own series in July 2012.'],
+    con: ['The joining month is a judgement.', 'Basket changes still alter the meaning of the index over time.'], u: ['Methods', '#methods'], s: ['CPI20', 'BB'] },
+  { id: 'real', t: 'Nominal and real values', c: 'Prices', d: 'Nominal values are in current prices; real values remove inflation using a price index.',
+    f: 'Real<sub>t</sub> = Nominal<sub>t</sub> ÷ P<sub>t</sub> × P<sub>base</sub>; &nbsp;real growth ≈ nominal growth − inflation',
+    p: '(1 + n) = (1 + r)(1 + π), so r = (1 + n) ÷ (1 + π) − 1. Expanding, n = r + π + rπ; dropping the small term rπ gives r ≈ n − π.',
+    th: 'Only real changes measure gains in what people can buy.',
+    pro: ['Makes values comparable over time.'], con: ['Depends on the price index chosen.'], u: ['Learn', '#learn'], s: ['SNA08'] },
+  { id: 'fisher', t: 'Real interest rate (Fisher equation)', c: 'Prices', d: 'The interest rate minus inflation: what a lender earns in purchasing power.',
+    f: '(1 + i) = (1 + r)(1 + π<sup>e</sup>) &nbsp;⇒&nbsp; r ≈ i − π<sup>e</sup>',
+    m: 'This site uses the lending rate minus current point-to-point inflation (an after-the-fact measure).',
+    x: () => { const r = Lr('real_lend'); return r.v == null ? '' : 'Bangladesh’s real lending rate was ' + L2(r.v) + '% in ' + fmtPeriod(r.period) + '.'; },
+    th: 'Fisher (1930): over time, nominal interest rates adjust to expected inflation.',
+    p: 'Same algebra as for real values: with r the real rate and π expected inflation, (1 + i) = (1 + r)(1 + π) gives r = i − π − rπ ≈ i − π.',
+    pro: ['Shows whether credit is cheap or dear in real terms.'], con: ['Expected inflation is unobserved; current inflation is a proxy.'],
+    n: 'Negative real rates mean borrowers repay less than they borrowed in real terms, a sign of financial repression (McKinnon, 1973).', u: ['Interest rates', '#bangladesh~rates'], s: ['FISHER30', 'MCK'] },
+  // ---------------- People and work
+  { id: 'pop', t: 'Population and population growth', c: 'People and work', d: 'All residents at mid-year, regardless of legal status or citizenship; growth is the annual change.',
+    f: 'Growth = ln(P<sub>t</sub> ÷ P<sub>t−1</sub>) × 100',
+    m: 'UN population estimates, built from censuses, surveys and vital registration.',
+    x: () => { const p = Lw('population'), g = Lw('pop_growth'); return p[1] == null ? '' : 'Bangladesh had ' + L2(p[1]) + ' million people in ' + p[0] + ', growing ' + L2(g[1]) + '% a year.'; },
+    th: 'Population growth adds workers but also dependants; its effect on income per person depends on the age structure.',
+    pro: ['Basic denominator for per-person measures.'], con: ['Between censuses, figures are projections.'], u: ['Countries', '#country-BGD'], s: ['WPP24', 'WDI'] },
+  { id: 'unemp', t: 'Unemployment rate (ILO definition)', c: 'People and work', d: 'People of working age without work, available for work and actively looking for it, as a share of the labour force.',
+    f: 'u = U ÷ (E + U) × 100',
+    m: 'Labour force surveys; the ILO’s modelled estimates harmonise definitions across countries.',
+    x: () => { const u = Lw('unemployment'); return u[1] == null ? '' : 'Bangladesh’s unemployment rate was ' + L2(u[1]) + '% in ' + u[0] + '.'; },
+    th: 'Okun (1962): when output grows below its potential, unemployment rises.',
+    pro: ['Internationally standard definition.', 'Widely tracked over the business cycle.'],
+    con: ['Leaves out discouraged workers.', 'In economies with large informal sectors it stays low while underemployment is high.'], u: ['Countries', '#country-BGD'], s: ['ILO13', 'OKUN'] },
+  { id: 'youth', t: 'Youth unemployment', c: 'People and work', d: 'The unemployment rate for people aged 15–24, shown separately for women and men.',
+    f: 'u<sub>youth</sub> = U<sub>15–24</sub> ÷ LF<sub>15–24</sub> × 100',
+    x: () => { const f = Lw('youth_unemp_f'), m = Lw('youth_unemp_m'); return f[1] == null ? '' : 'Bangladesh (' + f[0] + '): young women ' + L2(f[1]) + '%, young men ' + L2(m[1]) + '%.'; },
+    th: 'Young people move between jobs and study, so their rate is typically two to three times the overall rate.',
+    pro: ['Highlights barriers to entering work.'], con: ['Students outside the labour force are excluded, so rates can mislead.'], u: ['Countries', '#country-BGD'], s: ['ILO13'] },
+  { id: 'lfp', t: 'Labour force participation rate', c: 'People and work', d: 'The share of the working-age population (15 and over) that is employed or looking for work.',
+    f: 'LFPR = (E + U) ÷ population<sub>15+</sub> × 100',
+    x: () => { const f = Lw('lfp_f'), m = Lw('lfp_m'); return f[1] == null ? '' : 'Bangladesh (' + f[0] + '): women ' + L2(f[1]) + '%, men ' + L2(m[1]) + '%.'; },
+    th: 'Participation reflects education, care responsibilities, social norms and pensions.',
+    pro: ['Shows how much of the potential workforce is active.'], con: ['Unpaid work is not counted as participation.'], u: ['Countries', '#country-BGD'], s: ['ILO13'] },
+  { id: 'demo', t: 'Life expectancy, fertility and child mortality', c: 'People and work', d: 'Life expectancy at birth is the years a newborn would live if today’s death rates stayed the same; total fertility is births per woman over a lifetime at today’s rates; under-5 mortality is deaths before age 5 per 1,000 live births.',
+    f: 'TFR = 5 × Σ<sub>a</sub> f<sub>a</sub> &nbsp;(five-year age groups 15–49); &nbsp;e<sub>0</sub> = T<sub>0</sub> ÷ l<sub>0</sub> (life table)',
+    m: 'Life tables and birth histories from censuses, surveys and registration, compiled by the UN.',
+    x: () => { const l = Lp('life'), f = Lp('fert'), u = Lp('u5mort'); return l[1] == null ? '' : 'Bangladesh: life expectancy ' + L2(l[1]) + ' years, fertility ' + L2(f[1]) + ' births per woman, under-5 mortality ' + L2(u[1]) + ' per 1,000 (latest years).'; },
+    th: 'The demographic transition: death rates fall first, then birth rates, creating a temporary bulge of working-age people.',
+    pro: ['Summarise health and population dynamics in single numbers.'], con: ['Period measures, not the experience of any real cohort.'],
+    n: 'Replacement-level fertility is about 2.1 births per woman.', u: ['Countries', '#country-BGD'], s: ['WPP24', 'IGME'] },
+  { id: 'urban', t: 'Urban population, density, literacy and electricity', c: 'People and work', d: 'The urban share uses each country’s own definition of urban areas; density is people per km² of land; adult literacy is the share of people 15+ who can read and write a short simple statement; electricity access is the share of people with a connection.',
+    f: 'Density = population ÷ land area',
+    x: () => { const a = Lp('urban'), b = Lp('density'), c = Lp('literacy'), d = Lp('elec'); return a[1] == null ? '' : 'Bangladesh: ' + L2(a[1]) + '% urban, ' + L2(b[1]) + ' people per km², adult literacy ' + L2(c[1]) + '%, electricity access ' + L2(d[1]) + '%.'; },
+    th: 'Urbanisation and literacy rise with income; dense economies can supply infrastructure more cheaply per person.',
+    pro: ['Simple structural indicators.'], con: ['National urban definitions differ, so comparisons are approximate.'], u: ['Countries', '#country-BGD'], s: ['WUP18', 'UIS', 'SDG7'] },
+  // ---------------- Poverty and inequality
+  { id: 'poverty', t: 'Poverty headcount (international line)', c: 'Poverty and inequality', d: 'The share of people living below the World Bank’s international poverty line for extreme poverty.',
+    f: 'P<sub>α</sub> = (1 ÷ n) Σ<sub>y<sub>i</sub> &lt; z</sub> ((z − y<sub>i</sub>) ÷ z)<sup>α</sup>; &nbsp;headcount: α = 0',
+    m: 'Household surveys of consumption or income. The line was $2.15 a day in 2017 prices and was raised to $3.00 a day in 2021 prices in June 2025.',
+    x: () => { const p = Lw('poverty'); return p[1] == null ? '' : 'Bangladesh: ' + L2(p[1]) + '% of people below the line in ' + p[0] + '.'; },
+    th: 'The Foster–Greer–Thorbecke family: α = 1 measures the depth of poverty and α = 2 its severity.',
+    pro: ['Comparable across countries.'], con: ['Surveys are infrequent.', 'Measures extreme poverty only.'], u: ['Countries', '#country-BGD'], s: ['PIP', 'FGT'] },
+  { id: 'povnat', t: 'National poverty rate', c: 'Poverty and inequality', d: 'The share of people below the national poverty line, set by each country (in Bangladesh, by BBS using the cost of basic needs).',
+    f: 'H = number below the national line ÷ population × 100',
+    x: () => { const p = Lw('poverty_nat'); return p[1] == null ? '' : 'Bangladesh’s national poverty rate was ' + L2(p[1]) + '% in ' + p[0] + '.'; },
+    pro: ['Reflects local living costs and norms.'], con: ['Not comparable across countries.'], u: ['Countries', '#country-BGD'], s: ['BBS', 'WDI'] },
+  { id: 'gini', t: 'Gini index', c: 'Poverty and inequality', d: 'A measure of inequality from 0 (everyone has the same) to 100 (one person has everything).',
+    f: 'G = 1 − 2∫<sub>0</sub><sup>1</sup> L(p) dp; &nbsp;for data: G = Σ<sub>i</sub>Σ<sub>j</sub> |y<sub>i</sub> − y<sub>j</sub>| ÷ (2n²μ)',
+    x: () => { const g = Lw('gini'); return g[1] == null ? '' : 'Bangladesh’s Gini index was ' + L2(g[1]) + ' in ' + g[0] + '.'; },
+    th: 'Based on the Lorenz curve L(p): the share of income held by the poorest p of people.',
+    p: 'Under perfect equality L(p) = p and the area under it is 1/2. The Gini is the area between the equality line and the Lorenz curve as a share of 1/2: (1/2 − ∫L) ÷ (1/2) = 1 − 2∫L.',
+    pro: ['One number, easy to compare.'], con: ['Different distributions can share the same Gini.', 'Usually based on consumption, which understates income inequality.'], u: ['Countries', '#country-BGD'], s: ['GINI', 'PIP'] },
+  { id: 'shares', t: 'Income shares (poorest and richest 20%)', c: 'Poverty and inequality', d: 'The share of total income or consumption held by the poorest and the richest fifth of people.',
+    f: 'Share<sub>q</sub> = Σ<sub>i ∈ q</sub> y<sub>i</sub> ÷ Σ<sub>i</sub> y<sub>i</sub> × 100',
+    x: () => { const b = Lw('bottom20'), t = Lw('top20'); return b[1] == null ? '' : 'Bangladesh (' + b[0] + '): poorest 20% ' + L2(b[1]) + '%, richest 20% ' + L2(t[1]) + '%.'; },
+    pro: ['Easy to interpret.'], con: ['Ignores the middle of the distribution.'], u: ['Countries', '#country-BGD'], s: ['PIP'] },
+  // ---------------- Money and banking
+  { id: 'm2', t: 'Broad money (M2)', c: 'Money and banking', d: 'Currency held by the public plus demand and time deposits at banks.',
+    f: 'M2 = currency outside banks + demand deposits + time deposits; &nbsp;growth = (M2<sub>t</sub> ÷ M2<sub>t−12</sub> − 1) × 100',
+    m: 'Compiled from the monetary survey of the central bank and commercial banks.',
+    x: () => { const r = Lr('m2'); return r.v == null ? '' : 'Bangladesh’s broad money grew ' + L2(r.v) + '% year on year in ' + fmtPeriod(r.period) + '.'; },
+    th: 'Quantity theory: MV = PY, so %ΔM + %ΔV = %ΔP + %ΔY. If velocity is stable, money growth above real growth raises prices.',
+    pro: ['A broad gauge of liquidity.'], con: ['Velocity is not stable, so the link to inflation is loose in the short run.'],
+    n: 'In this site’s SVAR, money growth predicted inflation before 2020 but not since.', u: ['Money and banking', '#bangladesh~money'], s: ['MFSM16', 'BB'] },
+  { id: 'rm', t: 'Reserve money and the money multiplier', c: 'Money and banking', d: 'Reserve (base) money is currency issued plus banks’ reserves at the central bank; the multiplier is broad money divided by reserve money.',
+    f: 'm = M2 ÷ RM = (1 + c) ÷ (c + r), &nbsp;c = currency ÷ deposits, r = reserves ÷ deposits',
+    p: 'M = C + D and RM = C + R. Dividing both by deposits D: M ÷ RM = (C/D + 1) ÷ (C/D + R/D) = (1 + c) ÷ (c + r).',
+    x: () => { const r = Lr('rm'); return r.v == null ? '' : 'Reserve money grew ' + L2(r.v) + '% year on year in ' + fmtPeriod(r.period) + '.'; },
+    th: 'The central bank controls reserve money more directly than broad money; the multiplier depends on the public’s and banks’ choices.',
+    pro: ['Links central-bank operations to the money supply.'], con: ['The multiplier is unstable when banks hold excess reserves.'], u: ['Money and banking', '#bangladesh~money'], s: ['MISHKIN', 'MFSM16'] },
+  { id: 'credit', t: 'Private sector credit growth', c: 'Money and banking', d: 'The annual growth of bank lending to firms and households.',
+    f: 'Growth = (credit<sub>t</sub> ÷ credit<sub>t−12</sub> − 1) × 100',
+    x: () => { const r = Lr('pcredit'); return r.v == null ? '' : 'Private credit grew ' + L2(r.v) + '% in ' + fmtPeriod(r.period) + '.'; },
+    th: 'Credit growth above about 20% a year often marks a boom that ends in a bust (Dell’Ariccia and others, 2012); negative growth signals a credit crunch.',
+    pro: ['Timely signal of financial conditions.'], con: ['Mixes demand for and supply of credit.'], u: ['Money and banking', '#bangladesh~money'], s: ['DELL', 'BB'] },
+  { id: 'npl', t: 'Non-performing loans (NPL) ratio', c: 'Money and banking', d: 'Loans 90 days or more overdue, or otherwise unlikely to be repaid, as a share of all gross loans.',
+    f: 'NPL ratio = non-performing loans ÷ gross loans × 100',
+    x: () => { const r = Lr('npl'); return r.v == null ? '' : 'Bangladesh’s NPL ratio was ' + L2(r.v) + '% in ' + fmtPeriod(r.period) + ', far above the 8% high-risk benchmark.'; },
+    th: 'Bad loans tie up bank capital and income, which reduces new lending.',
+    pro: ['Core measure of asset quality.'], con: ['Classification rules differ across countries and change over time.'],
+    n: 'The European Banking Authority treats ratios above 8% as high risk.', u: ['Money and banking', '#bangladesh~money'], s: ['FSI19', 'EBA'] },
+  { id: 'crar', t: 'Capital to risk-weighted assets (CRAR)', c: 'Money and banking', d: 'Banks’ regulatory capital as a share of their assets weighted by risk.',
+    f: 'CRAR = (Tier 1 + Tier 2 capital) ÷ risk-weighted assets × 100',
+    m: 'Under Basel III the global minimum is 8% plus a 2.5% conservation buffer (10.5%); Bangladesh Bank requires 10% plus 2.5% (12.5%).',
+    x: () => { const r = Lr('crar'); return r.v == null ? '' : 'Bangladesh’s banks had a CRAR of ' + L2(r.v) + '% in ' + fmtPeriod(r.period) + ', against the 12.5% requirement.'; },
+    th: 'Capital absorbs losses; riskier assets need more of it.',
+    pro: ['International standard of bank solvency.'], con: ['Risk weights can understate true risk.'], u: ['Money and banking', '#bangladesh~money'], s: ['BASEL', 'FSI19', 'BB'] },
+  { id: 'cdr', t: 'Credit–deposit ratio', c: 'Money and banking', d: 'Loans and advances as a share of deposits.',
+    f: 'CDR = loans ÷ deposits × 100',
+    x: () => { const r = Lr('cdr'); return r.v == null ? '' : 'Bangladesh’s banks lent ' + L2(r.v) + '% of their deposits in ' + fmtPeriod(r.period) + '.'; },
+    th: 'A high ratio means banks rely on other funding and have less liquidity.',
+    pro: ['Simple liquidity check.'], con: ['Ignores the maturity of loans and deposits.'],
+    n: 'Bangladesh Bank sets ceilings on this ratio for banks.', u: ['Money and banking', '#bangladesh~money'], s: ['BB'] },
+  // ---------------- Interest rates
+  { id: 'call', t: 'Call money rate', c: 'Interest rates', d: 'The interest rate on overnight lending between banks.',
+    f: 'Weighted average = Σ (rate<sub>j</sub> × volume<sub>j</sub>) ÷ Σ volume<sub>j</sub>',
+    x: () => { const r = Lr('call'); return r.v == null ? '' : 'The call money rate averaged ' + L2(r.v) + '% in ' + fmtPeriod(r.period) + '.'; },
+    th: 'It reflects day-to-day liquidity and is steered by the central bank’s policy rates.',
+    pro: ['Daily signal of money-market conditions.'], con: ['Volatile around holidays and reporting dates.'],
+    n: 'In this site’s SVAR it is the strongest predictor of inflation.', u: ['Interest rates', '#bangladesh~rates'], s: ['BB'] },
+  { id: 'rates', t: 'Lending and deposit rates, and the spread', c: 'Interest rates', d: 'Weighted average rates that banks charge on loans and pay on deposits; the spread is the difference.',
+    f: 'Spread = lending rate − deposit rate',
+    x: () => { const l = Lr('lend'), d = Lr('dep'), s = Lr('spread'); return l.v == null ? '' : 'In ' + fmtPeriod(l.period) + ': lending ' + L2(l.v) + '%, deposits ' + L2(d.v) + '%, spread ' + L2(s.v) + ' points.'; },
+    th: 'The spread covers banks’ costs, risk and profit; a wide spread can signal inefficiency or bad loans.',
+    pro: ['Shows the cost of credit and the return to savers.'], con: ['Averages hide large differences between banks.'], u: ['Interest rates', '#bangladesh~rates'], s: ['BB'] },
+  { id: 'policy', t: 'Policy rate and bank rate', c: 'Interest rates', d: 'The central bank’s key interest rates, which it uses to steer short-term market rates; the bank rate is the rate at which Bangladesh Bank lends to banks.',
+    x: () => { const r = Lr('bankrate'); return r.v == null ? '' : 'The bank rate was ' + L2(r.v) + '% in ' + fmtPeriod(r.period) + '.'; },
+    th: 'Raising the policy rate makes borrowing dearer, cools demand and, with a lag, lowers inflation.',
+    pro: ['The main tool of monetary policy.'], con: ['Works with long and variable lags.'], u: ['Interest rates', '#bangladesh~rates'], s: ['BB', 'MISHKIN'] },
+  { id: 'ust', t: 'US 10-year Treasury yield', c: 'Interest rates', d: 'The return on 10-year US government bonds, a benchmark for long-term borrowing costs worldwide.',
+    x: () => { try { const m = RAW.mk.us10y; const v = String(m.m[1]).split(','); return 'Latest monthly value: ' + L2(+v[v.length - 1]) + '%.'; } catch (e) { return ''; } },
+    th: 'Long yields reflect expected short rates plus a term premium.',
+    pro: ['Global reference rate.'], con: ['Moved by US conditions, not local ones.'], u: ['Markets', '#markets'], s: ['FED'] },
+  // ---------------- External sector
+  { id: 'xr', t: 'Exchange rate (Taka per US$) and depreciation', c: 'External sector', d: 'The price of one US dollar in Taka; a higher number means a weaker Taka. Depreciation is the percentage rise over a year.',
+    f: 'Depreciation = (e<sub>t</sub> ÷ e<sub>t−12</sub> − 1) × 100, &nbsp;e in Taka per US$',
+    x: () => { const a = Lr('xr'), b = Lr('xr_dep'); return a.v == null ? '' : 'In ' + fmtPeriod(a.period) + ', one US dollar cost ' + L2(a.v) + ' Taka, ' + L2(b.v) + '% more than a year earlier.'; },
+    th: 'Under a flexible regime the rate balances supply and demand for foreign currency; under a managed regime the central bank intervenes with reserves.',
+    pro: ['Key price for trade, remittances and inflation.'], con: ['Official and informal rates can differ.'],
+    n: 'A depreciation of 25% or more in a year is a common definition of a currency crash (Frankel and Rose, 1996).', u: ['External sector', '#bangladesh~ext'], s: ['BB', 'FR96'] },
+  { id: 'currchange', t: 'Currency change (World Bank data)', c: 'External sector', d: 'This site’s change in a currency’s value against the US dollar, from the official annual exchange rate; positive means the currency strengthened.',
+    f: 'Change = (e<sub>t−1</sub> ÷ e<sub>t</sub> − 1) × 100, &nbsp;e in local currency per US$',
+    th: 'Using the ratio this way gives the change in the currency’s own value rather than in the dollar’s.',
+    pro: ['Comparable across countries.'], con: ['Annual averages hide moves within the year.'], u: ['Rankings', '#rankings'], s: ['WDI'] },
+  { id: 'rer', t: 'Real exchange rate and pass-through', c: 'External sector', d: 'The real exchange rate adjusts the nominal rate for prices at home and abroad; pass-through is how much exchange-rate changes feed into domestic prices.',
+    f: 'RER = e × P* ÷ P; &nbsp;pass-through β in π<sub>t</sub> = α + β Δe<sub>t</sub> + …',
+    x: () => { try { const o = BD.robust.orders[0]; return 'In this site’s SVAR, a Taka depreciation shock raises inflation by up to ' + L2(o.xr_peak) + ' points, peaking after ' + o.xr_at + ' months.'; } catch (e) { return ''; } },
+    th: 'Pass-through is usually incomplete and larger where imports are a big share of consumption (Goldberg and Knetter, 1997).',
+    pro: ['Explains how currency moves affect inflation.'], con: ['Estimates depend on the model and period.'], u: ['Forecast lab: SVAR', '#lab~var'], s: ['GK97', 'CASSEL'] },
+  { id: 'bop', t: 'Balance of payments', c: 'External sector', d: 'The record of all transactions between residents and non-residents: the current account (goods, services, primary and secondary income), the capital account and the financial account. The overall balance is financed by reserves.',
+    f: 'Current account + capital account − financial account + net errors and omissions = 0 &nbsp;(BPM6 signs)',
+    m: 'Compiled by Bangladesh Bank under BPM6.',
+    x: () => { const a = Lr('ca'), b = Lr('bop'); return a.v == null ? '' : 'In ' + a.period + ', the current account was US$ ' + L2(a.v) + ' million and the overall balance US$ ' + L2(b.v) + ' million.'; },
+    th: 'Double-entry bookkeeping: every transaction is recorded twice with opposite signs.',
+    p: 'Each entry has an equal and opposite counterpart: an export (credit) matches the payment received (a financial asset acquired). Summing all entries therefore gives zero; errors and omissions close any measurement gap.',
+    pro: ['Complete picture of external flows.'], con: ['Errors and omissions can be large.'], u: ['External sector', '#bangladesh~ext'], s: ['BPM6', 'BB'] },
+  { id: 'ca', t: 'Current-account balance', c: 'External sector', d: 'Exports minus imports of goods and services plus net primary and secondary income; equal to national savings minus investment.',
+    f: 'CA = (X − M) + net primary income + net secondary income = S − I',
+    x: () => { const c = Lw('current_account'); return c[1] == null ? '' : 'Bangladesh’s current account was ' + L2(c[1]) + '% of GDP in ' + c[0] + '.'; },
+    th: 'Persistent large deficits must be financed by borrowing or investment from abroad; deficits above about 5% of GDP often precede adjustment (Freund, 2005).',
+    pro: ['Summarises external sustainability.'], con: ['A deficit can reflect healthy investment as well as overspending.'], u: ['Countries', '#country-BGD'], s: ['BPM6', 'FREUND'] },
+  { id: 'remit', t: 'Remittances', c: 'External sector', d: 'Personal transfers and compensation of employees received from people working abroad.',
+    f: 'Personal remittances = personal transfers + compensation of employees (BPM6)',
+    x: () => { const r = Lr('remit'), g = Lr('remit_g'), w = Lw('remittances'); return r.v == null ? '' : 'Bangladesh received US$ ' + L2(r.v) + ' million in ' + fmtPeriod(r.period) + ' (' + L2(g.v) + '% on a year earlier); remittances were ' + L2(w[1]) + '% of GDP in ' + w[0] + '.'; },
+    th: 'Remittances support consumption, smooth shocks and supply foreign currency.',
+    pro: ['Stable source of foreign exchange.'], con: ['Informal channels (hundi) are not captured.'],
+    n: 'Official inflows jump when the gap between official and informal exchange rates narrows.', u: ['External sector', '#bangladesh~ext'], s: ['BPM6', 'BB', 'WDI'] },
+  { id: 'fdi', t: 'Foreign direct investment (FDI)', c: 'External sector', d: 'Investment that gives a lasting interest in a firm abroad, defined as owning 10% or more of the voting power.',
+    f: 'Net inflows = new FDI liabilities − repayments (BPM6 directional principle)',
+    x: () => { const f = Lr('fdi'); return f.v == null ? '' : 'Net FDI was US$ ' + L2(f.v) + ' million in ' + f.period + '.'; },
+    th: 'FDI brings capital, technology and access to markets, and is less prone to sudden stops than portfolio flows.',
+    pro: ['Long-term, stable financing.'], con: ['Profits flow back out as primary income.'], u: ['External sector', '#bangladesh~ext'], s: ['BPM6', 'OECDFDI'] },
+  { id: 'trade', t: 'Exports and imports', c: 'External sector', d: 'Sales of goods and services to, and purchases from, the rest of the world.',
+    f: 'Openness = (X + M) ÷ GDP × 100',
+    x: () => { const e = Lr('exp'), w = Lw('exports'); return e.v == null ? '' : 'Bangladesh exported US$ ' + L2(e.v) + ' million in ' + fmtPeriod(e.period) + '; exports were ' + L2(w[1]) + '% of GDP in ' + w[0] + '.'; },
+    th: 'Trade allows specialisation by comparative advantage.',
+    pro: ['Shows integration with the world economy.'], con: ['Monthly shipment and payment data use different concepts.'],
+    n: 'This site uses import payments to July 2024 and import shipments afterwards; the two measures differ.', u: ['External sector', '#bangladesh~ext'], s: ['BPM6', 'BB', 'WDI'] },
+  { id: 'reserves', t: 'Foreign exchange reserves and import cover', c: 'External sector', d: 'External assets readily available to the central bank; import cover is how many months of imports they could pay for.',
+    f: 'Import cover (months) = reserves ÷ (imports over the last 12 months ÷ 12)',
+    m: 'Bangladesh Bank publishes gross reserves and the lower BPM6 measure, which excludes assets that are not readily available.',
+    x: () => { const r = Lr('res'), c = Lr('cover'); return r.v == null ? '' : 'Gross reserves were US$ ' + L2(r.v) + ' million in ' + fmtPeriod(r.period) + ', covering ' + L2(c.v) + ' months of imports.'; },
+    th: 'The IMF’s rule of thumb is at least 3 months of imports; its broader adequacy metric also counts short-term debt and broad money.',
+    pro: ['Simple measure of external resilience.'], con: ['Ignores capital-flow risks.'], u: ['External sector', '#bangladesh~ext'], s: ['BPM6', 'IMF11'] },
+  { id: 'extdebt', t: 'External debt and debt service', c: 'External sector', d: 'Debt owed to non-residents, as a share of gross national income; debt service is principal and interest paid, as a share of exports.',
+    f: 'Debt ratio = external debt ÷ GNI × 100; &nbsp;debt service ratio = (principal + interest) ÷ exports × 100',
+    x: () => { const d = Lw('ext_debt'), s = Lw('debt_service'); return d[1] == null ? '' : 'Bangladesh: external debt ' + L2(d[1]) + '% of GNI and debt service ' + L2(s[1]) + '% of exports (' + d[0] + ').'; },
+    th: 'Debt is sustainable if it can be serviced without large adjustments; the export ratio measures the ability to pay in foreign currency.',
+    pro: ['Standard measures used by the World Bank and IMF.'], con: ['Ignore the currency and maturity of debt.'], u: ['Countries', '#country-BGD'], s: ['IDS'] },
+  // ---------------- Public finance
+  { id: 'govfin', t: 'Government revenue, tax and expense', c: 'Public finance', d: 'Revenue is taxes, social contributions, grants and other income; tax revenue is compulsory payments to government; expense is spending on operations such as wages, goods and interest.',
+    f: 'Tax-to-GDP = tax revenue ÷ GDP × 100',
+    m: 'GFSM 2014 standard; Bangladesh’s monthly tax figures come from the National Board of Revenue (NBR).',
+    x: () => { const t = Lw('tax'); return t[1] == null ? '' : 'Bangladesh’s tax revenue was ' + L2(t[1]) + '% of GDP in ' + t[0] + ', one of the lowest ratios in the world.'; },
+    th: 'Low revenue limits public investment in health, education and infrastructure.',
+    pro: ['Core measures of fiscal capacity.'], con: ['Coverage (central versus general government) varies.'], u: ['Fiscal', '#bangladesh~fiscal'], s: ['GFSM14', 'WDI'] },
+  { id: 'budget', t: 'Budget balance (cash surplus or deficit)', c: 'Public finance', d: 'Revenue minus expense and net investment in non-financial assets.',
+    f: 'Balance = revenue − expense − net acquisition of non-financial assets',
+    x: () => { const b = Lw('budget'); return b[1] == null ? '' : 'Bangladesh’s balance was ' + L2(b[1]) + '% of GDP in ' + b[0] + '.'; },
+    th: 'Deficits must be financed by borrowing, which adds to debt.',
+    pro: ['Simple summary of fiscal stance.'], con: ['Cash figures can be shifted by timing.'],
+    n: 'The European Union’s reference value is a deficit of no more than 3% of GDP.', u: ['Countries', '#country-BGD'], s: ['GFSM14', 'EU'] },
+  { id: 'debt', t: 'Government debt', c: 'Public finance', d: 'Gross debt liabilities of the central government, as a share of GDP.',
+    f: 'Δd = d<sub>t−1</sub>(r − g) ÷ (1 + g) − pb<sub>t</sub> &nbsp;(r interest rate, g growth, pb primary balance)',
+    p: 'With debt D, d = D ÷ Y: D<sub>t</sub> = (1 + r)D<sub>t−1</sub> − PB<sub>t</sub>. Dividing by Y<sub>t</sub> = (1 + g)Y<sub>t−1</sub> gives d<sub>t</sub> = d<sub>t−1</sub>(1 + r) ÷ (1 + g) − pb<sub>t</sub>, so Δd = d<sub>t−1</sub>(r − g) ÷ (1 + g) − pb<sub>t</sub>.',
+    th: 'Debt falls when growth exceeds the interest rate or the government runs a primary surplus.',
+    pro: ['Shows long-term fiscal risk.'], con: ['Excludes guarantees and state enterprises.'],
+    n: 'The EU reference value is 60% of GDP; safe levels are lower for emerging economies.', u: ['Countries', '#country-BGD'], s: ['GFSM14', 'EU'] },
+  { id: 'nsc', t: 'National savings certificates (Bangladesh)', c: 'Public finance', d: 'Government savings instruments sold to households; net sales are sales minus repayments.',
+    f: 'Net sales = sales − encashment (principal repaid)',
+    x: () => { const r = Lr('nsav_net'); return r.v == null ? '' : 'Net sales were Tk ' + L2(r.v) + ' crore in ' + fmtPeriod(r.period) + '.'; },
+    th: 'When net sales fall, the government must borrow more from banks.',
+    pro: ['Non-bank financing of the budget.'], con: ['High rates make them a costly source of funds.'], u: ['Fiscal', '#bangladesh~fiscal'], s: ['BB'] },
+  { id: 'govcredit', t: 'Net bank credit to the government', c: 'Public finance', d: 'Banking-system lending to the government minus government deposits.',
+    f: 'Growth = (NCG<sub>t</sub> ÷ NCG<sub>t−12</sub> − 1) × 100',
+    x: () => { const r = Lr('govcredit'); return r.v == null ? '' : 'It grew ' + L2(r.v) + '% year on year in ' + fmtPeriod(r.period) + '.'; },
+    th: 'Heavy bank borrowing by the government can crowd out private credit.',
+    pro: ['Timely measure of deficit financing.'], con: ['Moves with the timing of payments.'], u: ['Fiscal', '#bangladesh~fiscal'], s: ['MFSM16', 'BB'] },
+  // ---------------- Markets
+  { id: 'oil', t: 'Crude oil prices (Brent and WTI)', c: 'Markets', d: 'Benchmark prices for crude oil: Brent from the North Sea and West Texas Intermediate (WTI) from the United States, in US dollars per barrel.',
+    th: 'Oil prices move with world demand, supply decisions and geopolitics, and feed into transport and electricity costs.',
+    pro: ['Daily, global reference prices.'], con: ['Very volatile.'], u: ['Markets', '#markets'], s: ['EIA'] },
+  { id: 'gas', t: 'Natural gas (Henry Hub)', c: 'Markets', d: 'The US benchmark price for natural gas, in US dollars per million British thermal units.',
+    pro: ['Key input cost for electricity and fertiliser.'], con: ['Regional: prices in Asia and Europe differ.'], u: ['Markets', '#markets'], s: ['EIA'] },
+  { id: 'gold', t: 'Gold price', c: 'Markets', d: 'The monthly average price of gold in US dollars per troy ounce.',
+    th: 'Gold is held as a store of value; it often rises when real interest rates fall or uncertainty increases.',
+    pro: ['Long history.'], con: ['No income, so its value depends on demand alone.'], u: ['Markets', '#markets'], s: ['PINK'] },
+  { id: 'mcap', t: 'Market capitalisation', c: 'Markets', d: 'The total market value of listed companies: share price times shares outstanding.',
+    f: 'Market cap = Σ<sub>j</sub> price<sub>j</sub> × shares<sub>j</sub>',
+    x: () => { const r = Lr('mcap'); return r.v == null ? '' : 'Bangladesh: Tk ' + L2(r.v) + ' crore in ' + fmtPeriod(r.period) + '.'; },
+    pro: ['Size of the equity market.'], con: ['Moves with prices more than with new listings.'], u: ['Capital market', '#bangladesh~cap'], s: ['BB'] },
+  // ---------------- Statistics and models
+  { id: 'desc', t: 'Mean, median, standard deviation and quartiles', c: 'Statistics and models', d: 'The mean is the average; the median is the middle value; the standard deviation measures spread; the quartiles cut the data into quarters.',
+    f: 'x̄ = (1/n)Σx<sub>i</sub>; &nbsp;s = √(Σ(x<sub>i</sub> − x̄)² ÷ (n − 1)); &nbsp;Q1, Q3 = 25th and 75th percentiles',
+    x: () => { try { const d = BD.desc[0]; return 'Bangladesh inflation since 2010: mean ' + L2(d.mean) + '%, median ' + L2(d.median) + '%, standard deviation ' + L2(d.sd) + ' points.'; } catch (e) { return ''; } },
+    p: 'Why n − 1: E[Σ(x<sub>i</sub> − x̄)²] = (n − 1)σ², because using the sample mean uses up one degree of freedom; dividing by n − 1 makes the variance estimate unbiased (Bessel’s correction).',
+    pro: ['Summarise a distribution in a few numbers.'], con: ['The mean is sensitive to outliers; the median is not.'], u: ['Forecast lab: data', '#lab~data'], s: ['CB02', 'HF96'] },
+  { id: 'ci', t: 'Confidence interval', c: 'Statistics and models', d: 'A range built so that, in repeated samples, it contains the true value a chosen share of the time, such as 95%.',
+    f: 'x̄ ± t<sub>α/2, n−1</sub> × s ÷ √n',
+    th: 'Neyman (1937): the probability statement is about the method, not about one particular interval.',
+    pro: ['Shows the precision of an estimate.'], con: ['Often misread as the probability that the true value lies inside.'],
+    n: 'The bands on the forecast charts are prediction intervals for future values, which are wider.', u: ['Forecast lab: data', '#lab~data'], s: ['NEYMAN', 'CB02'] },
+  { id: 'pvalue', t: 'p-value and significance stars', c: 'Statistics and models', d: 'The probability, if the null hypothesis were true, of a result at least as extreme as the one observed. Stars: *** p &lt; 0.01, ** p &lt; 0.05, * p &lt; 0.1.',
+    th: 'Small p-values are evidence against the null hypothesis.',
+    pro: ['Standard, comparable measure of evidence.'], con: ['Not the probability that the null is true; statistical significance is not the same as importance.'],
+    n: 'The American Statistical Association warns against relying on a single threshold.', u: ['Forecast lab', '#lab'], s: ['WL16'] },
+  { id: 'corr', t: 'Correlation (Pearson and Spearman)', c: 'Statistics and models', d: 'Measures how closely two variables move together, from −1 to +1. Spearman’s version uses ranks, so it is robust to outliers.',
+    f: 'r = Σ(x − x̄)(y − ȳ) ÷ √(Σ(x − x̄)² Σ(y − ȳ)²); &nbsp;ρ = 1 − 6Σd<sub>i</sub>² ÷ (n(n² − 1)) (no ties)',
+    th: 'Correlation shows association, not causation.',
+    pro: ['Simple summary of a relationship.'], con: ['Pearson captures only straight-line relationships.'], u: ['Forecast lab: world', '#lab~world'], s: ['PEARSON', 'SPEARMAN'] },
+  { id: 'ols', t: 'Regression (OLS), R² and robust standard errors', c: 'Statistics and models', d: 'Ordinary least squares fits the line that minimises squared errors; R² is the share of variation explained; robust (HC1) standard errors stay valid when error variance differs across observations.',
+    f: 'β̂ = (X′X)<sup>−1</sup>X′y; &nbsp;R² = 1 − SSR ÷ SST; &nbsp;V̂<sub>HC1</sub> = n ÷ (n − k) (X′X)<sup>−1</sup>(Σ û<sub>i</sub>² x<sub>i</sub>x<sub>i</sub>′)(X′X)<sup>−1</sup>',
+    p: 'OLS minimises S(β) = (y − Xβ)′(y − Xβ). Setting the derivative to zero gives the normal equations X′(y − Xβ) = 0, so β̂ = (X′X)<sup>−1</sup>X′y.',
+    x: () => { try { const r = BD.world.conv.m1; return 'The convergence regression has R² = ' + L2(r.r2) + ' with ' + r.n + ' economies.'; } catch (e) { return ''; } },
+    pro: ['Transparent and widely used.'], con: ['Sensitive to outliers and omitted variables.'], u: ['Forecast lab: world', '#lab~world'], s: ['WOOLD', 'WHITE', 'MW85'] },
+  { id: 'unitroot', t: 'Stationarity and unit-root tests (ADF, KPSS)', c: 'Statistics and models', d: 'A stationary series has a constant mean and variance; a unit-root series wanders, so shocks to it never fade.',
+    f: 'ADF: Δy<sub>t</sub> = α + γy<sub>t−1</sub> + Σφ<sub>j</sub>Δy<sub>t−j</sub> + ε<sub>t</sub>, &nbsp;H<sub>0</sub>: γ = 0 (unit root); &nbsp;KPSS: H<sub>0</sub>: stationary',
+    x: () => { try { return 'Bangladesh inflation: ' + BD.unitroot[0].verdict + '.'; } catch (e) { return ''; } },
+    th: 'Regressing one unit-root series on another can show a strong but meaningless relationship (spurious regression).',
+    pro: ['ADF and KPSS have opposite null hypotheses, so agreement gives a clear verdict.'], con: ['Low power in short samples.'], u: ['Forecast lab: data', '#lab~data'], s: ['DF79', 'SD84', 'KPSS', 'GN74'] },
+  { id: 'arima', t: 'ARIMA and seasonal ARIMA', c: 'Statistics and models', d: 'Models that forecast a series from its own past values (AR), past errors (MA) and differences (I); the seasonal version adds 12-month patterns.',
+    f: 'φ(L)(1 − L)<sup>d</sup> y<sub>t</sub> = c + θ(L) ε<sub>t</sub>; &nbsp;seasonal: × Φ(L<sup>12</sup>)(1 − L<sup>12</sup>)<sup>D</sup> … Θ(L<sup>12</sup>)',
+    m: 'Orders chosen by the Akaike criterion from a grid; re-estimated at every backtest origin.',
+    x: () => { try { return 'The model chosen for Bangladesh inflation is ' + BD.arima.infl.spec + '.'; } catch (e) { return ''; } },
+    th: 'Box–Jenkins method: identify the model, estimate it, then check the residuals.',
+    pro: ['Strong short-term forecasts for a single series.'], con: ['Ignores other variables and structural change.'], u: ['Forecast lab: ARIMA', '#lab~arima'], s: ['BOX', 'HYND'] },
+  { id: 'ic', t: 'Information criteria (AIC, BIC, HQIC)', c: 'Statistics and models', d: 'Scores that trade off fit against complexity; lower is better.',
+    f: 'AIC = −2 ln L + 2k; &nbsp;BIC = −2 ln L + k ln n; &nbsp;HQIC = −2 ln L + 2k ln ln n',
+    th: 'BIC penalises extra parameters more, so it picks smaller models; AIC tends to forecast better.',
+    pro: ['Objective model selection.'], con: ['Different criteria can disagree.'], u: ['Forecast lab: SVAR', '#lab~var'], s: ['AIC', 'SCHWARZ', 'HQ'] },
+  { id: 'ljung', t: 'Ljung–Box test', c: 'Statistics and models', d: 'Tests whether a model’s residuals still contain autocorrelation.',
+    f: 'Q = n(n + 2) Σ<sub>k=1..h</sub> ρ̂<sub>k</sub>² ÷ (n − k) &nbsp;~ χ² with h minus the number of estimated parameters',
+    th: 'A good model leaves white-noise residuals; a small p-value means the model misses some pattern.',
+    pro: ['Simple diagnostic.'], con: ['Results depend on the number of lags h.'], u: ['Forecast lab: ARIMA', '#lab~arima'], s: ['LB'] },
+  { id: 'accuracy', t: 'Forecast accuracy: RMSE, MAE, Theil’s U and skill', c: 'Statistics and models', d: 'RMSE and MAE measure typical forecast errors; Theil’s U and skill compare a model with a naive “no change” forecast.',
+    f: 'RMSE = √(Σe² ÷ n); &nbsp;MAE = Σ|e| ÷ n; &nbsp;U = RMSE<sub>model</sub> ÷ RMSE<sub>naive</sub>; &nbsp;skill = 1 − U',
+    x: () => { try { const b = BD.arima.infl.backtest[0]; return 'Inflation, 1 month ahead: RMSE ' + L2(b.rmse) + ' points against ' + L2(b.rmse_rw) + ' for the naive forecast.'; } catch (e) { return ''; } },
+    pro: ['Easy to interpret in the units of the data.'], con: ['RMSE weights large errors heavily.'], u: ['Forecast lab: projections', '#lab~overview'], s: ['HK06'] },
+  { id: 'backtest', t: 'Rolling-origin backtest', c: 'Statistics and models', d: 'Re-estimate the model at each past date, forecast ahead, and compare with what actually happened, using only data available at the time.',
+    th: 'Out-of-sample tests guard against models that fit the past but forecast badly.',
+    pro: ['Honest measure of real forecasting skill.'], con: ['Needs a long history; results depend on the period chosen.'], u: ['Forecast lab: projections', '#lab~overview'], s: ['TASH'] },
+  { id: 'dm', t: 'Diebold–Mariano test', c: 'Statistics and models', d: 'Tests whether two forecasts are equally accurate.',
+    f: 'DM = d̄ ÷ √V̂(d̄), &nbsp;d<sub>t</sub> = e<sub>1t</sub>² − e<sub>2t</sub>²; &nbsp;Harvey–Leybourne–Newbold factor √((n + 1 − 2h + h(h − 1)/n) ÷ n)',
+    th: 'Allows for autocorrelated forecast errors at longer horizons.',
+    pro: ['Standard test of forecast comparison.'], con: ['Low power in small samples.'], u: ['Forecast lab: ARIMA', '#lab~arima'], s: ['DM95', 'HLN'] },
+  { id: 'ensemble', t: 'Forecast combination (ensemble)', c: 'Statistics and models', d: 'A weighted average of forecasts from different models.',
+    f: 'f<sup>c</sup> = w f<sub>1</sub> + (1 − w) f<sub>2</sub>, &nbsp;w = (1/MSE<sub>1</sub>) ÷ (1/MSE<sub>1</sub> + 1/MSE<sub>2</sub>)',
+    p: 'For unbiased forecasts with uncorrelated errors, the combined error variance w²σ₁² + (1 − w)²σ₂² is smallest at w = σ₂² ÷ (σ₁² + σ₂²), which equals the inverse-MSE weight above; the minimum σ₁²σ₂² ÷ (σ₁² + σ₂²) is below both σ₁² and σ₂².',
+    x: () => { try { const e = BD.ensemble.path[BD.ensemble.path.length - 1]; return 'The ensemble projects ' + L2(e.mean) + '% inflation in 12 months (80% range ' + L2(e.lo80) + '–' + L2(e.hi80) + '%).'; } catch (e) { return ''; } },
+    pro: ['Usually more accurate than any single model.'], con: ['Weights estimated from short samples are noisy.'], u: ['Forecast lab: projections', '#lab~overview'], s: ['BG69'] },
+  { id: 'fan', t: 'Fan charts and prediction intervals', c: 'Statistics and models', d: 'Shaded bands showing ranges with a chosen probability (for example 80% or 95%) of containing future values.',
+    th: 'Uncertainty widens with the forecast horizon.',
+    pro: ['Communicates uncertainty honestly.'], con: ['Bands depend on the assumed error distribution.'], u: ['Forecast lab: projections', '#lab~overview'], s: ['BFW'] },
+  { id: 'var', t: 'Vector autoregression (VAR) and structural VAR', c: 'Statistics and models', d: 'A system in which each variable depends on past values of all variables; the structural version identifies separate shocks, here by recursive (Cholesky) ordering.',
+    f: 'y<sub>t</sub> = c + A<sub>1</sub>y<sub>t−1</sub> + … + A<sub>p</sub>y<sub>t−p</sub> + u<sub>t</sub>; &nbsp;Σ<sub>u</sub> = PP′, &nbsp;ε<sub>t</sub> = P<sup>−1</sup>u<sub>t</sub>',
+    x: () => { try { return 'This site’s SVAR uses ' + BD.var.vars.join(', ') + ', with ' + BD.var.p + ' lags (' + BD.var.sample.join(' to ') + ').'; } catch (e) { return ''; } },
+    th: 'Sims (1980) proposed VARs as an alternative to large structural models with doubtful restrictions.',
+    pro: ['Captures feedback between variables.'], con: ['Results depend on the ordering; many parameters.'], u: ['Forecast lab: SVAR', '#lab~var'], s: ['SIMS', 'LUT', 'HAM'] },
+  { id: 'granger', t: 'Granger causality', c: 'Statistics and models', d: 'x “Granger-causes” y if past values of x help predict y beyond y’s own past.',
+    f: 'F-test of H<sub>0</sub>: all coefficients on lags of x in the equation for y are zero',
+    x: () => { try { const g = BD.var.granger.find(z => z.effect === 0 && z.cause === 2); return 'The call money rate Granger-causes inflation in Bangladesh (p = ' + fp(g.p) + ').'; } catch (e) { return ''; } },
+    th: 'It is about predictability, not true cause and effect.',
+    pro: ['Simple, testable notion of influence.'], con: ['Can be fooled by omitted variables and trends.'], u: ['Forecast lab: SVAR', '#lab~var'], s: ['GRANGER'] },
+  { id: 'irf', t: 'Impulse responses and variance decomposition', c: 'Statistics and models', d: 'An impulse response traces the effect of a one-time shock over time; the variance decomposition splits forecast uncertainty between shocks.',
+    f: 'y<sub>t</sub> = Σ<sub>i</sub> Θ<sub>i</sub> ε<sub>t−i</sub>; &nbsp;FEVD<sub>jk</sub>(h) = Σ<sub>i&lt;h</sub> θ<sub>jk,i</sub>² ÷ Σ<sub>i&lt;h</sub> Σ<sub>k</sub> θ<sub>jk,i</sub>²',
+    pro: ['Shows dynamics and the relative importance of shocks.'], con: ['Inherits the identifying assumptions of the SVAR.'], u: ['Forecast lab: SVAR', '#lab~var'], s: ['LUT'] },
+  { id: 'placebo', t: 'Placebo and permutation tests', c: 'Statistics and models', d: 'Repeat a test with the timing of the data scrambled; if the real result is not unusual against these placebo results, it is not convincing.',
+    f: 'Placebo p-value = share of placebo statistics ≥ the actual statistic',
+    x: () => { try { return 'For Taka depreciation and inflation, the placebo p-value is ' + fp(BD.placebo.p_placebo) + '.'; } catch (e) { return ''; } },
+    th: 'Randomisation inference (Fisher, 1935) builds the null distribution from the data themselves.',
+    pro: ['Few distributional assumptions.'], con: ['Computationally heavy.'], u: ['Forecast lab: robustness', '#lab~robust'], s: ['FISHER35'] },
+  { id: 'kw', t: 'Kruskal–Wallis test', c: 'Statistics and models', d: 'A rank-based test of whether several groups come from the same distribution.',
+    f: 'H = 12 ÷ (N(N + 1)) Σ<sub>j</sub> R<sub>j</sub>² ÷ n<sub>j</sub> − 3(N + 1)',
+    pro: ['Does not assume normal data.'], con: ['Says groups differ, not which ones.'], u: ['Forecast lab: world', '#lab~world'], s: ['KW'] },
+  { id: 'conv', t: 'β- and σ-convergence', c: 'Statistics and models', d: 'β-convergence: poorer economies grow faster than richer ones. σ-convergence: the spread of incomes across economies narrows.',
+    f: 'g<sub>i</sub> = a + β ln y<sub>i,0</sub> + ε<sub>i</sub>; &nbsp;half-life ≈ ln 2 ÷ (−β ÷ 100); &nbsp;σ<sub>t</sub> = SD(ln y<sub>i,t</sub>)',
+    x: () => { try { const c = BD.world.conv; return 'Across economies since 2000, β = ' + L2(c.m1.rows[1].coef) + ', so income gaps halve about every ' + nf(c.half_life, 0) + ' years.'; } catch (e) { return ''; } },
+    th: 'The Solow model predicts conditional convergence: economies converge to their own steady states.',
+    pro: ['Simple test of catch-up growth.'], con: ['Sensitive to the sample of countries.'], u: ['Forecast lab: world', '#lab~world'], s: ['BSM', 'MRW'] },
+  { id: 'kde', t: 'Kernel density (ridgeline “mountain map”)', c: 'Statistics and models', d: 'A smoothed histogram that shows the shape of a distribution.',
+    f: 'f̂(x) = (1 ÷ nh) Σ<sub>i</sub> K((x − x<sub>i</sub>) ÷ h); &nbsp;Scott’s bandwidth h ≈ 1.06 σ n<sup>−1/5</sup>',
+    pro: ['Shows shape, spread and multiple peaks.'], con: ['Results depend on the bandwidth.'], u: ['Forecast lab: data', '#lab~data'], s: ['SILV', 'SCOTT'] },
+  { id: 'dsge', t: 'DSGE model (New Keynesian)', c: 'Statistics and models', d: 'A small model of the whole economy built from households’, firms’ and the central bank’s decisions: an IS curve, a Phillips curve and a Taylor rule.',
+    f: 'x<sub>t</sub> = E<sub>t</sub>x<sub>t+1</sub> − (1/σ)(i<sub>t</sub> − E<sub>t</sub>π<sub>t+1</sub>) + d<sub>t</sub>; &nbsp;π<sub>t</sub> = βE<sub>t</sub>π<sub>t+1</sub> + κx<sub>t</sub> + u<sub>t</sub>; &nbsp;i<sub>t</sub> = φ<sub>π</sub>π<sub>t</sub> + φ<sub>y</sub>x<sub>t</sub> + v<sub>t</sub>',
+    m: 'Calibrated to textbook values (not estimated for Bangladesh) and solved by undetermined coefficients.',
+    th: 'Prices adjust slowly because only some firms reset prices each period (Calvo, 1983).',
+    pro: ['Structural: shows why effects happen.'], con: ['Results depend on assumed parameters.'], u: ['Forecast lab: DSGE', '#lab~dsge'], s: ['GALI', 'SW07', 'CALVO'] },
+  { id: 'taylor', t: 'Taylor rule and the Taylor principle', c: 'Statistics and models', d: 'A rule of thumb for setting the policy rate from inflation and the output gap; the principle says the rate should rise more than one for one with inflation.',
+    f: 'i = r* + π + 0.5(π − π*) + 0.5x &nbsp;(Taylor, 1993); &nbsp;principle: φ<sub>π</sub> &gt; 1; &nbsp;determinacy: κ(φ<sub>π</sub> − 1) + (1 − β)φ<sub>y</sub> &gt; 0',
+    th: 'If the rate rose less than inflation, real rates would fall and fuel more inflation.',
+    pro: ['Simple benchmark for policy.'], con: ['Needs estimates of unobserved r* and the output gap.'], u: ['Forecast lab: DSGE', '#lab~dsge'], s: ['TAYLOR', 'WOOD'] },
+  { id: 'phillips', t: 'Phillips curve', c: 'Statistics and models', d: 'The relationship between inflation and slack in the economy; its modern form links inflation to expected inflation and the output gap.',
+    f: 'π<sub>t</sub> = βE<sub>t</sub>π<sub>t+1</sub> + κx<sub>t</sub> &nbsp;(New Keynesian Phillips curve)',
+    th: 'Phillips (1958) found that wage inflation was higher when unemployment was low.',
+    pro: ['Core of inflation theory.'], con: ['The relationship is unstable over time.'], u: ['Forecast lab: DSGE', '#lab~dsge'], s: ['PHIL', 'CALVO', 'GALI'] },
+  { id: 'log', t: 'Log scale', c: 'Statistics and models', d: 'An axis on which equal distances mean equal percentage changes.',
+    p: 'A series growing at a constant rate g is y<sub>t</sub> = y<sub>0</sub>(1 + g)<sup>t</sup>, so ln y<sub>t</sub> = ln y<sub>0</sub> + t ln(1 + g): a straight line in t.',
+    pro: ['Shows growth rates clearly over long periods.'], con: ['Cannot show zero or negative values.'], u: ['Countries', '#countries'], s: ['CB02'] },
+  { id: 'percentile', t: 'Percentile and position in history', c: 'Statistics and models', d: 'The share of past observations below the latest value; the “Range” column shows where today sits between the historical minimum and maximum.',
+    f: 'Percentile = (number of observations below x) ÷ (n − 1) × 100',
+    pro: ['Puts the latest value in context.'], con: ['Depends on the length of history.'], u: ['Bangladesh', '#bangladesh'], s: ['HF96'] },
+  { id: 'bench', t: 'Benchmark ranges (warnings)', c: 'Statistics and models', d: 'International rules of thumb that define a comfortable range; a value outside it blinks on this site.',
+    m: 'Examples: inflation 2–6% (India’s official target band), import cover at least 3 months (IMF), bank capital at least 12.5% (Bangladesh Bank’s Basel III rule), bad loans at most 8% (EBA).',
+    pro: ['Gives a quick, consistent warning signal.'], con: ['Benchmarks are guides, not laws; the right range differs between countries.'], u: ['At a glance', '#bangladesh~glance'], s: ['RBI', 'IMF11', 'BASEL', 'EBA'] }
+];
+function learnCard(g) {
+  let ex = '';
+  try { ex = typeof g.x === 'function' ? g.x() : (g.x || ''); } catch (e) { ex = ''; }
+  const row = (k, v) => v ? '<div class="lr"><dt>' + k + '</dt><dd>' + v + '</dd></div>' : '';
+  const list = a => a && a.length ? '<ul>' + a.map(z => '<li>' + esc(z) + '</li>').join('') + '</ul>' : '';
+  return '<details class="lcard" id="term-' + g.id + '" data-cat="' + esc(g.c) + '"><summary><span class="lt-t">' + esc(g.t) + '</span><span class="lt-c">' + esc(g.c) + '</span></summary><dl>' +
+    row('Definition', esc(g.d)) + row('Formula', g.f ? '<span class="fx">' + g.f + '</span>' : '') + row('Method', g.m ? esc(g.m) : '') + row('Example', ex ? esc(ex) : '') +
+    row('Theory', g.th ? esc(g.th) : '') + row('Proof', g.p ? g.p : '') + row('Strengths', list(g.pro)) + row('Limitations', list(g.con)) + row('Exceptions and notes', g.n ? esc(g.n) : '') +
+    row('On this site', g.u ? '<a href="' + g.u[1] + '">' + esc(g.u[0]) + ' →</a>' : '') + row('Sources', '<ol class="lsrc">' + (g.s || []).map(k => '<li>' + esc(LSRC[k] || k) + '</li>').join('') + '</ol>') + '</dl></details>';
+}
+function initLearnX() {
+  const host = $('#learn-groups');
+  if (!host) return;
+  const cats = [...new Set(GLOSS.map(g => g.c))];
+  host.innerHTML = '<div class="block-head"><h2>Key terms</h2><p class="note">' + GLOSS.length + ' terms, each with its definition, formula, method, a live example from this site’s data, the theory behind it (with a proof where one exists), strengths, limitations, exceptions and authoritative sources.</p></div>' +
+    '<div class="controls lctl"><label class="field grow"><span>Search the terms</span><input type="search" id="learn-q" placeholder="e.g. inflation, reserves, ARIMA" autocomplete="off"></label></div>' +
+    '<div class="lchips" id="learn-cats"><button type="button" class="chip" data-cat="" aria-pressed="true">All</button>' + cats.map(c => '<button type="button" class="chip" data-cat="' + esc(c) + '" aria-pressed="false">' + esc(c) + '</button>').join('') + '</div>' +
+    '<p class="note" id="learn-count"></p><div id="learn-list"></div>';
+  const st = { q: '', cat: '' };
+  const draw = () => {
+    const terms = st.q.toLowerCase().split(/\s+/).filter(Boolean);
+    const hit = GLOSS.filter(g => (!st.cat || g.c === st.cat) && (!terms.length || terms.every(t => (g.t + ' ' + g.d + ' ' + g.c + ' ' + (g.th || '')).toLowerCase().includes(t))));
+    $('#learn-count').textContent = hit.length + ' of ' + GLOSS.length + ' terms';
+    $('#learn-list').innerHTML = cats.filter(c => hit.some(g => g.c === c)).map(c => '<section class="lgroup"><h3>' + esc(c) + '</h3>' + hit.filter(g => g.c === c).map(learnCard).join('') + '</section>').join('') || '<p class="empty">No terms match. Try another word.</p>';
+  };
+  $('#learn-q').addEventListener('input', e => { st.q = e.target.value; draw(); });
+  $('#learn-cats').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (!b) return; st.cat = b.getAttribute('data-cat'); $$('#learn-cats .chip').forEach(x => x.setAttribute('aria-pressed', String(x === b))); draw(); });
+  draw();
+  if (LEARN_OPEN) openTerm(LEARN_OPEN);
+}
+let LEARN_OPEN = null;
+function openTerm(id) { const d = document.getElementById('term-' + id); if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: RM ? 'auto' : 'smooth' }); } LEARN_OPEN = null; }
+
+/* ---------- FAQ: generated from the site's own data, so answers stay current ---------- */
+const FAQ_MAP = { gdp_growth: 'growth', gdp_usd: 'gdp', gdp_pc: 'gdppc', gdp_pc_ppp: 'ppp', investment: 'invest', savings: 'savings', inflation: 'inflation', lending_rate: 'rates', real_rate: 'fisher', money_growth: 'm2', fx: 'xr', fx_change: 'currchange',
+  unemployment: 'unemp', youth_unemp_f: 'youth', youth_unemp_m: 'youth', lfp_f: 'lfp', lfp_m: 'lfp', population: 'pop', pop_growth: 'pop', poverty: 'poverty', poverty_nat: 'povnat', gini: 'gini', bottom20: 'shares', top20: 'shares',
+  revenue: 'govfin', tax: 'govfin', spending: 'govfin', budget: 'budget', gov_debt: 'debt', current_account: 'ca', exports: 'trade', imports: 'trade', fdi: 'fdi', remittances: 'remit', reserves: 'reserves', ext_debt: 'extdebt', debt_service: 'extdebt', private_credit: 'credit' };
+const lnk = (id, t) => ' <a href="#learn~' + id + '">' + esc(t || 'More in Learn') + ' →</a>';
+function faqBuild() {
+  const Q = [];
+  const add = (cat, q, a, src) => Q.push({ id: 'q' + Q.length, cat, q, a: a + (src ? '<span class="fsrc">Source: ' + esc(src) + '</span>' : '') });
+  const ownerOn = !!document.querySelector('[data-owner-gate]:not([hidden])');
+  // ---- about the site
+  add('About the site', 'What is Macroeconomic Monitor and Forecasting?', 'A free website that brings together official statistics for more than 200 economies, a detailed monitor of Bangladesh, and statistical forecasts, explained in plain language with a source under every chart and table.');
+  add('About the site', 'Who runs the site?', ownerOn ? 'The site’s owner is named on the About page.' : 'It is an independent website. Ownership details appear on the About page when the owner chooses to publish them.');
+  add('About the site', 'Is the site free to use?', 'Yes. There are no fees and no adverts.');
+  add('About the site', 'How often is the data updated?', 'World Bank and market data are refreshed automatically every day at 05:30 UTC. Bangladesh data are updated when a new edition of Bangladesh Bank’s Monthly Economic Trends is added, and the models are then re-estimated. The live dashboard on the front page checks for newly published data at the interval you choose.');
+  add('About the site', 'Are the projections official forecasts?', 'No. They are statistical projections made by this site’s models from official data. They are not forecasts by Bangladesh Bank, BBS, the World Bank or any other agency.' + lnk('ensemble'));
+  add('About the site', 'Why do some values blink?', 'A value blinks when it is outside its international benchmark range, too high or too low; for example inflation outside 2–6% or bad loans above 8% of all loans. The full list of benchmarks and their sources is on the Bangladesh “At a glance” page. You can switch blinking off at the bottom of any page.' + lnk('bench'));
+  add('About the site', 'What do the colours in the tables mean?', 'Values sit in coloured pills. Green marks a favourable change and red an unfavourable one; shades of blue show where a value sits among the others in its column; a blinking red pill is outside its benchmark range.');
+  add('About the site', 'How do the Month, Quarter, Year and 10 years, 25 years, All buttons work?', 'Each time chart has its own buttons. Month, Quarter and Year change the frequency: rates and flows are averaged and stocks such as reserves use the last value of each period. 10 years, 25 years and All change the time span. A control at the top of each Bangladesh page changes every chart on the page at once, and options that are not available for a series are greyed out.');
+  add('About the site', 'What do the labels on the charts show?', 'Bars show their values. Lines show a value at each quarter, or each year where there are no quarters; where lines cross or overlap only one label is shown. Every line ends with its latest value and its date, for example “8.34 · Sep 2026”.');
+  add('About the site', 'Why are the source lines so short?', 'Each source line names only the agency that publishes the data, such as Bangladesh Bank, BBS or World Bank. Projections add “model estimates”. Full references, with editions and series codes, are on the Methods page and in the Forecast lab’s References.');
+  add('About the site', 'Can I download the data or charts?', 'Downloads are reserved for the site owner. Visitors can see every figure, table and source on the site.');
+  add('About the site', 'Why can’t I copy text or print pages?', 'Copying, selecting and printing are switched off to protect the site’s work. Every page also carries a faint watermark with the site’s name.');
+  add('About the site', 'Why do I need to sign in?', 'When sign-in is switched on, the front page and the Privacy page are open to everyone, and other pages need a free sign-in with Google. Your first sign-in creates your account.');
+  add('About the site', 'What does the site record about me?', 'If you sign in, the site records your name, email address, the date you joined and the pages you open, so the owner can see how the site is used. It is never sold or shared, and you can delete your account and record from the account menu. Details are on the Privacy page.');
+  add('About the site', 'How do I contact the site?', 'Use the form on the Contact page. You will get an automatic confirmation by email; replies usually take up to 3 days.');
+  add('About the site', 'How do I cite the site?', 'The Methods page has a ready-made citation, including the version date. Please also cite the original publishers of the data, which are named under every chart and table.');
+  add('About the site', 'Does the site work on a phone?', 'Yes. Every page adapts to small screens; tables scroll sideways with the first column fixed.');
+  // ---- pages
+  [['Overview', 'overview', 'the live dashboard, a map of Bangladesh, summary panels, Bangladesh beside its peers, world analysis, and automatically written results and conclusions'],
+   ['Bangladesh', 'bangladesh', 'Bangladesh’s economy by sector, grouped as in Bangladesh Bank’s Weekly Selected Economic Indicators, with key-indicator tables, charts and model readings, plus a catalogue of 6,910 series'],
+   ['Forecast lab', 'lab', 'projections, summary statistics, unit-root tests, ARIMA models, a structural VAR, robustness and placebo checks, a DSGE model, world analysis and references'],
+   ['Countries', 'countries', 'a profile of any of 217 economies: key figures, a map with geography and people, and charts with their own time controls'],
+   ['Compare', 'compare', 'up to eight economies on one indicator, with ready-made groups such as SAARC or the G7'],
+   ['Explore', 'explore', 'how two indicators relate across economies, animated over time'],
+   ['World map', 'map', 'any indicator mapped across the world for any year'],
+   ['Rankings', 'rankings', 'economies ranked on any indicator, by region and year'],
+   ['Markets', 'markets', 'oil, gas, gold, US interest rates and inflation, and 22 exchange rates'],
+   ['Learn', 'learn', 'every key term explained with its definition, formula, method, example, theory, strengths, limitations and sources'],
+   ['Methods', 'methods', 'how the data are collected, checked and transformed, and how to cite the site'],
+   ['FAQ', 'faq', 'answers to common questions, built from the site’s own data'],
+   ['Contact', 'contact', 'the contact form'],
+   ['Privacy', 'privacy', 'what the site records and how to delete it']].forEach(([n, h, d]) => add('Pages', 'What can I do on the ' + n + ' page?', 'You will find ' + d + '. <a href="#' + h + '">Open ' + esc(n) + ' →</a>'));
+  // ---- world indicators: meaning, source, coverage, benchmark
+  Object.keys(IND).forEach(k => {
+    const I = IND[k];
+    if (!I || !I.label) return;
+    const L = FAQ_MAP[k];
+    add('World indicators', 'What does “' + I.label + '” measure?', esc(I.desc || '') + ' ' + esc(I.why || '') + ' It is measured as: ' + esc(I.unit || '') + '.' + (L ? lnk(L) : ''), shortSrc(I.src));
+    const cv = typeof COV !== 'undefined' && COV[k];
+    if (cv) add('World indicators', 'Which years and economies does “' + I.label + '” cover?', 'Data run from ' + cv.first + ' to ' + cv.last + '. The most complete recent year is ' + cv.best + ', with figures for ' + cv.n + ' economies.', shortSrc(I.src));
+    const sd = stdOf(k);
+    if (sd) add('World indicators', 'What is a normal range for “' + I.label + '”?', 'This site uses the benchmark ' + esc(sd.txt) + ' (' + esc(sd.src) + '). Values outside it blink.' + lnk('bench'));
+  });
+  // ---- Bangladesh series: live answers
+  Object.keys(BD.series).forEach(k => {
+    const s = BD.series[k], r = s.reading;
+    if (!r || r.v == null) return;
+    const sd = stdOf(k);
+    add('Bangladesh data', 'What is Bangladesh’s latest ' + s.label.toLowerCase() + (s.sub ? ' (' + s.sub + ')' : '') + '?', 'It was <b>' + nf(r.v, 2) + '</b> ' + esc(s.unit) + ' in ' + esc(fmtPeriod(r.period)) + (r.ya != null ? ', compared with ' + nf(r.ya, 2) + ' a year earlier' : '') + '.' + (sd ? (stdOut(sd, r.v) ? ' That is outside the benchmark (' + esc(sd.txt) + ').' : ' That is within the benchmark (' + esc(sd.txt) + ').') : '') + ' <a href="#bangladesh~' + s.chunk + '">See the chart →</a>', srcKeys([k]).replace(/\.$/, ''));
+  });
+  // ---- Bangladesh beside its peers: combinations of economies and indicators
+  const EM = EMAPB();
+  const PE = ['gdp_growth', 'inflation', 'unemployment', 'current_account', 'gdp_pc_ppp', 'exports'];
+  const bd = {};
+  PE.forEach(k => { bd[k] = latestOf(k, 'BGD'); });
+  PEER_GROUPS.forEach(([g, codes]) => codes.filter(c => c !== 'BGD' && EM[c]).forEach(c => PE.forEach(k => {
+    const a = bd[k], b = latestOf(k, c), I = IND[k];
+    if (!a || !b || !I) return;
+    const d = a[1] - b[1];
+    add('Bangladesh and its peers', 'How does Bangladesh compare with ' + EM[c][1] + ' on ' + I.label.toLowerCase() + '?', 'Bangladesh: <b>' + nf(a[1], 2) + '</b> (' + a[0] + '); ' + esc(EM[c][1]) + ': <b>' + nf(b[1], 2) + '</b> (' + b[0] + '). Bangladesh is ' + nf(Math.abs(d), 2) + (/%/.test(I.unit) ? ' points ' : ' ') + (d >= 0 ? 'higher' : 'lower') + '. Unit: ' + esc(I.unit) + '. <a href="#compare~' + k + '~BGD.' + c + '">Compare over time →</a>', 'World Bank');
+  })));
+  // ---- forecasts and findings: live answers
+  try {
+    const e = BD.ensemble.path, f = e[e.length - 1], now = BD.arima.infl.hist.v.slice(-1)[0];
+    add('Forecasts and findings', 'What is the inflation outlook for Bangladesh?', 'The models project <b>' + nf(f.mean, 2) + '%</b> for ' + esc(fmtPeriod(mLabAdd(BD.ensemble.start, e.length - 1))) + ', from ' + nf(now, 2) + '% now, with an 80% range of ' + nf(f.lo80, 2) + '–' + nf(f.hi80, 2) + '%. <a href="#lab~overview">See the projection →</a>', 'Bangladesh Bank, BBS; model estimates');
+    const b1 = BD.ensemble.backtest[0];
+    add('Forecasts and findings', 'How accurate are the inflation forecasts?', 'In a rolling backtest, one-month-ahead errors averaged ' + nf(b1.rmse_ens, 2) + ' points (RMSE), against ' + nf(b1.rmse_rw, 2) + ' for a naive “no change” forecast. Monthly inflation is hard to beat because it moves slowly.' + lnk('accuracy'), 'Model estimates');
+    const gp = i => (BD.var.granger.find(x => x.effect === 0 && x.cause === i) || {}).p;
+    add('Forecasts and findings', 'What drives inflation in Bangladesh?', 'In the structural VAR, the call money rate helps predict inflation (p = ' + fp(gp(2)) + '), Taka depreciation adds ' + (gp(3) < 0.05 ? 'significant' : 'weak') + ' information (p = ' + fp(gp(3)) + '), and money growth adds ' + (gp(1) < 0.05 ? 'significant' : 'little') + ' (p = ' + fp(gp(1)) + ').' + lnk('granger'), 'Model estimates');
+    const npl = SER('npl').reading, crar = SER('crar').reading;
+    add('Forecasts and findings', 'How healthy are Bangladesh’s banks?', 'Bad loans were ' + nf(npl.v, 2) + '% of all loans in ' + esc(fmtPeriod(npl.period)) + ' (benchmark: at most 8%), and the capital ratio was ' + nf(crar.v, 2) + '% (requirement: 12.5%). Both point to serious stress.' + lnk('npl'), 'Bangladesh Bank');
+    const cov = SER('cover').reading;
+    add('Forecasts and findings', 'Are Bangladesh’s foreign exchange reserves adequate?', 'Reserves covered ' + nf(cov.v, 2) + ' months of imports in ' + esc(fmtPeriod(cov.period)) + ', ' + (stdOut(STD.cover, cov.v) ? 'below' : 'above') + ' the IMF’s 3-month rule of thumb.' + lnk('reserves'), 'Bangladesh Bank');
+  } catch (err) { /* model results optional */ }
+  // ---- models and methods (short answers that point to Learn)
+  GLOSS.filter(g => g.c === 'Statistics and models').forEach(g => add('Models and methods', 'What is ' + (/^[A-Z]/.test(g.t) && !/^(DSGE|ARIMA)/.test(g.t) ? g.t.charAt(0).toLowerCase() + g.t.slice(1) : g.t) + '?', esc(g.d) + lnk(g.id, 'Formula, theory and sources')));
+  // ---- data sources
+  [['World Bank', 'World Development Indicators for 217 economies, country profiles and gold prices.', 'Free to reuse with credit under CC BY 4.0.'],
+   ['Bangladesh Bank', 'Money, banking, interest rates, the external sector, fiscal financing and the capital market, from Monthly Economic Trends and the National Summary Data Page.', 'Public statistics; please credit Bangladesh Bank.'],
+   ['BBS', 'Consumer prices, national accounts and industrial production for Bangladesh.', 'Public statistics; please credit BBS.'],
+   ['IMF', 'Statistical standards (BPM6, the CPI Manual and others) and the direction-of-trade tables in the Bangladesh catalogue.', 'Follow the IMF’s copyright terms when reusing.'],
+   ['ADB', 'Listed as a reference for Asian data; not yet used for the charts.', 'Follow ADB’s terms of use.'],
+   ['EIA', 'Daily and monthly oil and natural gas prices.', 'US government data, generally free to reuse with credit.'],
+   ['Federal Reserve', 'The US 10-year Treasury yield and exchange rates.', 'Free to reuse with credit.'],
+   ['BLS', 'US consumer prices.', 'US government data, generally free to reuse with credit.'],
+   ['Natural Earth', 'Country outlines, capitals, cities, rivers and Bangladesh’s divisions.', 'Public domain.']].forEach(([n, what, lic]) => {
+    add('Data sources', 'What does the site use from ' + n + '?', esc(what));
+    add('Data sources', 'Can I reuse ' + n + ' data from this site?', esc(lic) + ' Always cite the original publisher as well as this site.');
+  });
+  add('Data sources', 'Where can I find every country’s central bank and statistics office?', 'The Forecast lab’s References link the Bank for International Settlements’ directory of central banks and the UN Statistics Division’s directory of national statistics offices.');
+  return Q;
+}
+function initFAQ() {
+  const host = $('#faq-body');
+  if (!host || !BD) return;
+  const Q = faqBuild();
+  const cats = [...new Set(Q.map(q => q.cat))];
+  const st = { q: '', cat: '', show: 60 };
+  $('#faq-ctl').innerHTML = '<div class="controls"><label class="field grow"><span>Search ' + Q.length + ' questions</span><input type="search" id="faq-q" placeholder="e.g. inflation, reserves, India, sign in" autocomplete="off"></label></div>' +
+    '<div class="lchips" id="faq-cats"><button type="button" class="chip" data-cat="" aria-pressed="true">All (' + Q.length + ')</button>' + cats.map(c => '<button type="button" class="chip" data-cat="' + esc(c) + '" aria-pressed="false">' + esc(c) + ' (' + Q.filter(q => q.cat === c).length + ')</button>').join('') + '</div>';
+  const draw = () => {
+    const terms = st.q.toLowerCase().split(/\s+/).filter(Boolean);
+    const hit = Q.filter(q => (!st.cat || q.cat === st.cat) && (!terms.length || terms.every(t => (q.q + ' ' + q.a).toLowerCase().includes(t))));
+    host.innerHTML = '<p class="note">' + hit.length + ' question' + (hit.length === 1 ? '' : 's') + '</p>' + hit.slice(0, st.show).map(q => '<details class="fq" id="faq-' + q.id + '"><summary>' + esc(q.q) + '</summary><div class="fa">' + q.a + '</div></details>').join('') +
+      (hit.length > st.show ? '<button type="button" class="btn" id="faq-more">Show all ' + hit.length + '</button>' : '') + (hit.length ? '' : '<p class="empty">No questions match. Try another word.</p>');
+    const more = $('#faq-more');
+    if (more) more.addEventListener('click', () => { st.show = 100000; draw(); });
+  };
+  $('#faq-q').addEventListener('input', e => { st.q = e.target.value; st.show = 60; draw(); });
+  $('#faq-cats').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (!b) return; st.cat = b.getAttribute('data-cat'); st.show = 60; $$('#faq-cats .chip').forEach(x => x.setAttribute('aria-pressed', String(x === b))); draw(); });
+  draw();
 }
 
 /* ---------- Blinking warnings: on by default, with an off switch ---------- */
@@ -1727,7 +2419,7 @@ function initPeers() {
   document.addEventListener('keydown', e => { const k = (e.key || '').toLowerCase(); if ((e.ctrlKey || e.metaKey) && ['c', 'x', 's', 'p', 'u', 'a'].includes(k) && !ok(e.target)) e.preventDefault(); });
 })();
 setTimeout(() => { try { initOwner(); } catch (e) { /* optional */ } try { initAuth(); } catch (e) { /* sign-in optional */ } try { initContact(); } catch (e) { /* optional */ } try { initFront(); } catch (e) { /* optional */ } try { initBlink(); } catch (e) { /* optional */ } try { initPeers(); } catch (e) { /* table optional */ } try { initLive(); } catch (e) { /* dashboard optional */ } try { staticSources(); } catch (e) { /* optional */ } }, 0);
-return { initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo };
+return { initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo, initLearnX, initFAQ };
 })();
 function initBD() { return BDX.initBD(); }
 function initLab() { return BDX.initLab(); }
@@ -1880,3 +2572,5 @@ function shortSrc(t) {
   return out.length ? out.join(', ') : t.split(/[,(]/)[0].trim();
 }
 function renderGeo(code) { try { BDX.renderGeo(code); } catch (e) { /* map optional */ } }
+function initLearnX() { return BDX.initLearnX(); }
+function initFAQ() { return BDX.initFAQ(); }

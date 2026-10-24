@@ -1,3 +1,4 @@
+import re
 #!/usr/bin/env python3
 """Assemble Macro-Economic Monitor from src/ and build/data.json.
 
@@ -30,6 +31,24 @@ def MAPS_DATA():
         except Exception:
             MAPS_DATA.v = None
     return MAPS_DATA.v
+
+
+FRAMEBUST = "if(window.top!==window.self){document.documentElement.style.display='none';try{window.top.location.replace(window.location.href)}catch(e){}}"
+
+
+def harden(page, main=False):
+    """Content Security Policy with exact script fingerprints, frame protection and referrer policy (live site only)."""
+    import hashlib, base64
+    if main:
+        page = page.replace('<head>', '<head>\n<script>' + FRAMEBUST + '</script>', 1)
+    hashes = sorted({"'sha256-" + base64.b64encode(hashlib.sha256(m.group(1).encode('utf-8')).digest()).decode() + "'"
+                     for m in re.finditer(r'<script(?![^>]*\bsrc=)(?![^>]*type="application/(?:ld\+)?json")[^>]*>(.*?)</script>', page, flags=re.S)})
+    csp = ("default-src 'self'; script-src 'self' " + ' '.join(hashes) + " https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com; "
+           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.googleusercontent.com; "
+           "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com; frame-src https://*.firebaseapp.com https://docs.google.com https://accounts.google.com; "
+           "object-src 'none'; base-uri 'self'; form-action 'self' https://docs.google.com; upgrade-insecure-requests")
+    meta = '<meta http-equiv="Content-Security-Policy" content="' + csp + '">\n<meta name="referrer" content="strict-origin-when-cross-origin">\n'
+    return page.replace('<head>', '<head>\n' + meta, 1)
 
 
 def extras_inject(page, artifact=False):
@@ -217,7 +236,7 @@ def main():
     if pub.exists():
         shutil.rmtree(pub)
     pub.mkdir()
-    (pub / 'index.html').write_text(extras_inject(auth_inject(assemble(raw, True))), encoding='utf-8')
+    (pub / 'index.html').write_text(harden(extras_inject(auth_inject(assemble(raw, True))), main=True), encoding='utf-8')
     S, built, codes = D['s'], D['meta']['built'], []
     for code, name, iso2, region, sub, _n, grp in D['econ']:
         if grp:
@@ -229,7 +248,7 @@ def main():
                 rows.append(f'<tr><td>{E(label)}</td><td class="v">{fmt(kind, l[1])}</td><td class="y">{l[0]}</td></tr>\n')
         d = pub / 'country' / code.lower()
         d.mkdir(parents=True, exist_ok=True)
-        (d / 'index.html').write_text(stub(code, name, sub or region, summary(S, code, name), rows, built), encoding='utf-8')
+        (d / 'index.html').write_text(harden(stub(code, name, sub or region, summary(S, code, name), rows, built)), encoding='utf-8')
         codes.append(code)
     urls = [SITE] + [f'{SITE}country/{c.lower()}/' for c in codes]
     (pub / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
@@ -253,6 +272,7 @@ def main():
         (pub / 'live.json').write_text(_json.dumps({'built': _built, 'bd': _bm.get('estimated')}), encoding='utf-8')
     except Exception as _e:
         print('live.json not written:', _e)
+    (pub / '404.html').write_text(harden((pub / '404.html').read_text(encoding='utf-8')), encoding='utf-8')
     print('Built public/ with', len(codes), 'country pages and', len(urls), 'sitemap entries')
 
 
