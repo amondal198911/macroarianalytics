@@ -6,9 +6,6 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent if HERE.name == 'scripts' else HERE
 RAW = ROOT / 'data' / 'raw'
 GH = 'https://raw.githubusercontent.com/datasets/'
-PROF_CODES = {'ag.srf.totl.k2': 'area', 'ag.lnd.totl.k2': 'land', 'en.pop.dnst': 'density', 'sp.urb.totl.in.zs': 'urban', 'sp.dyn.le00.in': 'life',
-              'sp.dyn.tfrt.in': 'fert', 'sp.pop.0014.to.zs': 'young', 'sp.pop.65up.to.zs': 'old', 'sp.pop.totl.fe.zs': 'female', 'se.adt.litr.zs': 'literacy',
-              'ag.lnd.frst.zs': 'forest', 'ag.lnd.agri.zs': 'agri', 'eg.elc.accs.zs': 'elec', 'sh.dyn.mort': 'u5mort', 'sp.dyn.imrt.in': 'infmort', 'sp.dyn.cbrt.in': 'birth'}
 WDI_CODES = [
     'ny.gdp.mktp.kd.zg', 'ny.gdp.mktp.cd', 'ny.gdp.pcap.cd', 'ny.gdp.pcap.pp.cd', 'ne.gdi.totl.zs', 'ny.gns.ictr.zs',
     'fp.cpi.totl.zg', 'fr.inr.lend', 'fr.inr.rinr', 'fm.lbl.bmny.zg', 'pa.nus.fcrf', 'sl.uem.totl.zs', 'sp.pop.totl',
@@ -48,11 +45,6 @@ def fetch(url, dest, tries=4):
 if __name__ == '__main__':
     for code in WDI_CODES:
         fetch(f'{GH}world-development-indicators/main/indicators/{code}/data.csv', RAW / 'wdi' / f'{code}.csv')
-    for code in PROF_CODES:  # country profile figures: optional, never stop the update
-        try:
-            fetch(f'{GH}world-development-indicators/main/indicators/{code}/data.csv', RAW / 'wdi' / f'{code}.csv')
-        except Exception as e:
-            print('profile indicator skipped:', code, e)
     for name, path in DATAHUB.items():
         fetch(GH + path, RAW / 'dh' / name)
     print('Downloaded', len(WDI_CODES) + len(DATAHUB), 'files into', RAW)

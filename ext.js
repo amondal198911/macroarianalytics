@@ -2,7 +2,7 @@
 const ARTIFACT_URL = 'https://claude.ai/artifact/JpwNpmbYD85T4QmYirumxV';
 const STANDALONE = !window.claude && /^https?:$/.test(location.protocol);
 const BASE_URL = STANDALONE ? location.origin + location.pathname : ARTIFACT_URL;
-const EMAIL = '';
+const EMAIL = ['arian.hu.idec', 'gmail.com'].join('@');
 function blobSave(filename, data, type) {
   const blob = data instanceof Blob ? data : new Blob([data], { type: type || 'application/octet-stream' });
   const a = el('a', { href: URL.createObjectURL(blob), download: filename });
@@ -12,7 +12,7 @@ function blobSave(filename, data, type) {
 }
 function renderEmail() {
   $$('[data-email]').forEach(n => { n.textContent = EMAIL; n.setAttribute('href', 'mailto:' + EMAIL); });
-  $$('[data-email-btn]').forEach(n => n.setAttribute('href', 'mailto:' + EMAIL + '?subject=' + encodeURIComponent('Macroeconomic Monitor and Forecasting')));
+  $$('[data-email-btn]').forEach(n => n.setAttribute('href', 'mailto:' + EMAIL + '?subject=' + encodeURIComponent('Macro-Economic Monitor')));
 }
 const NAVNAME = { overview: 'Overview', countries: 'Countries', compare: 'Compare', explore: 'Explore', map: 'World map', rankings: 'Rankings', markets: 'Markets', learn: 'Learn the indicators', methods: 'Methods and notes', about: 'About', contact: 'Contact', privacy: 'Privacy' };
 let CM = null;
@@ -93,7 +93,7 @@ async function exportChart(node, title, sub, filename, src) {
   cx.fillStyle = TH.ink; cx.font = '700 18px Archivo, Arial, sans-serif'; cx.fillText(title, pad, pad + 14);
   cx.fillStyle = TH.muted; cx.font = '13px Archivo, Arial, sans-serif'; cx.fillText(sub.slice(0, 120), pad, pad + 34);
   cx.drawImage(img, pad, head, w, h);
-  cx.fillText('Macroeconomic Monitor and Forecasting · macroarianalytics.com. Source: ' + (src || WB) + '.', pad, H - 12);
+  cx.fillText('Macro-Economic Monitor by Arian Mondal. Source: ' + (src || WB) + '.', pad, H - 12);
   const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
   if (!blob) { toast('That chart couldn’t be turned into an image.'); return; }
   if (!DL) { blobSave(filename, blob); return; }
@@ -591,7 +591,7 @@ function initMethods() {
   const stale = COUNTRIES.filter(e => bigEnough(e.code, LAST)).map(e => ({ e, g: latest('gdp_growth', e.code) })).filter(r => !r.g || r.g.y <= LAST - 3).sort((a, b) => a.e.name.localeCompare(b.e.name));
   $('#me-stale').textContent = stale.length ? stale.map(r => r.e.name + ' (' + (r.g ? r.g.y : 'none') + ')').join(', ') + '.' : 'None.';
   const C = RAW.meta.checks;
-  $('#me-checks').textContent = 'The data hold ' + C.values.toLocaleString('en-US') + ' annual values across ' + C.indicators + ' indicators. Each was checked against a plausible range: ' + C.flagged_n.toLocaleString('en-US') +
+  $('#me-checks').textContent = 'This release holds ' + C.values.toLocaleString('en-US') + ' annual values across ' + C.indicators + ' indicators. Each was checked against a plausible range: ' + C.flagged_n.toLocaleString('en-US') +
     ' (' + num((C.flagged_n / C.values) * 100, 1) + '%) fall outside it. They are kept exactly as published, because extreme years such as hyperinflations and wars are real, but they deserve a second look. As a consistency test, GDP divided by population matches the published GDP per person within 1% in ' +
     C.pc_within1.toLocaleString('en-US') + ' of ' + C.pc_pairs.toLocaleString('en-US') + ' cases (' + num((C.pc_within1 / C.pc_pairs) * 100, 1) + '%).';
   const tb = $('#me-flags');
@@ -600,9 +600,9 @@ function initMethods() {
   const body = el('tbody');
   C.flagged.slice(0, 10).forEach(([k, code, y, v]) => { if (ECON[code] && IND[k]) body.append(el('tr', { 'data-country': code, tabindex: '0' }, el('td', { text: ECON[code].name }), el('td', { text: IND[k].label }), el('td', { text: y }), el('td', { text: fmt(k, v) }))); });
   tb.append(body);
-  const cite = (document.querySelector('[data-owner-gate]:not([hidden])') ? 'Mondal, A. (2026). ' : '') + 'Macroeconomic Monitor and Forecasting (version of ' + fmtDay(RAW.meta.built) + '). ' + BASE_URL + '. Underlying data: World Bank, World Development Indicators (CC BY 4.0); U.S. Energy Information Administration; Federal Reserve Board; U.S. Bureau of Labor Statistics.';
+  const cite = 'Mondal, A. (2026). Macro-Economic Monitor (data release ' + fmtDay(RAW.meta.built) + '). ' + BASE_URL + '. Underlying data: World Bank, World Development Indicators (CC BY 4.0); U.S. Energy Information Administration; Federal Reserve Board; U.S. Bureau of Labor Statistics.';
   $('#me-cite').textContent = cite;
-  if ($('#me-cite-btn')) $('#me-cite-btn').addEventListener('click', async () => {
+  $('#me-cite-btn').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(cite); toast('Citation copied'); }
     catch (e) { const r = document.createRange(); r.selectNodeContents($('#me-cite')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Citation selected. Use your device’s copy command.'); }
   });
@@ -619,17 +619,17 @@ function downloadAll() {
     }
   }
   rows.push([]);
-  rows.push(['Source: World Bank, World Development Indicators (CC BY 4.0), compiled by Macroeconomic Monitor and Forecasting, data release ' + RAW.meta.built]);
+  rows.push(['Source: World Bank, World Development Indicators (CC BY 4.0), compiled by Macro-Economic Monitor, data release ' + RAW.meta.built]);
   saveCSV('macro-monitor-all-data-' + RAW.meta.built + '.csv', rows);
 }
 function syncContact() {
   const card = $('#ct-target');
   if (card) card.hidden = !CM;
   const a = $('#ct-avail');
-  if (a) a.textContent = 'Comments are saved with this page on claude.ai, where the site owner can read and reply to them.';
+  if (a) a.textContent = 'Comments are saved with this page on claude.ai, where Arian can read and reply to them.';
 }
 function initContact() {
-  if ($('#ct-copy')) $('#ct-copy').addEventListener('click', async () => {
+  $('#ct-copy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(EMAIL); toast('Email address copied'); }
     catch (e) { const r = document.createRange(); r.selectNodeContents($('#ct-email')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Address selected. Use your device’s copy command.'); }
   });
@@ -666,4 +666,5 @@ function bootEarly() {
   });
   $('#share-close').addEventListener('click', closeShare);
   $('#share-sheet').addEventListener('click', e => { if (e.target === $('#share-sheet')) closeShare(); });
+  $('#foot-vintage').textContent = 'Data release ' + fmtDay(RAW.meta.built) + '. Annual figures run to ' + LAST + '; market prices to ' + fmtDay(MKD.brent.last.d) + '.';
 }

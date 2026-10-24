@@ -310,33 +310,10 @@ for c_, r_, gid, name in dj['dots']:
     flat += [c_, r_, iso_idx[iso]]
 geo_out = dict(w=geo['w'], h=geo['h'], p=paths, dots=dict(s=dj['step'], iso=iso_list, d=flat))
 
-econ_codes = {e[0] for e in econ}
 data = dict(
     meta=dict(built=TODAY.isoformat(), first=1960, last=coverage['gdp_growth']['best'], checks=checks, euro=euro_done, fx_breaks={k: v for k, v in fx_breaks.items() if k in meta}),
     econ=econ, cov=coverage, s=out_s, mk=mk, geo=geo_out,
 )
-PROF_CODES = {'ag.srf.totl.k2': 'area', 'ag.lnd.totl.k2': 'land', 'en.pop.dnst': 'density', 'sp.urb.totl.in.zs': 'urban', 'sp.dyn.le00.in': 'life',
-              'sp.dyn.tfrt.in': 'fert', 'sp.pop.0014.to.zs': 'young', 'sp.pop.65up.to.zs': 'old', 'sp.pop.totl.fe.zs': 'female', 'se.adt.litr.zs': 'literacy',
-              'ag.lnd.frst.zs': 'forest', 'ag.lnd.agri.zs': 'agri', 'eg.elc.accs.zs': 'elec', 'sh.dyn.mort': 'u5mort', 'sp.dyn.imrt.in': 'infmort', 'sp.dyn.cbrt.in': 'birth'}
-prof = {}
-for code, key in PROF_CODES.items():  # latest value and year for each economy (optional block)
-    f = Path(WDI) / f'{code}.csv'
-    if not f.exists():
-        continue
-    try:
-        import csv as _csv
-        with open(f, newline='', encoding='utf-8') as fh:
-            for row in _csv.DictReader(fh):
-                iso, yr, v = row.get('Country Code'), row.get('Year'), row.get('Value')
-                if iso not in econ_codes or not v:
-                    continue
-                y, val = int(yr), float(v)
-                cur = prof.setdefault(iso, {}).get(key)
-                if cur is None or y > cur[0]:
-                    prof[iso][key] = [y, round(val, 4)]
-    except Exception as e:
-        print('profile indicator skipped:', code, e)
-data['prof'] = prof
 # safety checks: stop (and keep the live site unchanged) if the download looks broken
 assert len(countries) >= 200, 'too few economies'
 assert coverage['gdp_growth']['n'] >= 150, 'too few growth figures for the latest year'

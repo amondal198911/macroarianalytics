@@ -1,5 +1,5 @@
 :root{
-  color-scheme: only light;
+  color-scheme: light;
   --bg:#EEF2F4; --paper:#FFFFFF; --panel:#F6F8F9; --ink:#0E1C2B; --ink-2:#2E4256; --muted:#5E7185;
   --line:#D4DCE3; --grid:#E4EAEF; --pos:#1F5FA8; --neg:#C23B3B; --pos-soft:rgba(31,95,168,.12);
   --neg-soft:rgba(194,59,59,.16); --signal:#E0A100; --signal-ink:#7A5600; --focus:#1F5FA8;
