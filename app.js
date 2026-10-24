@@ -998,6 +998,7 @@ function showCountry(code) {
   if (!ECON[code]) code = 'USA';
   if (!inited.countries) { initCountries(); inited.countries = true; }
   curCountry = code; store.set('mm.country', code);
+  try { renderGeo(code); } catch (e) { /* map optional */ }
   const e = ECON[code];
   $('#c-flag').textContent = flag(e);
   $('#c-name').textContent = e.name;

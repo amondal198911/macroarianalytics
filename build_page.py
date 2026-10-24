@@ -21,6 +21,35 @@ _FB = AUTH.get('firebase') or {}
 AUTH_ON = all(str(_FB.get(k, '')).strip() for k in ('apiKey', 'authDomain', 'projectId', 'appId'))
 
 
+def MAPS_DATA():
+    """Country and Bangladesh map data, stored inside geo.json under 'maps'."""
+    if not hasattr(MAPS_DATA, 'v'):
+        gf = (ROOT / 'geo' / 'geo.json') if (ROOT / 'geo').is_dir() else (ROOT / 'geo.json')
+        try:
+            MAPS_DATA.v = json.loads(gf.read_text(encoding='utf-8')).get('maps')
+        except Exception:
+            MAPS_DATA.v = None
+    return MAPS_DATA.v
+
+
+def extras_inject(page, artifact=False):
+    """Owner fingerprint, contact-form link and the Bangladesh map (all pages); every map in the claude.ai copy."""
+    tags = []
+    if AUTH.get('owner'):
+        tags.append('window.MM_OWNERH=' + json.dumps(str(AUTH['owner'])) + ';')
+    if str(CFG.get('contact_form', '')).strip():
+        tags.append('window.MM_FORM=' + json.dumps(str(CFG['contact_form']).strip()) + ';')
+    mj = MAPS_DATA()
+    if mj:
+        tags.append('window.MM_BDMAP=' + json.dumps(mj.get('bd'), separators=(',', ':')) + ';')
+        if artifact:
+            tags.append('window.MM_MAPS=' + json.dumps(mj, separators=(',', ':')) + ';')
+    if not tags:
+        return page
+    tag = '<script>' + ''.join(tags).replace('</', '<\\/') + '</script>\n'
+    return page.replace('<script type="application/json" id="mm-data">', tag + '<script type="application/json" id="mm-data">', 1)
+
+
 def auth_inject(page):
     """Add the sign-in settings to the live site (never to the claude.ai preview)."""
     if not AUTH_ON:
@@ -181,14 +210,14 @@ def main():
     if len(sys.argv) >= 3 and sys.argv[1] == '--artifact':
         out = Path(sys.argv[2])
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(assemble(raw, False), encoding='utf-8')
+        out.write_text(extras_inject(assemble(raw, False), artifact=True), encoding='utf-8')
         print('Wrote', out, out.stat().st_size, 'bytes')
         return
     pub = ROOT / 'public'
     if pub.exists():
         shutil.rmtree(pub)
     pub.mkdir()
-    (pub / 'index.html').write_text(auth_inject(assemble(raw, True)), encoding='utf-8')
+    (pub / 'index.html').write_text(extras_inject(auth_inject(assemble(raw, True))), encoding='utf-8')
     S, built, codes = D['s'], D['meta']['built'], []
     for code, name, iso2, region, sub, _n, grp in D['econ']:
         if grp:
@@ -212,6 +241,8 @@ def main():
     og = next((p for p in (ROOT / 'assets' / 'og-image.png', ROOT / 'og-image.png') if p.exists()), None)
     if og:
         shutil.copy(og, pub / 'og-image.png')
+    if MAPS_DATA():
+        (pub / 'maps.json').write_text(json.dumps(MAPS_DATA(), separators=(',', ':'), ensure_ascii=False), encoding='utf-8')
     for f in ['bd_catalog.json', 'bd_M.json', 'bd_Q.json', 'bd_CY.json', 'bd_FY.json']:
         if (ROOT / f).exists():
             shutil.copy(ROOT / f, pub / f)

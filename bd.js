@@ -34,6 +34,21 @@ const CHUNKS = [
 ];
 const GLANCE = ['infl', 'food', 'nonfood', 'gdp_q', 'iip', 'm2', 'pcredit', 'npl', 'call', 'lend', 'real_lend', 'xr', 'res', 'cover', 'remit_g', 'exp_g', 'govcredit', 'tax_g', 'mcap'];
 const LAB_TABS = [['overview', 'Projections'], ['data', 'Data and tests'], ['arima', 'ARIMA / SARIMA'], ['var', 'SVAR'], ['robust', 'Robustness and placebo'], ['dsge', 'DSGE'], ['world', 'World analysis'], ['refs', 'References']];
+const STD = {
+  infl: { lo: 2, hi: 6, txt: '2–6%', src: 'Reserve Bank of India target band (4% ± 2%), a common emerging-market benchmark' },
+  gdp: { lo: 0, txt: 'above 0%', src: 'Below zero the economy is contracting' },
+  cover: { lo: 3, txt: 'at least 3 months', src: 'IMF rule of thumb for reserve adequacy' },
+  crar: { lo: 12.5, txt: 'at least 12.5%', src: 'Basel III: 10% minimum plus 2.5% conservation buffer (BIS)' },
+  npl: { hi: 8, txt: 'at most 8%', src: 'European Banking Authority risk thresholds (above 8% is high risk)' },
+  credit: { lo: 0, hi: 20, txt: '0–20%', src: 'Credit-boom threshold of 20% a year (Dell’Ariccia and others, 2012, IMF)' },
+  real: { lo: 0, txt: 'above 0%', src: 'Negative real interest rates signal financial repression (McKinnon, 1973)' },
+  dep: { hi: 25, txt: 'below 25%', src: 'Currency-crash threshold (Frankel and Rose, 1996)' },
+  ca: { lo: -5, txt: 'deficit below 5% of GDP', src: 'Deficits above about 5% of GDP tend to precede adjustment (Freund, 2005)' }
+};
+const STDK = { infl: 'infl', infl_avg: 'infl', food: 'infl', nonfood: 'infl', gdp_q: 'gdp', gdp_fy: 'gdp', cover: 'cover', crar: 'crar', npl: 'npl', pcredit: 'credit', real_lend: 'real', xr_dep: 'dep', inflation: 'infl', gdp_growth: 'gdp', current_account: 'ca' };
+const stdOf = k => STD[STDK[k]] || null;
+function stdOut(rule, v) { return !!rule && v != null && isFinite(v) && ((rule.lo != null && v < rule.lo) || (rule.hi != null && v > rule.hi)); }
+function stdMsg(rule, v) { return (rule.lo != null && v < rule.lo ? 'Below' : 'Above') + ' benchmark (' + rule.txt + ')'; }
 const bdState = { tab: 'glance' }, labState = { tab: 'overview', arima: 'infl', shock: 3, fevd: 0, ci: '95', het: 0, desc_ci: '95' };
 let FIGN = 0;
 
@@ -88,6 +103,7 @@ function tsOption(TH, labels, series, o) {
       data: evs.map(e => [{ name: e[3], xAxis: e[1] }, { xAxis: labels.includes(e[2]) ? e[2] : labels[labels.length - 1] }]) };
   }
   if (o.marks && series[0]) series[0].markLine = { silent: true, symbol: 'none', label: { color: TH.muted, fontSize: 10, position: 'insideEndTop', formatter: p => p.name || '' }, lineStyle: { color: TH.muted, type: 'dashed', width: 1 }, data: o.marks };
+  series.forEach((sr, si) => { if (sr && sr._std) { const rule = sr._std; o.warn = (o.warn || []).concat([{ s: si, test: v => stdOut(rule, v), label: '', rule }]); delete sr._std; } });
   if (o.warn) o.warn.forEach(w => {
     const sr = series[w.s];
     if (!sr || !Array.isArray(sr.data)) return;
@@ -95,7 +111,7 @@ function tsOption(TH, labels, series, o) {
     let i = sr.data.length - 1;
     while (i >= 0 && vv(sr.data[i]) == null) i--;
     if (i < 0 || !w.test(vv(sr.data[i]))) return;
-    series.push(warnPoint(labels[i], vv(sr.data[i]), w.label, sr.yAxisIndex || 0));
+    series.push(warnPoint(labels[i], vv(sr.data[i]), w.rule ? stdMsg(w.rule, vv(sr.data[i])) : w.label, sr.yAxisIndex || 0));
   });
   const pal = o.pal || TH.pal;
   let anyEnd = false;
@@ -132,6 +148,7 @@ function S(name, data, o) {
   if (o.end) s._end = o.dec == null ? 1 : o.dec;
   if (o.stack) s.stack = o.stack;
   if (o.agg) s._agg = o.agg;
+  if (o.std) s._std = stdOf(o.std);
   return s;
 }
 function blinkOn() { return !RM && !document.documentElement.classList.contains('no-blink'); }
@@ -220,7 +237,7 @@ function figure(host, o) {
     chartOn(node, TH => { FSTATE = st; FWIDE = !!o.wide; try { return o.render(TH); } finally { FSTATE = null; FWIDE = false; } });
   } else chartOn(node, TH => { FWIDE = !!o.wide; try { return o.render(TH); } finally { FWIDE = false; } });
   const act = f.querySelector('.fig-act');
-  if (ALLOW_DL && STANDALONE) {
+  {
     act.append(smallBtn('Image', () => {
       const r = charts.get(node);
       if (!r || !r.inst) return;
@@ -230,6 +247,7 @@ function figure(host, o) {
       document.body.append(a); a.click(); a.remove();
     }));
     if (o.csv) act.append(smallBtn('Data (CSV)', () => blobSave(slug(o.title) + '.csv', toCsv(o.csv()), 'text/csv;charset=utf-8')));
+    act.querySelectorAll('button').forEach(b => b.classList.add('dl-btn'));
   }
   return f;
 }
@@ -293,13 +311,13 @@ function matrix(host, keys, caption, groupBy) {
     const dir = DIR[k] || 0;
     const pct = r.pct == null ? null : Math.max(0, Math.min(100, r.pct));
     html += '<tr><th scope="row"><span class="mx-l">' + esc(s.label) + '</span>' + (s.sub ? '<span class="mx-s">' + esc(s.sub) + '</span>' : '') + '<span class="mx-u">' + esc(s.unit) + '</span></th>' +
-      '<td>' + esc(r.period) + '</td><td class="num big"' + (pct == null ? '' : ' data-pct="' + pct + '"') + '>' + fv(s.unit, r.v) + '</td><td class="num">' + fv(s.unit, r.prev) + '</td>' + chg(s.unit, r.v, r.prev, dir) +
+      '<td>' + esc(r.period) + '</td><td class="num big' + (stdOut(stdOf(k), r.v) ? ' warn-std' : '') + '"' + (stdOut(stdOf(k), r.v) ? ' title="' + esc(stdMsg(stdOf(k), r.v) + ': ' + stdOf(k).src) + '"' : '') + (pct == null ? '' : ' data-pct="' + pct + '"') + '>' + fv(s.unit, r.v) + '</td><td class="num">' + fv(s.unit, r.prev) + '</td>' + chg(s.unit, r.v, r.prev, dir) +
       '<td class="num">' + fv(s.unit, r.ya) + '</td>' + chg(s.unit, r.v, r.ya, dir) + '<td class="num">' + fv(s.unit, r.avg) + '</td>' +
       '<td class="rngc">' + (pct == null ? '' : '<span class="rng" title="Percentile ' + nf(pct, 0) + ' of ' + r.n + ' observations"><i style="left:' + pct + '%"></i></span><span class="rng-l"><small>' + fv(s.unit, r.min) + '</small><small>' + fv(s.unit, r.max) + '</small></span>') + '</td>' +
       '<td class="spkc">' + spark(k) + '</td><td class="srcc"><span class="src-ag" title="' + esc('Series ' + s.src.map(x => x.code).join(', ')) + '">' + esc(srcKeys([k]).replace(/\.$/, '')) + '</span></td></tr>';
   });
   html += '</tbody>';
-  return tableWrap(host, html, caption, '▲▼ show the direction of change; green means a favourable move and red an unfavourable one (no colour where there is no clear “good” direction). “Range” marks the latest value within its full history, from minimum to maximum; hover a heading for its full name and a source for its series code.');
+  return tableWrap(host, html, caption, 'Blinking values are outside their international benchmark range (listed under Benchmarks on the At a glance page). ▲▼ show the direction of change; green means a favourable move and red an unfavourable one. “Range” marks the latest value within its full history, from minimum to maximum; hover a heading for its full name and a source for its series code.');
 }
 function modelMatrix(host, keys, caption) {
   const rows = keys.map(k => BD.arima[k]).filter(Boolean);
@@ -365,18 +383,26 @@ function renderBD() {
   ({ prices: bdPrices, real: bdReal, money: bdMoney, rates: bdRates, ext: bdExt, fiscal: bdFiscal, cap: bdCap })[c.id](body);
 }
 function bdGlance(body) {
-  const s = sec(body, 'Bangladesh at a glance', 'The latest reading of every headline indicator, grouped as in Bangladesh Bank’s Weekly Selected Economic Indicators. Select a group to open its full page.');
-  matrix(s, GLANCE, tcap('Headline indicators by sector'), true);
-  const e = BD.ensemble.path, a = BD.arima.infl;
-  const p = sec(body, 'Outlook', 'Statistical projections from the Forecast lab. These are model-based, not official forecasts.');
-  const g = grid(p);
-  infFan(g, true);
-  const keys = ['infl', 'xr', 'res', 'remit', 'exp', 'm2', 'pcredit', 'call'];
-  modelMatrix(p, keys, tcap('Model readings for headline indicators'));
-  const n = document.createElement('p');
-  n.className = 'note';
-  n.innerHTML = 'Inflation in 12 months: <b>' + nf(e[11].mean, 1) + '%</b> (80% interval ' + nf(e[11].lo80, 1) + '–' + nf(e[11].hi80, 1) + '%), from ' + nf(a.hist.v[a.hist.v.length - 1], 1) + '% now. Probability it is still above 8%: <b>' + nf(e[11].p_gt8 * 100, 0) + '%</b>. <button type="button" class="linklike" data-labtab="overview">Open the Forecast lab →</button>';
-  p.append(n);
+  const s1 = sec(body, 'Charts', 'The inflation outlook beside a map of Bangladesh.');
+  const top = document.createElement('div');
+  top.className = 'live-top';
+  s1.append(top);
+  const gl = document.createElement('div');
+  top.append(gl);
+  infFan(gl, true);
+  const mb = document.createElement('div');
+  mb.className = 'mapbox';
+  top.append(mb);
+  bdMapBox(mb);
+  const s2 = sec(body, 'Summary', 'The latest reading of every headline indicator, grouped as in Bangladesh Bank’s Weekly Selected Economic Indicators. Select a group to open its full page.');
+  matrix(s2, GLANCE, tcap('Headline indicators by sector'), true);
+  const s3 = sec(body, 'Country summary', 'Geography and people of Bangladesh.');
+  profileTable(s3, 'BGD', null);
+  const s4 = sec(body, 'Analysis', 'Model readings for the headline indicators.');
+  modelMatrix(s4, ['infl', 'xr', 'res', 'remit', 'exp', 'm2', 'pcredit', 'call'], tcap('Model readings for headline indicators'));
+  body.append(resultsSection(true));
+  const s6 = sec(body, 'Benchmarks', 'The international ranges behind the blinking warnings.');
+  benchTable(s6);
 }
 function infFan(host, compact) {
   const a = BD.arima.infl, e = BD.ensemble.path;
@@ -397,9 +423,9 @@ function infFan(host, compact) {
     notes: 'Projection combines ARIMA and SVAR forecasts with weights inversely proportional to their backtest mean squared errors (Bates and Granger, 1969). Bands use the backtest forecast-error spread at each horizon. Shaded periods mark major shocks.',
     source: srcKeys(['infl'], 'model'),
     csv: () => [['month', 'actual', 'projection', 'lower 80', 'upper 80', 'lower 95', 'upper 95'], ...labels.map((l, i) => [l, i < hV.length ? hV[i] : '', mean[i] == null ? '' : mean[i], lo80[i] == null ? '' : lo80[i], hi80[i] == null ? '' : hi80[i], lo95[i] == null ? '' : lo95[i], hi95[i] == null ? '' : hi95[i]])],
-    render: TH => tsOption(TH, labels, [S('Actual', [...hV, ...Array(fl.length).fill(null)], { color: TH.ink, w: 2.2 }),
+    render: TH => tsOption(TH, labels, [S('Actual', [...hV, ...Array(fl.length).fill(null)], { color: TH.ink, w: 2.2, std: 'infl' }),
       ...bandSeries('95% band', lo95, hi95, TH.pos, TH.dark ? 0.16 : 0.12, 'b95'), ...bandSeries('80% band', lo80, hi80, TH.pos, TH.dark ? 0.3 : 0.22, 'b80'),
-      S('Projection', mean, { color: TH.pos, dash: true, w: 2.2, end: true })], { y1: '%', dec: 2, marks: [{ yAxis: 8, name: '8%' }, { yAxis: 6, name: '6%' }], warn: [{ s: 0, test: v => v > 8, label: 'Above 8%' }] })
+      S('Projection', mean, { color: TH.pos, dash: true, w: 2.2, end: true })], { y1: '%', dec: 2, marks: [{ yAxis: 8, name: '8%' }, { yAxis: 6, name: '6%' }] })
   });
 }
 function bdPrices(body) {
@@ -408,8 +434,8 @@ function bdPrices(body) {
   const a = align(['infl', 'infl_avg'], M0(2010));
   figure(g, { title: 'Headline inflation', sub: '% year on year; point-to-point and 12-month average', notes: SER('infl').note,
     source: srcKeys(['infl', 'infl_avg']), csv: () => csvAligned(['infl', 'infl_avg'], M0(2010)),
-    render: TH => tsOption(TH, a.labels, [S('Point-to-point', a.cols[0], { color: TH.pal[0], end: true }), S('12-month average', a.cols[1], { color: TH.pal[1], dash: true, end: true })],
-      { y1: '%', zoom: true, warn: [{ s: 0, test: v => v > 8, label: 'Above 8%' }] }) });
+    render: TH => tsOption(TH, a.labels, [S('Point-to-point', a.cols[0], { color: TH.pal[0], end: true, std: 'infl' }), S('12-month average', a.cols[1], { color: TH.pal[1], dash: true, end: true })],
+      { y1: '%', zoom: true }) });
   const b = align(['food', 'nonfood'], M0(2010));
   figure(g, { title: 'Food and non-food inflation', sub: '% year on year, point-to-point', notes: 'The gap between the two lines shows whether price pressure is coming from food (supply, harvests, imports) or from broader non-food demand and costs. ' + SER('food').note,
     source: srcKeys(['food', 'nonfood']), csv: () => csvAligned(['food', 'nonfood'], M0(2010)),
@@ -459,13 +485,13 @@ function bdMoney(body) {
   const g = grid(s);
   const a = align(['m2', 'rm', 'pcredit'], M0(2010));
   figure(g, { title: 'Money and private credit growth', sub: '% year on year', notes: 'Year-on-year growth calculated from end-month stocks.', source: srcKeys(['m2', 'rm', 'pcredit'], true), csv: () => csvAligned(['m2', 'rm', 'pcredit'], M0(2010)),
-    render: TH => tsOption(TH, a.labels, [S('Broad money (M2)', a.cols[0], { end: true }), S('Reserve money', a.cols[1], { dash: true }), S('Private sector credit', a.cols[2], { end: true, color: TH.pal[6] })], { y1: '% y/y', zoom: true, zoomFrom: '2016-01' }) });
+    render: TH => tsOption(TH, a.labels, [S('Broad money (M2)', a.cols[0], { end: true }), S('Reserve money', a.cols[1], { dash: true }), S('Private sector credit', a.cols[2], { end: true, color: TH.pal[6], std: 'pcredit' })], { y1: '% y/y', zoom: true, zoomFrom: '2016-01' }) });
   const b = align(['cdr'], M0(2010));
   figure(g, { title: 'Credit–deposit ratio of banks', sub: '%', notes: 'Above 100% banks are lending more than they hold in deposits and must rely on other funding.', source: srcKeys(['cdr']), csv: () => csvAligned(['cdr'], M0(2010)),
     render: TH => tsOption(TH, b.labels, [S('Credit–deposit ratio', b.cols[0], { area: 0.08, end: true })], { y1: '%', scale: true, marks: [{ yAxis: 100, name: '100%' }] }) });
   const c = align(['npl', 'crar']);
   figure(g, { title: 'Bank soundness: bad loans and capital', sub: 'deposit takers, % (quarterly)', notes: 'Bars: non-performing loans as a share of gross loans. Line: regulatory capital to risk-weighted assets; the dashed line marks 12.5% (10% minimum plus the 2.5% conservation buffer under Basel III).', source: srcKeys(['npl', 'crar']),
-    csv: () => csvAligned(['npl', 'crar']), render: TH => tsOption(TH, c.labels, [Object.assign(S('Non-performing loans', c.cols[0], { bar: true, color: TH.neg }), {}), Object.assign(S('Capital ratio (right)', c.cols[1], { ax: 1, color: TH.pos, w: 2.4, end: true }), { markLine: { symbol: 'none', silent: true, lineStyle: { type: 'dashed', color: TH.pos }, label: { formatter: '12.5%', color: TH.muted, fontSize: 10 }, data: [{ yAxis: 12.5 }] } })], { y1: '% of loans', y2: '% of RWA', bar: true, warn: [{ s: 1, test: v => v < 12.5, label: 'Capital below 12.5%' }, { s: 0, test: v => v > 10, label: 'Bad loans above 10%' }] }) });
+    csv: () => csvAligned(['npl', 'crar']), render: TH => tsOption(TH, c.labels, [Object.assign(S('Non-performing loans', c.cols[0], { bar: true, color: TH.neg, std: 'npl' }), {}), Object.assign(S('Capital ratio (right)', c.cols[1], { ax: 1, color: TH.pos, w: 2.4, end: true, std: 'crar' }), { markLine: { symbol: 'none', silent: true, lineStyle: { type: 'dashed', color: TH.pos }, label: { formatter: '12.5%', color: TH.muted, fontSize: 10 }, data: [{ yAxis: 12.5 }] } })], { y1: '% of loans', y2: '% of RWA', bar: true }) });
 }
 function bdRates(body) {
   const s = sec(body, 'Charts');
@@ -475,7 +501,7 @@ function bdRates(body) {
     render: TH => tsOption(TH, a.labels, [S('Call money', a.cols[0], { end: true }), S('Lending rate', a.cols[1], { end: true }), S('Deposit rate', a.cols[2], { end: true }), S('Bank rate', a.cols[3], { dash: true, step: 'end' })], { y1: '%', zoom: true }) });
   const r = align(['real_lend', 'spread'], M0(2010));
   figure(g, { title: 'Real lending rate and the spread', sub: 'percentage points', notes: SER('real_lend').note + ' Negative real rates mean borrowers repay less in real terms than they borrowed.', source: srcKeys(['real_lend', 'spread'], true),
-    csv: () => csvAligned(['real_lend', 'spread'], M0(2010)), render: TH => tsOption(TH, r.labels, [S('Real lending rate', signBars(r.cols[0], TH), { bar: true }), S('Lending–deposit spread', r.cols[1], { color: TH.ink2, end: true })], { y1: 'pp', bar: true, zoom: true, warn: [{ s: 0, test: v => v < 0, label: 'Negative real rate' }] }) });
+    csv: () => csvAligned(['real_lend', 'spread'], M0(2010)), render: TH => tsOption(TH, r.labels, [S('Real lending rate', signBars(r.cols[0], TH), { bar: true, std: 'real' }), S('Lending–deposit spread', r.cols[1], { color: TH.ink2, end: true })], { y1: 'pp', bar: true, zoom: true }) });
   modelMatrix(body, ['call'], tcap('Model reading: call money rate'));
 }
 function bdExt(body) {
@@ -486,7 +512,7 @@ function bdExt(body) {
     render: TH => tsOption(TH, a.labels, [S('Taka per US$', a.cols[0], { color: TH.ink, w: 2.4, end: true }), S('Depreciation (right)', signBars(a.cols[1], TH).map(x => x && Object.assign(x, { itemStyle: { color: x.value > 0 ? TH.neg : TH.pos } })), { bar: true, ax: 1 })], { y1: 'Tk/US$', y2: '% y/y', scale: true, zoom: true }) });
   const b = align(['res', 'res_bpm6', 'cover'], M0(2010));
   figure(g, { title: 'Foreign exchange reserves and import cover', sub: 'US$ million (left); months of imports (right)', notes: SER('cover').note + ' ' + SER('imp').note, source: srcKeys(['res', 'res_bpm6', 'imp'], true), csv: () => csvAligned(['res', 'res_bpm6', 'cover'], M0(2010)),
-    render: TH => tsOption(TH, b.labels, [S('Gross reserves', b.cols[0], { area: 0.1, end: true, dec: 0, agg: 'last' }), S('BPM6 reserves', b.cols[1], { end: true, dec: 0, agg: 'last' }), Object.assign(S('Import cover (right)', b.cols[2], { ax: 1, dash: true, color: TH.pal[6] }), { markLine: { symbol: 'none', silent: true, lineStyle: { type: 'dotted', color: TH.pal[6] }, label: { formatter: '3 months', color: TH.muted, fontSize: 10 }, data: [{ yAxis: 3 }] } })], { y1: 'US$ mn', y2: 'months', zoom: true, dec: 1, warn: [{ s: 2, test: v => v < 3, label: 'Below 3 months' }] }) });
+    render: TH => tsOption(TH, b.labels, [S('Gross reserves', b.cols[0], { area: 0.1, end: true, dec: 0, agg: 'last' }), S('BPM6 reserves', b.cols[1], { end: true, dec: 0, agg: 'last' }), Object.assign(S('Import cover (right)', b.cols[2], { ax: 1, dash: true, color: TH.pal[6], std: 'cover' }), { markLine: { symbol: 'none', silent: true, lineStyle: { type: 'dotted', color: TH.pal[6] }, label: { formatter: '3 months', color: TH.muted, fontSize: 10 }, data: [{ yAxis: 3 }] } })], { y1: 'US$ mn', y2: 'months', zoom: true, dec: 1 }) });
   const r = align(['remit', 'remit_g'], M0(2012));
   figure(g, { title: 'Remittances', sub: 'US$ million a month (bars) and % year on year (line)', source: srcKeys(['remit'], true), csv: () => csvAligned(['remit', 'remit_g'], M0(2012)),
     render: TH => tsOption(TH, r.labels, [S('Remittances', r.cols[0], { bar: true, color: TH.pal[2] }), S('Growth (right)', r.cols[1], { ax: 1, color: TH.ink, w: 1.6 })], { y1: 'US$ mn', y2: '% y/y', bar: true, zoom: true, zoomFrom: '2019-01', dec: 1 }) });
@@ -939,8 +965,21 @@ function labRefs(body) {
     'Mankiw, N. G., Romer, D., & Weil, D. N. (1992). A contribution to the empirics of economic growth. Quarterly Journal of Economics, 107(2), 407–437.',
     'Sims, C. A. (1980). Macroeconomics and reality. Econometrica, 48(1), 1–48.',
     'Sims, C. A. (1992). Interpreting the macroeconomic time series facts: The effects of monetary policy. European Economic Review, 36(5), 975–1000.',
-    'Taylor, J. B. (1993). Discretion versus policy rules in practice. Carnegie-Rochester Conference Series on Public Policy, 39, 195–214.'];
-  const D = ['Bangladesh Bank. Monthly Economic Trends (September 2026 edition and earlier editions back to 2009). Tables IA, IB, IIA, IID, IV, VII, VIII, XVI, XVIII, XXIII, XXVII and others, as cited under each figure.',
+    'Taylor, J. B. (1993). Discretion versus policy rules in practice. Carnegie-Rochester Conference Series on Public Policy, 39, 195–214.',
+    'Dell’Ariccia, G., Igan, D., Laeven, L., Tong, H., Bakker, B., & Vandenbussche, J. (2012). Policies for macrofinancial stability: How to deal with credit booms. IMF Staff Discussion Note 12/06.',
+    'Frankel, J. A., & Rose, A. K. (1996). Currency crashes in emerging markets: An empirical treatment. Journal of International Economics, 41(3–4), 351–366.',
+    'Freund, C. (2005). Current account adjustment in industrial countries. Journal of International Money and Finance, 24(8), 1278–1298.',
+    'McKinnon, R. I. (1973). Money and Capital in Economic Development. Brookings Institution.'];
+  const D = ['International Monetary Fund (IMF). IMF Data. https://www.imf.org/en/Data',
+    'World Bank. World Development Indicators (CC BY 4.0). https://data.worldbank.org',
+    'Asian Development Bank (ADB). Key Indicators Database. https://kidb.adb.org',
+    'Regional development banks: African Development Bank (https://www.afdb.org), Inter-American Development Bank (https://www.iadb.org), European Bank for Reconstruction and Development (https://www.ebrd.com), European Investment Bank (https://www.eib.org), Asian Infrastructure Investment Bank (https://www.aiib.org).',
+    'Central banks of every country: Bank for International Settlements, directory of central bank websites. https://www.bis.org/cbanks.htm',
+    'National statistics offices of every country: United Nations Statistics Division, directory of national statistical offices. https://unstats.un.org/home/nso_sites/',
+    'Bangladesh Bureau of Statistics (BBS). https://bbs.gov.bd',
+    'Finance Division, Ministry of Finance, Bangladesh. https://mof.gov.bd',
+    'Natural Earth. Free vector map data (public domain). https://www.naturalearthdata.com',
+    'Bangladesh Bank. Monthly Economic Trends (September 2026 edition and earlier editions back to 2009). Tables IA, IB, IIA, IID, IV, VII, VIII, XVI, XVIII, XXIII, XXVII and others, as cited under each figure.',
     'Bangladesh Bank. National Summary Data Page (NSDP) for the IMF Enhanced General Data Dissemination System: balance of payments (BPM6), financial soundness indicators and related tables.',
     'Bangladesh Bureau of Statistics (BBS). Consumer price index and national accounts, as published in Bangladesh Bank’s Monthly Economic Trends.',
     'World Bank. World Development Indicators. Licensed under CC BY 4.0.',
@@ -1022,7 +1061,8 @@ function pillify(tbl, opt) {
     const heat = (opt.heat === 'col' || opt.all) && sorted.length >= 4 && !/^\s*#|rank/.test(h) && !pMode;
     cells.forEach(([c, v]) => {
       let col = null, warn = false;
-      if (c.classList.contains('up-bad')) { col = BADC; warn = true; }
+      if (c.classList.contains('warn-std')) { col = BADC; warn = true; }
+      else if (c.classList.contains('up-bad')) col = BADC;
       else if (c.classList.contains('up-good')) col = GOODC;
       else if (c.hasAttribute('data-pct')) col = SEQ[Math.round(Math.max(0, Math.min(100, +c.getAttribute('data-pct'))) / 100 * (SEQ.length - 1))];
       else if (pMode) col = v < 0.01 ? SEQ[6] : v < 0.05 ? SEQ[5] : v < 0.1 ? SEQ[3] : SEQ[0];
@@ -1075,13 +1115,15 @@ function ownerOK() { return OWNER.state === 'yes'; }
 async function sha256hex(t) { const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return [...new Uint8Array(d)].map(x => x.toString(16).padStart(2, '0')).join(''); }
 async function checkOwner() {
   if (OWNER.state !== 'checking') return;
-  const want = AUTH.cfg && AUTH.cfg.owner;
+  const want = window.MM_OWNERH || (AUTH.cfg && AUTH.cfg.owner);
   let saved = null;
   try { saved = localStorage.getItem('mm.owner'); } catch (e) { /* private mode */ }
   const code = OWNER.fromUrl || saved;
   let ok = false;
   try { ok = !!(want && code && crypto.subtle && (await sha256hex(code)) === want); } catch (e) { ok = false; }
   OWNER.state = ok ? 'yes' : 'no';
+  document.documentElement.classList.toggle('owner', ok);
+  if (!ok) addWatermark();
   if (ok) { try { localStorage.setItem('mm.owner', code); } catch (e) { /* private mode */ } if (OWNER.fromUrl) toast('Owner pass saved: this device no longer needs to sign in.'); }
   else { try { localStorage.removeItem('mm.owner'); } catch (e) { /* private mode */ } if (OWNER.fromUrl) toast('That owner link isn’t valid.'); }
   renderAcct();
@@ -1150,7 +1192,8 @@ function saveUser(u) {
 function renderAcct() {
   const b = $('#acct-btn');
   if (!b) return;
-  b.hidden = !authActive();
+  b.hidden = !authActive() && !ownerOK();
+  const rf = $('#acct-refresh'); if (rf) rf.hidden = !ownerOK();
   const u = AUTH.user;
   b.classList.toggle('own', ownerOK());
   if (ownerOK() && !u) { b.textContent = 'Owner'; b.classList.remove('in'); b.setAttribute('aria-label', 'Owner pass is on for this device'); $('#acct-name').textContent = 'Owner pass'; $('#acct-email').textContent = 'This device opens every page without signing in, and isn’t tracked.'; return; }
@@ -1180,9 +1223,34 @@ async function deleteAccount() {
   } catch (e) { toast('That didn’t work. Please try again.'); }
 }
 function loadScript(src) { return new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = no; document.head.append(sc); }); }
+let ACCT_BOUND = false;
+function bindAcct() {
+  if (ACCT_BOUND || !$('#acct-btn')) return;
+  ACCT_BOUND = true;
+  $('#acct-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    if (!AUTH.user && !ownerOK()) { AUTH.pending = null; showGate(AUTH.ready ? 'signin' : 'wait'); return; }
+    $('#acct-out').textContent = AUTH.user ? 'Sign out' : 'Turn off the owner pass on this device';
+    $('#acct-del').hidden = !AUTH.user;
+    const m = $('#acct-menu'), open = m.hidden;
+    if (open) { const rr = $('#acct-btn').getBoundingClientRect(); m.style.top = (rr.bottom + 8) + 'px'; m.style.right = Math.max(8, window.innerWidth - rr.right) + 'px'; }
+    m.hidden = !open; $('#acct-btn').setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('#acct-menu')) closeMenu(); });
+  $('#acct-out').addEventListener('click', () => {
+    closeMenu();
+    if (AUTH.user) { if (AUTH.fb) AUTH.fb.signOut(); return; }
+    if (ownerOK()) { OWNER.state = 'no'; document.documentElement.classList.remove('owner'); addWatermark(); try { localStorage.removeItem('mm.owner'); } catch (e) { /* private mode */ } renderAcct(); toast('Owner pass turned off on this device.'); if (authActive() && !PUBLIC_VIEWS.includes(curView())) go('overview'); }
+  });
+  $('#acct-del').addEventListener('click', () => { closeMenu(); deleteAccount(); });
+}
+async function initOwner() {
+  bindAcct();
+  if (OWNER.state === 'checking') await checkOwner(); else addWatermark();
+  renderAcct();
+}
 async function initAuth() {
   if (!authActive()) return;
-  checkOwner();
   $$('[data-auth-only]').forEach(n => { n.hidden = false; });
   $$('[data-auth-off]').forEach(n => { n.hidden = true; });
   renderAcct();
@@ -1191,22 +1259,7 @@ async function initAuth() {
   $('#gate-back').addEventListener('click', () => { AUTH.pending = null; hideGate(); go('overview'); });
   $('#gate-privacy').addEventListener('click', e => { e.preventDefault(); AUTH.pending = null; hideGate(); go('privacy'); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#gate').hidden) { AUTH.pending = null; hideGate(); go('overview'); } });
-  $('#acct-btn').addEventListener('click', e => {
-    e.stopPropagation();
-    if (!AUTH.user && !ownerOK()) { AUTH.pending = null; showGate(AUTH.ready ? 'signin' : 'wait'); return; }
-    $('#acct-out').textContent = AUTH.user ? 'Sign out' : 'Turn off the owner pass on this device';
-    $('#acct-del').hidden = !AUTH.user;
-    const m = $('#acct-menu'), open = m.hidden;
-    if (open) { const r = $('#acct-btn').getBoundingClientRect(); m.style.top = (r.bottom + 8) + 'px'; m.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; }
-    m.hidden = !open; $('#acct-btn').setAttribute('aria-expanded', String(open));
-  });
-  document.addEventListener('click', e => { if (!e.target.closest('#acct-menu')) closeMenu(); });
-  $('#acct-out').addEventListener('click', () => {
-    closeMenu();
-    if (AUTH.user) { if (AUTH.fb) AUTH.fb.signOut(); return; }
-    if (ownerOK()) { OWNER.state = 'no'; try { localStorage.removeItem('mm.owner'); } catch (e) { /* private mode */ } renderAcct(); toast('Owner pass turned off on this device.'); if (!PUBLIC_VIEWS.includes(curView())) go('overview'); }
-  });
-  $('#acct-del').addEventListener('click', () => { closeMenu(); deleteAccount(); });
+  bindAcct();
   try {
     const v = AUTH.cfg.sdk || '10.12.2';
     for (const src of SDK(v)) await loadScript(src);
@@ -1236,6 +1289,206 @@ async function initAuth() {
     AUTH.err = 'Sign-in couldn’t load. Check your connection, then reload the page.';
     if (AUTH.pending) showGate('error');
   }
+}
+
+/* ---------- Maps (Natural Earth) and country profiles (World Bank) ---------- */
+const MAPS = { data: window.MM_MAPS || null, p: null };
+function loadMaps() {
+  if (MAPS.data) return Promise.resolve(MAPS.data);
+  if (!MAPS.p) MAPS.p = fetch('maps.json', { cache: 'force-cache' }).then(x => { if (!x.ok) throw new Error(String(x.status)); return x.json(); }).then(d => (MAPS.data = d));
+  return MAPS.p;
+}
+const EMAPB = () => { if (!EMAPB.m) { EMAPB.m = {}; RAW.econ.forEach(e => { EMAPB.m[e[0]] = e; }); } return EMAPB.m; };
+function projFor(b, W, H, pad) {
+  const lat0 = (b[1] + b[3]) / 2, k = Math.cos(lat0 * Math.PI / 180) || 1;
+  const w = Math.max((b[2] - b[0]) * k, 1e-6), hh = Math.max(b[3] - b[1], 1e-6);
+  const sc = Math.min((W - 2 * pad) / w, (H - 2 * pad) / hh);
+  const ox = (W - w * sc) / 2, oy = (H - hh * sc) / 2;
+  return { f: (lon, lat) => [ox + (lon - b[0]) * k * sc, oy + (b[3] - lat) * sc], sc, k };
+}
+const shiftLon = (lon, on) => (on && lon < 0 ? lon + 360 : lon);
+function ringsPath(rings, P, sh) { return rings.map(rg => 'M' + rg.map(c => { const q = P.f(shiftLon(c[0], sh), c[1]); return q[0].toFixed(1) + ',' + q[1].toFixed(1); }).join('L') + 'Z').join(''); }
+function geoOf(c) {
+  if (c.b[2] - c.b[0] < 300) return { b: c.b, sh: false };
+  let mn = 999, mx = -999;
+  c.r.forEach(rg => rg.forEach(pt => { const x = shiftLon(pt[0], true); if (x < mn) mn = x; if (x > mx) mx = x; }));
+  return { b: [mn, c.b[1], mx, c.b[3]], sh: true };
+}
+function niceKm(km) { const steps = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000]; return steps.reduce((best, s) => (Math.abs(s - km) < Math.abs(best - km) ? s : best), steps[0]); }
+function countrySVG(iso, M) {
+  const c = M.c[iso];
+  if (!c) return '';
+  const EM = EMAPB(), G = geoOf(c), W = 640, H = 420, P = projFor(G.b, W, H, 28), uid = 'm' + iso;
+  let sv = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="cmap" role="img" aria-label="' + esc('Map of ' + ((EM[iso] || [])[1] || iso)) + '">';
+  sv += '<defs><linearGradient id="' + uid + 'g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#63B3D1"/><stop offset="1" stop-color="#1B5185"/></linearGradient>' +
+    '<filter id="' + uid + 's" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0E1C2B" flood-opacity=".28"/></filter></defs>';
+  sv += '<rect class="sea" width="' + W + '" height="' + H + '" rx="14"/>';
+  (c.nb || []).forEach(n => { const m = M.c[n]; if (m) sv += '<path class="nbr" d="' + ringsPath(m.r, P, G.sh) + '"><title>' + esc((EM[n] || [])[1] || n) + '</title></path>'; });
+  sv += '<path class="ctry" d="' + ringsPath(c.r, P, G.sh) + '" fill="url(#' + uid + 'g)" fill-rule="evenodd" filter="url(#' + uid + 's)"><title>' + esc((EM[iso] || [])[1] || iso) + '</title></path>';
+  const placed = [];
+  const lab = (x, y, t, cls) => { if (placed.some(q => Math.abs(q[0] - x) < 70 && Math.abs(q[1] - y) < 16)) return ''; placed.push([x, y]); return '<text x="' + (x + 8).toFixed(1) + '" y="' + (y + 4).toFixed(1) + '" class="' + cls + '">' + esc(t) + '</text>'; };
+  if (c.cap) { const q = P.f(shiftLon(c.cap[1], G.sh), c.cap[2]); sv += '<path class="capm" d="' + starPath(q[0], q[1], 8, 3.6) + '"/>' + lab(q[0], q[1], c.cap[0], 'capl'); }
+  (c.top || []).forEach(ct => { const q = P.f(shiftLon(ct[1], G.sh), ct[2]); if (q[0] < 0 || q[0] > W || q[1] < 0 || q[1] > H) return; sv += '<circle class="citym" cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="3.6"/>' + lab(q[0], q[1], ct[0], 'cityl'); });
+  const kmPx = P.sc / 111.32, km = niceKm(120 / kmPx), px = km * kmPx;
+  sv += '<g class="scale" transform="translate(22,' + (H - 26) + ')"><rect width="' + px.toFixed(1) + '" height="5" rx="2"/><text y="-6">' + km.toLocaleString('en-US') + ' km</text></g>';
+  if (RAW.geo && RAW.geo.p) {
+    const gw = RAW.geo.w || 1000, gh = RAW.geo.h || 500, ss = 150 / gw;
+    sv += '<g class="inset" transform="translate(' + (W - 162) + ',12)"><rect x="-6" y="-6" width="' + (gw * ss + 12).toFixed(0) + '" height="' + (gh * ss + 12).toFixed(0) + '" rx="8"/><g transform="scale(' + ss.toFixed(4) + ')">' +
+      RAW.geo.p.map(pp => '<path d="' + pp[1] + '" class="' + (pp[0] === iso ? 'on' : '') + '"/>').join('') + '</g></g>';
+  }
+  return sv + '</svg>';
+}
+function starPath(cx, cy, R, r) { let d = ''; for (let i = 0; i < 10; i++) { const a = Math.PI / 5 * i - Math.PI / 2, rr = i % 2 ? r : R; d += (i ? 'L' : 'M') + (cx + rr * Math.cos(a)).toFixed(1) + ',' + (cy + rr * Math.sin(a)).toFixed(1); } return d + 'Z'; }
+const PROF_DEF = [['population', 'Population', 'million people', 2], ['area', 'Surface area', 'km²', 0], ['land', 'Land area', 'km²', 0], ['density', 'Population density', 'people per km² of land', 2], ['urban', 'Urban population', '% of total', 2],
+  ['life', 'Life expectancy at birth', 'years', 2], ['fert', 'Fertility rate', 'births per woman', 2], ['birth', 'Birth rate', 'per 1,000 people', 2], ['young', 'Aged 0–14', '% of population', 2], ['old', 'Aged 65 and over', '% of population', 2],
+  ['female', 'Female population', '% of total', 2], ['literacy', 'Adult literacy', '% of people 15+', 2], ['elec', 'Access to electricity', '% of population', 2], ['u5mort', 'Under-5 mortality', 'per 1,000 live births', 2],
+  ['infmort', 'Infant mortality', 'per 1,000 live births', 2], ['forest', 'Forest area', '% of land', 2], ['agri', 'Agricultural land', '% of land', 2]];
+function profileTable(host, iso, M) {
+  const EM = EMAPB(), e = EM[iso] || [], P = (RAW.prof || {})[iso] || {}, c = M && M.c[iso];
+  let html = '<thead><tr><th scope="col">Indicator</th><th scope="col" class="num">Value</th><th scope="col">Unit</th><th scope="col">Year</th></tr></thead><tbody>';
+  const facts = [];
+  if (c && c.cap) facts.push(['Capital', esc(c.cap[0])]);
+  if (e[3]) facts.push(['Region', esc(e[3] + (e[4] ? ' · ' + e[4] : ''))]);
+  if (c) {
+    const G = geoOf(c), lat = (c.b[1] + c.b[3]) / 2;
+    let lon = (G.b[0] + G.b[2]) / 2;
+    if (lon > 180) lon -= 360;
+    facts.push(['Centre', Math.abs(lat).toFixed(2) + '° ' + (lat >= 0 ? 'N' : 'S') + ', ' + Math.abs(lon).toFixed(2) + '° ' + (lon >= 0 ? 'E' : 'W')]);
+    facts.push(['Extent', nf((G.b[3] - G.b[1]) * 111.32, 0) + ' km north–south, ' + nf((G.b[2] - G.b[0]) * 111.32 * Math.cos(lat * Math.PI / 180), 0) + ' km east–west (approx.)']);
+    facts.push(['Borders', c.nb && c.nb.length ? c.nb.map(n => '<a href="#country-' + n + '">' + esc((EM[n] || [])[1] || n) + '</a>').join(', ') : 'No land borders']);
+    if (c.top && c.top.length) facts.push(['Largest other cities', esc(c.top.map(t => t[0]).join(', '))]);
+  }
+  facts.forEach(f => { html += '<tr><th scope="row">' + f[0] + '</th><td colspan="3">' + f[1] + '</td></tr>'; });
+  const popL = latestOf('population', iso);
+  PROF_DEF.forEach(([k, lab, unit, d]) => {
+    const x = k === 'population' ? popL : P[k] ? [P[k][0], P[k][1]] : null;
+    if (!x) return;
+    html += '<tr><th scope="row">' + esc(lab) + '</th><td class="num">' + nf(x[1], d) + '</td><td>' + esc(unit) + '</td><td>' + x[0] + '</td></tr>';
+  });
+  tableWrap(host, html + '</tbody>', '<span class="fig-n">Profile</span>' + esc('Geography and people: ' + (e[1] || iso)), 'Latest year available for each figure. Extent is approximate, measured from the map outline.', { src: 'World Bank; map: Natural Earth.' });
+}
+function renderGeo(iso) {
+  const host = $('#c-geo');
+  if (!host || !RAW.econ) return;
+  host.innerHTML = '<div class="block-head"><h2>Geography and people</h2><p class="note">Where the economy is, who lives there and how they live. Tap a neighbour to open its profile.</p></div><div class="geo-grid"><div class="geo-map" id="c-geo-map"><p class="note">Loading map…</p></div><div class="geo-prof" id="c-geo-prof"></div></div>';
+  const done = M => { const mp = $('#c-geo-map'); if (!mp) return; const svg = M ? countrySVG(iso, M) : ''; mp.innerHTML = svg ? svg + '<p class="src-line"><b>Source:</b> Natural Earth.</p>' : '<p class="note">' + (M ? 'No map outline is available for this economy.' : 'The map opens on macroarianalytics.com.') + '</p>'; $('#c-geo-prof').innerHTML = ''; profileTable($('#c-geo-prof'), iso, M); };
+  profileTable($('#c-geo-prof'), iso, null);
+  loadMaps().then(done).catch(() => done(null));
+}
+const DIVC = ['#7BC8A4', '#F2C14E', '#F78154', '#5FAD56', '#4D9DE0', '#E15554', '#B07BAC', '#3BB273'];
+function bdMapSVG(B) {
+  const W = 520, H = 600, P = projFor([87.85, 20.55, 92.75, 26.75], W, H, 10);
+  let sv = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="bdmap" role="img" aria-label="Map of Bangladesh with its divisions, main rivers and cities">';
+  sv += '<defs><filter id="bdsh" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0E1C2B" flood-opacity=".3"/></filter><linearGradient id="bdsea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D7ECF6"/><stop offset="1" stop-color="#9FD0E8"/></linearGradient></defs>';
+  sv += '<rect width="' + W + '" height="' + H + '" rx="16" fill="url(#bdsea)" class="bdsea"/>';
+  (B.nb || []).forEach(n => { sv += '<path class="bdnb" d="' + ringsPath(n.r, P, false) + '"><title>' + esc(n.n) + '</title></path>'; });
+  sv += '<g filter="url(#bdsh)">' + B.div.map((d, i) => '<path class="bddiv" style="fill:' + DIVC[i % DIVC.length] + '" d="' + ringsPath(d.r, P, false) + '"><title>' + esc(({ Chittagong: 'Chattogram', Barisal: 'Barishal' }[d.n] || d.n) + ' Division') + '</title></path>').join('') + '</g>';
+  (B.rv || []).forEach(rv => { sv += '<path class="bdriv" d="M' + rv.l.map(c => P.f(c[0], c[1]).map(v => v.toFixed(1)).join(',')).join('L') + '"><title>' + esc(rv.n || 'River') + '</title></path>'; });
+  const OFF = { Chittagong: 'Chattogram', Barisal: 'Barishal' };
+  B.div.forEach(d => { const q = P.f(d.c[0], d.c[1]); sv += '<text class="bddivl" x="' + q[0].toFixed(1) + '" y="' + q[1].toFixed(1) + '">' + esc(OFF[d.n] || d.n) + '</text>'; });
+  (B.city || []).slice(0, 7).forEach(ct => { const q = P.f(ct[1], ct[2]); sv += ct[0] === 'Dhaka' ? '<path class="capm" d="' + starPath(q[0], q[1], 9, 4) + '"/><text class="capl" x="' + (q[0] + 10).toFixed(1) + '" y="' + (q[1] + 16).toFixed(1) + '">Dhaka</text>' : '<circle class="citym" cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="3.4"/>'; });
+  const bay = P.f(90.2, 21.05), ind = P.f(88.25, 25.9), mya = P.f(92.45, 21.3);
+  sv += '<text class="bdsea-l" x="' + bay[0].toFixed(1) + '" y="' + bay[1].toFixed(1) + '">Bay of Bengal</text><text class="bdnb-l" x="' + ind[0].toFixed(1) + '" y="' + ind[1].toFixed(1) + '">INDIA</text><text class="bdnb-l" x="' + mya[0].toFixed(1) + '" y="' + mya[1].toFixed(1) + '">MYANMAR</text>';
+  return sv + '</svg>';
+}
+function bdMapBox(host) {
+  const B = window.MM_BDMAP;
+  if (!host || !B) return;
+  const P = (RAW.prof || {}).BGD || {}, pop = latestOf('population', 'BGD');
+  const fact = (k, v) => '<div class="bdf"><span>' + k + '</span><b>' + v + '</b></div>';
+  host.innerHTML = '<div class="mapbox-head"><h3>Bangladesh</h3><a class="mapbox-link" href="#country-BGD">Geography and people →</a></div>' + bdMapSVG(B) +
+    '<div class="bdfacts">' + fact('Capital', 'Dhaka') + (pop ? fact('Population', nf(pop[1], 2) + ' million') : '') + (P.area ? fact('Area', nf(P.area[1], 0) + ' km²') : '') + (P.density ? fact('Density', nf(P.density[1], 2) + ' per km²') : '') + (P.urban ? fact('Urban', nf(P.urban[1], 2) + '%') : '') + (P.life ? fact('Life expectancy', nf(P.life[1], 2) + ' years') : '') + '</div>' +
+    '<p class="mx-note">' + esc(B.note) + ' Tap a division for its name.</p><p class="src-line"><b>Source:</b> World Bank; map: Natural Earth.</p>';
+}
+
+/* ---------- Results and conclusions (written from the model results) ---------- */
+let PEER_RANKS = {};
+function resultsCards(bdOnly) {
+  const e = BD.ensemble.path, a = BD.arima.infl, V = BD.var, R = BD.robust, Wd = BD.world;
+  const now = a.hist.v[a.hist.v.length - 1], f12 = e[e.length - 1];
+  const gp = i => ((V.granger.find(x => x.effect === 0 && x.cause === i)) || {}).p;
+  const sig = p => p != null && p < 0.05;
+  const npl = SER('npl').reading, crar = SER('crar').reading, cov = SER('cover').reading;
+  const sb = R.subsamples || [], s0 = sb[0] || {}, s1 = sb[1] || {};
+  const after = [['the call money rate', 'g_call_p'], ['Taka depreciation', 'g_xr_p'], ['money growth', 'g_m2_p']].filter(([, k]) => s1[k] < 0.05 && !(s0[k] < 0.05)).map(x => x[0]);
+  const before = [['the call money rate', 'g_call_p'], ['Taka depreciation', 'g_xr_p'], ['money growth', 'g_m2_p']].filter(([, k]) => s0[k] < 0.05 && !(s1[k] < 0.05)).map(x => x[0]);
+  const C = [];
+  C.push({ t: 'Inflation outlook', big: nf(f12.mean, 2) + '%', s: 'Projected for ' + fmtPeriod(mLabAdd(BD.ensemble.start, e.length - 1)) + ', from ' + nf(now, 2) + '% now (80% range ' + nf(f12.lo80, 2) + '–' + nf(f12.hi80, 2) + '%). The benchmark band is 2–6%; the chance inflation is still above 8% is ' + nf(f12.p_gt8 * 100, 2) + '%.', go: '#lab~overview', bad: stdOut(STD.infl, f12.mean) });
+  C.push({ t: 'What moves prices', big: sig(gp(2)) ? 'Interest rates' : sig(gp(3)) ? 'The Taka' : 'Own momentum', s: 'The call money rate ' + (sig(gp(2)) ? 'helps' : 'does not help') + ' predict inflation (p = ' + fp(gp(2)) + '); Taka depreciation ' + (sig(gp(3)) ? 'helps' : 'adds little') + ' (p = ' + fp(gp(3)) + '); money growth ' + (sig(gp(1)) ? 'helps' : 'adds little') + ' (p = ' + fp(gp(1)) + ').', go: '#lab~var' });
+  if (after.length || before.length) C.push({ t: 'A change since 2020', big: 'Regime shift', s: (after.length ? 'Since 2020, ' + after.join(' and ') + ' predict' + (after.length > 1 ? '' : 's') + ' inflation. ' : '') + (before.length ? 'Before 2020, ' + before.join(' and ') + ' did, but no longer does.' : ''), go: '#lab~robust' });
+  if (npl && crar) C.push({ t: 'Banking stress', big: nf(npl.v, 2) + '%', s: 'Bad loans as a share of all loans (' + fmtPeriod(npl.period) + '), against an 8% high-risk benchmark. Banks’ capital ratio is ' + nf(crar.v, 2) + '%, against the 12.5% Basel III requirement.', go: '#bangladesh~money', bad: stdOut(STD.npl, npl.v) || stdOut(STD.crar, crar.v) });
+  if (cov) C.push({ t: 'External buffers', big: nf(cov.v, 2) + ' months', s: 'Foreign exchange reserves cover ' + nf(cov.v, 2) + ' months of imports (' + fmtPeriod(cov.period) + '), against the IMF’s 3-month benchmark.', go: '#bangladesh~ext', bad: stdOut(STD.cover, cov.v) });
+  if (!bdOnly) {
+    if (PEER_RANKS.gdp_growth) C.push({ t: 'Bangladesh among its peers', big: '#' + PEER_RANKS.gdp_growth[0] + ' of ' + PEER_RANKS.gdp_growth[1], s: 'Rank for growth among the 20 economies in the table; ' + (PEER_RANKS.inflation ? '#' + PEER_RANKS.inflation[0] + ' for inflation (closest to 3% ranks best).' : ''), go: '#peers' });
+    const c1 = Wd.conv.m1.rows[1];
+    C.push({ t: 'The world: slow catch-up', big: 'β = ' + nf(c1.coef, 2), s: 'Poorer economies have grown ' + (c1.coef < 0 ? 'faster' : 'slower') + ' than richer ones since 2000 (p = ' + fp(c1.p) + '), but the income gap halves only about every ' + nf(Wd.conv.half_life, 0) + ' years.', go: '#lab~world' });
+    const kw = Wd.het.measures.find(m => m.key === 'mean');
+    if (kw) C.push({ t: 'Regions differ on inflation', big: 'p = ' + fp(kw.kw_p), s: 'Average inflation since 2000 ' + (kw.kw_p < 0.05 ? 'differs significantly' : 'does not differ significantly') + ' between world regions (Kruskal–Wallis test).', go: '#lab~world' });
+  }
+  return C;
+}
+function conclusionText() {
+  const f12 = BD.ensemble.path[BD.ensemble.path.length - 1], now = BD.arima.infl.hist.v.slice(-1)[0];
+  const npl = SER('npl').reading, cov = SER('cover').reading;
+  const parts = [];
+  parts.push('Inflation in Bangladesh is ' + (stdOut(STD.infl, now) ? 'outside' : 'inside') + ' the 2–6% benchmark band at ' + nf(now, 2) + '% and is projected at ' + nf(f12.mean, 2) + '% in a year' + (f12.mean < now ? ', so it should ease, but slowly' : '') + '.');
+  if (npl && stdOut(STD.npl, npl.v)) parts.push('Banking-sector stress is the clearest risk, with bad loans at ' + nf(npl.v, 2) + '% of all loans.');
+  if (cov) parts.push('Reserves cover ' + nf(cov.v, 2) + ' months of imports, ' + (stdOut(STD.cover, cov.v) ? 'below' : 'above') + ' the 3-month benchmark.');
+  parts.push('These are model-based readings of official data, not forecasts by Bangladesh Bank.');
+  return parts.join(' ');
+}
+function resultsSection(bdOnly) {
+  const sct = document.createElement('section');
+  sct.className = 'block results';
+  sct.id = bdOnly ? 'bd-results' : 'results';
+  sct.innerHTML = '<div class="block-head"><h2>Results and conclusions</h2><p class="note">Key findings, worked out automatically from the latest data and models. Tap a card for the evidence.</p></div><div class="res-grid">' +
+    resultsCards(bdOnly).map(c => '<a class="res-card' + (c.bad ? ' bad' : '') + '" href="' + c.go + '"><span class="res-t">' + esc(c.t) + '</span><b class="res-big' + (c.bad ? ' warn-txt' : '') + '">' + esc(c.big) + '</b><span class="res-s">' + esc(c.s) + '</span><span class="res-go">Evidence →</span></a>').join('') + '</div>' +
+    '<div class="concl"><b>Conclusion.</b> ' + esc(conclusionText()) + '</div><p class="src-line"><b>Source:</b> Bangladesh Bank, BBS, World Bank; model estimates.</p>';
+  return sct;
+}
+function benchTable(host) {
+  let html = '<thead><tr><th scope="col">Indicator</th><th scope="col">Benchmark range</th><th scope="col">Basis</th></tr></thead><tbody>';
+  [['Inflation (headline, food, non-food)', STD.infl], ['Real GDP growth', STD.gdp], ['Import cover of reserves', STD.cover], ['Bank capital to risk-weighted assets', STD.crar], ['Non-performing loans', STD.npl], ['Private credit growth', STD.credit], ['Real lending rate', STD.real], ['Taka depreciation against the US$', STD.dep], ['Current account balance', STD.ca]].forEach(([n, rl]) => { html += '<tr><th scope="row">' + esc(n) + '</th><td>' + esc(rl.txt) + '</td><td>' + esc(rl.src) + '</td></tr>'; });
+  tableWrap(host, html + '</tbody>', tcap('Benchmarks used for warnings'), 'A value blinks when it falls outside its range, in either direction. Benchmarks are rules of thumb from the sources shown, not targets set by Bangladesh Bank.', { src: 'IMF, BIS, EBA, Reserve Bank of India; academic sources as listed.' });
+}
+
+/* ---------- Front page order: charts, summary, groups, analysis, results, more ---------- */
+function initFront() {
+  bdMapBox($('#bd-mapbox'));
+  const ov = $('#v-overview'), live = $('#live'), peers = $('#peers');
+  if (!ov || !live || !peers || $('#results')) return;
+  const wrap = peers.parentElement;
+  const pw = document.createElement('div');
+  pw.className = 'wrap';
+  pw.innerHTML = '<p class="eyebrow">3 · Country summary by groups</p>';
+  pw.append(peers);
+  live.after(pw);
+  const band = ov.querySelector('section.band');
+  if (band) { const eb = document.createElement('div'); eb.className = 'wrap'; eb.innerHTML = '<p class="eyebrow">4 · Analysis</p>'; band.before(eb); }
+  const ins = wrap.querySelector('[aria-labelledby="in-h"]'), pul = wrap.querySelector('[aria-labelledby="pulse-h"]');
+  if (pul) wrap.prepend(pul);
+  if (ins) wrap.prepend(ins);
+  const res = resultsSection(false);
+  const e5 = document.createElement('p'); e5.className = 'eyebrow'; e5.textContent = '5 · Results and conclusions';
+  const e6 = document.createElement('p'); e6.className = 'eyebrow'; e6.textContent = '6 · More combinations';
+  (pul || ins || wrap.firstChild).after(e5, res, e6);
+}
+
+/* ---------- Contact form (Google Forms) ---------- */
+function initContact() {
+  const host = $('#ct-form');
+  if (!host) return;
+  const url = window.MM_FORM;
+  if (!url) { host.innerHTML = '<p class="note">The contact form is being set up. Please check back soon.</p>'; return; }
+  const src = url + (url.includes('?') ? '&' : '?') + 'embedded=true';
+  host.innerHTML = '<iframe class="ct-frame" src="' + esc(src) + '" title="Contact form" loading="lazy"></iframe><p class="note">If the form doesn’t appear, <a href="' + esc(url) + '" target="_blank" rel="noopener">open it in a new tab</a>.</p>';
+}
+function addWatermark() {
+  if (document.documentElement.classList.contains('owner') || $('.wm-layer')) return;
+  const d = document.createElement('div');
+  d.className = 'wm-layer';
+  d.setAttribute('aria-hidden', 'true');
+  document.body.append(d);
 }
 
 /* ---------- Blinking warnings: on by default, with an off switch ---------- */
@@ -1276,11 +1529,11 @@ function liveTiles() {
     if (!s || !s.series) return;
     const p = s.series;
     const pts = p.v.map((v, i) => [bdLab(p.f, p.k0 + i), v == null ? null : v / (scale || 1)]).filter(x => x[1] != null);
-    if (pts.length > 1) T.push({ grp: 'Bangladesh', label, unit, pts, dir: DIR[key] || 0, dec, src: srcKeys([key], s.how !== 'raw'), href: '#bangladesh~' + s.chunk, freq: p.f });
+    if (pts.length > 1) T.push({ grp: 'Bangladesh', label, unit, pts, dir: DIR[key] || 0, dec, src: srcKeys([key], s.how !== 'raw'), href: '#bangladesh~' + s.chunk, freq: p.f, std: stdOf(key) });
   };
   bd('infl', 'Inflation', '% y/y', 1, 2); bd('food', 'Food inflation', '% y/y', 1, 2); bd('xr', 'Taka per US$', 'Tk', 1, 2); bd('res', 'FX reserves', 'US$ bn', 1000, 1);
   bd('remit_g', 'Remittances', '% y/y', 1, 1); bd('exp_g', 'Exports', '% y/y', 1, 1); bd('call', 'Call money rate', '%', 1, 2); bd('pcredit', 'Private credit', '% y/y', 1, 2);
-  const w = (key, code, label, dir) => { const pts = wdiSeries(key, code); if (pts.length > 1) T.push({ grp: 'World', label, unit: '%', pts, dir, dec: 1, src: 'World Bank.', href: '#country-' + code, freq: 'A' }); };
+  const w = (key, code, label, dir) => { const pts = wdiSeries(key, code); if (pts.length > 1) T.push({ grp: 'World', label, unit: '%', pts, dir, dec: 1, src: 'World Bank.', href: '#country-' + code, freq: 'A', std: stdOf(key) }); };
   w('gdp_growth', 'WLD', 'World growth', 1); w('inflation', 'WLD', 'World inflation', -1); w('gdp_growth', 'SAS', 'South Asia growth', 1); w('gdp_growth', 'EAS', 'East Asia & Pacific growth', 1);
   const mk = (key, label, unit, dec) => {
     const m = RAW.mk && RAW.mk[key];
@@ -1292,24 +1545,35 @@ function liveTiles() {
   mk('brent', 'Brent crude', 'US$/bbl', 2); mk('wti', 'WTI crude', 'US$/bbl', 2); mk('gas', 'Natural gas', 'US$/MMBtu', 2); mk('gold', 'Gold', 'US$/oz', 0); mk('us10y', 'US 10-year yield', '%', 2); mk('uscpi', 'US inflation', '% y/y', 1);
   return T;
 }
+function shortPer(p) {
+  p = String(p);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(p)) return +p.slice(8) + ' ' + MON[+p.slice(5, 7) - 1] + ' ’' + p.slice(2, 4);
+  if (/^\d{4}-\d{2}$/.test(p)) return MON[+p.slice(5, 7) - 1] + ' ’' + p.slice(2, 4);
+  if (/^\d{4}-Q\d$/.test(p)) return p.slice(5) + ' ’' + p.slice(2, 4);
+  return p;
+}
 function tileHTML(t, i) {
   const n = t.pts.length, last = t.pts[n - 1], prev = t.pts[n - 2];
   const v = last[1], d = prev ? v - prev[1] : null;
   const lvl = !/%/.test(t.unit);
   const c = d == null ? null : lvl ? (prev[1] ? (v / prev[1] - 1) * 100 : null) : d;
-  const cls = d == null || !t.dir ? '' : d * t.dir > 0 ? 'up-good' : d * t.dir < 0 ? 'up-bad' : '';
-  const ct = c == null ? '' : (c > 0 ? '▲ +' : c < 0 ? '▼ ' : '') + nf(c, lvl ? 1 : 2) + (lvl ? '%' : ' pp');
+  const cls = d == null || !t.dir ? 'nt' : d * t.dir > 0 ? 'gd' : d * t.dir < 0 ? 'bd' : 'nt';
+  const so = stdOut(t.std, v);
+  const ct = c == null ? '–' : (c > 0 ? '▲ +' : c < 0 ? '▼ ' : '') + nf(c, 2) + (lvl ? '%' : ' pp');
   const since = { D: 'on the day', M: 'on the month', Q: 'on the quarter', A: 'on the year', FY: 'on the year' }[t.freq] || '';
-  return '<button type="button" class="lt' + (i === LIVE.i ? ' on' : '') + '" data-lt="' + i + '" aria-label="' + esc(t.label + ': ' + nf(v, t.dec) + ' ' + t.unit + ', ' + fmtPeriod(last[0])) + '"><span class="lt-l">' + esc(t.label) + '</span><span class="lt-v">' + nf(v, t.dec) + '<small> ' + esc(t.unit) + '</small></span>' +
-    '<span class="lt-c ' + cls + '" title="Change ' + since + '">' + ct + '</span><span class="lt-d">' + esc(fmtPeriod(last[0])) + '</span>' + sparkVals(t.pts.slice(-36).map(x => x[1])) + '</button>';
+  return '<tr class="lt' + (i === LIVE.i ? ' on' : '') + (so ? ' lt-warn' : '') + '" data-lt="' + i + '" tabindex="0" title="' + esc(so ? stdMsg(t.std, v) + ': ' + t.std.src : t.label + ', ' + fmtPeriod(last[0])) + '">' +
+    '<th scope="row">' + esc(t.label) + '</th><td class="sv"><span class="cell' + (so ? ' warn' : '') + '">' + nf(v, 2) + '</span><small>' + esc(t.unit) + '</small></td>' +
+    '<td class="sc ' + cls + '" title="Change ' + since + '">' + ct + '</td><td class="sp">' + esc(shortPer(last[0])) + '</td></tr>';
 }
 function liveRender() {
   const host = $('#live-grid');
   if (!host) return;
-  const meta = { Bangladesh: 'Bangladesh Bank, latest month', World: 'World Bank, latest year', Markets: 'latest daily or monthly price' };
-  host.innerHTML = ['Bangladesh', 'World', 'Markets'].map(g => '<div class="live-group"><h3>' + esc(g) + '<small>' + esc(meta[g]) + '</small></h3><div class="live-tiles">' + LIVE.tiles.map((t, i) => t.grp === g ? tileHTML(t, i) : '').join('') + '</div></div>').join('');
+  const meta = { Bangladesh: ['Bangladesh Bank, BBS', 'g-bd'], World: ['World Bank', 'g-wd'], Markets: ['EIA, Fed, BLS, World Bank', 'g-mk'] };
+  host.innerHTML = '<div class="sumgrid">' + ['Bangladesh', 'World', 'Markets'].map(g => '<section class="sumcard ' + meta[g][1] + '" aria-label="' + g + '"><header><b>' + g + '</b><span>' + esc(meta[g][0]) + '</span></header>' +
+    '<table class="sumtab"><thead><tr><th scope="col">Indicator</th><th scope="col" class="r">Latest</th><th scope="col" class="r">Change</th><th scope="col" class="r">Date</th></tr></thead><tbody>' +
+    LIVE.tiles.map((t, i) => t.grp === g ? tileHTML(t, i) : '').join('') + '</tbody></table></section>').join('') + '</div>' +
+    '<p class="sum-note">Tap a row to show it in the chart above. A blinking red value is outside its international benchmark range.</p>';
 }
-function liveWorse(t) { const n = t.pts.length; return n > 1 && t.dir ? (t.pts[n - 1][1] - t.pts[n - 2][1]) * t.dir < 0 : false; }
 function liveSpot() {
   const host = $('#live-spot');
   const t = LIVE.tiles[LIVE.i];
@@ -1319,7 +1583,7 @@ function liveSpot() {
   const pts = t.freq === 'D' ? t.pts.slice(-260) : t.freq === 'A' ? t.pts.filter(x => +x[0] >= 1990) : t.pts.slice(-72);
   const span = t.freq === 'D' ? 'daily, last 12 months' : t.freq === 'A' ? 'annual, since 1990' : 'monthly, last 6 years';
   const f = figure(host, { state: LIVE.st, num: false, badge: 'Spotlight ' + (LIVE.i + 1) + ' of ' + LIVE.tiles.length, wide: true, title: t.label + (t.grp === 'Bangladesh' ? ', Bangladesh' : ''), sub: t.unit + '; ' + span, h: 250, source: t.src,
-    render: TH => tsOption(TH, pts.map(x => x[0]), [S(t.label, pts.map(x => x[1]), { color: TH.pal[0], area: 0.12, end: true, dec: t.dec, w: 2.2 })], { y1: t.unit, scale: true, events: t.freq === 'M', dec: t.dec, warn: [{ s: 0, test: () => liveWorse(t), label: 'Worsening' }] }) });
+    render: TH => tsOption(TH, pts.map(x => x[0]), [S(t.label, pts.map(x => x[1]), { color: TH.pal[0], area: 0.12, end: true, dec: t.dec, w: 2.2 })], { y1: t.unit, scale: true, events: t.freq === 'M', dec: t.dec, warn: t.std ? [{ s: 0, test: v => stdOut(t.std, v), label: '', rule: t.std }] : [] }) });
   const a = document.createElement('a');
   a.href = t.href; a.className = 'live-open'; a.textContent = 'Open the full page →';
   f.querySelector('.fig-act').append(a);
@@ -1380,6 +1644,7 @@ function initLive() {
   inp.addEventListener('change', () => { const v = Math.round(+inp.value); if (v >= 2 && v <= 3600) liveSetInt(v); else if (inp.value !== '') { inp.value = ''; toast('Choose a refresh time between 2 and 3,600 seconds.'); } });
   $('#live-pause').addEventListener('click', () => { LIVE.paused = !LIVE.paused; $('#live-pause').textContent = LIVE.paused ? 'Resume' : 'Pause'; liveSchedule(); });
   $('#live-grid').addEventListener('click', e => { const b = e.target.closest('[data-lt]'); if (!b) return; LIVE.i = +b.getAttribute('data-lt'); $$('#live-grid .lt').forEach(x => x.classList.toggle('on', x === b)); liveSpot(); liveSchedule(); });
+  $('#live-grid').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { const b = e.target.closest('[data-lt]'); if (b) { e.preventDefault(); b.click(); } } });
   liveRender();
   liveSpot();
   liveCheck().then(liveStatus);
@@ -1434,7 +1699,7 @@ function initPeers() {
       if (!e) return;
       const bd = c === 'BGD', agg = !!e[6];
       html += '<tr class="pe-r' + (bd ? ' pe-bd' : '') + (agg ? ' pe-agg' : '') + '" tabindex="0" data-code="' + c + '" style="--g:' + color + '"><th scope="row" class="pe-c"><span class="pe-f" aria-hidden="true">' + flagEmoji(e[2]) + '</span>' + esc(e[1]) + (bd ? '<span class="pe-star" aria-hidden="true"> ★</span>' : '') + '</th>' +
-        PEER_COLS.map((col, j) => { const x = V[c][j]; if (!x) return '<td class="num c"><span class="cell dash">–</span></td>'; const bg = peerColor(j, x[1]); return '<td class="num c" title="' + esc(col[2] + ', ' + x[0]) + '"><span class="cell" style="background:' + bg + ';color:' + textOn(bg) + '">' + fmtv(j, x[1]) + (x[0] !== modal[j] ? '<sup>’' + String(x[0]).slice(2) + '</sup>' : '') + '</span></td>'; }).join('') + '</tr>';
+        PEER_COLS.map((col, j) => { const x = V[c][j]; if (!x) return '<td class="num c"><span class="cell dash">–</span></td>'; const bg = peerColor(j, x[1]); const so = stdOut(stdOf(col[0]), x[1]); return '<td class="num c" title="' + esc(col[2] + ', ' + x[0] + (so ? '. ' + stdMsg(stdOf(col[0]), x[1]) : '')) + '"><span class="cell' + (so ? ' warn' : '') + '" style="background:' + bg + ';color:' + textOn(bg) + '">' + fmtv(j, x[1]) + (x[0] !== modal[j] ? '<sup>’' + String(x[0]).slice(2) + '</sup>' : '') + '</span></td>'; }).join('') + '</tr>';
     });
   });
   html += '<tr class="pe-rank"><th scope="row" class="pe-c">Bangladesh rank</th>' + PEER_COLS.map((col, j) => {
@@ -1442,7 +1707,8 @@ function initPeers() {
     if (!x || !col[3]) return '<td class="num"><span class="muted">–</span></td>';
     const sx = score(j, x[1]), up = col[3] > 0 || col[0] === 'inflation';
     const vals = colVals[j], rk = vals.filter(v => up ? v > sx : v < sx).length + 1, n = vals.length, k = Math.ceil(n / 3);
-    return '<td class="num"><span class="pe-badge' + (rk <= k ? ' top' : rk > n - k ? ' low warn-b' : '') + '" title="' + esc(col[2]) + ': rank ' + rk + ' of ' + n + '">' + rk + '<small>/' + n + '</small></span></td>';
+    PEER_RANKS[col[0]] = [rk, n];
+    return '<td class="num"><span class="pe-badge' + (rk <= k ? ' top' : rk > n - k ? ' low' : '') + '" title="' + esc(col[2]) + ': rank ' + rk + ' of ' + n + '">' + rk + '<small>/' + n + '</small></span></td>';
   }).join('') + '</tr></tbody>';
   host.innerHTML = '<div class="table-wrap pe-wrap"><table class="mx pe">' + html + '</table></div>' +
     '<p class="mx-note">Year under each heading: the most common latest year; a small ’23 after a value marks an older year. Green is better and red worse than most economies in the column: higher growth, income, current account, exports and investment, lower unemployment, and inflation closest to 3% count as better (blue: no better or worse direction). Values more than four years older than the rest of their column are left out. Ranks run from best (1) among the 20 economies. Benchmarks are World Bank regional and income-group aggregates. </p><p class="src-line"><b>Source:</b> World Bank.</p>' +
@@ -1454,14 +1720,14 @@ function initPeers() {
 
 /* ---------- No copying, dragging or printing shortcuts ---------- */
 (function protect() {
-  const ok = t => t && t.closest && t.closest('input, textarea, select, [contenteditable="true"]');
+  const ok = t => document.documentElement.classList.contains('owner') || (t && t.closest && t.closest('input, textarea, select, [contenteditable="true"]'));
   let told = 0;
   document.addEventListener('copy', e => { if (ok(e.target)) return; e.preventDefault(); if (Date.now() - told > 4000) { told = Date.now(); toast('Copying is turned off on this site.'); } });
   ['cut', 'contextmenu', 'dragstart', 'selectstart'].forEach(t => document.addEventListener(t, e => { if (!ok(e.target)) e.preventDefault(); }));
   document.addEventListener('keydown', e => { const k = (e.key || '').toLowerCase(); if ((e.ctrlKey || e.metaKey) && ['c', 'x', 's', 'p', 'u', 'a'].includes(k) && !ok(e.target)) e.preventDefault(); });
 })();
-setTimeout(() => { try { initAuth(); } catch (e) { /* sign-in optional */ } try { initBlink(); } catch (e) { /* optional */ } try { initPeers(); } catch (e) { /* table optional */ } try { initLive(); } catch (e) { /* dashboard optional */ } try { staticSources(); } catch (e) { /* optional */ } }, 0);
-return { initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender };
+setTimeout(() => { try { initOwner(); } catch (e) { /* optional */ } try { initAuth(); } catch (e) { /* sign-in optional */ } try { initContact(); } catch (e) { /* optional */ } try { initFront(); } catch (e) { /* optional */ } try { initBlink(); } catch (e) { /* optional */ } try { initPeers(); } catch (e) { /* table optional */ } try { initLive(); } catch (e) { /* dashboard optional */ } try { staticSources(); } catch (e) { /* optional */ } }, 0);
+return { initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo };
 })();
 function initBD() { return BDX.initBD(); }
 function initLab() { return BDX.initLab(); }
@@ -1500,7 +1766,8 @@ function addLabels(opt) {
     else if (/^\d+$/.test(c0)) showAt = cats.length > 20 ? i => +cats[i] % 3 === 0 : () => true;
   }
   const list = Array.isArray(opt.series) ? opt.series : opt.series ? [opt.series] : [];
-  const ok = s => s && !s.silent && !s.label && !(s.lineStyle && s.lineStyle.opacity === 0) && !/ lower$/.test(s.name || '');
+  const ok = s => s && !s.silent && !(s.label && s.label.show === true) && !(s.lineStyle && s.lineStyle.opacity === 0) && !/ lower$/.test(s.name || '');
+  list.forEach(s => { if (s && ok(s)) { delete s.endLabel; delete s.label; } });
   const base = { fontSize: 10, color: T.ink2, fontWeight: 600 };
   const lastOf = a => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return i; return -1; };
   const endLabel = (s, i, v, isBar) => {
@@ -1612,3 +1879,4 @@ function shortSrc(t) {
   [[/World Bank/i, 'World Bank'], [/Energy Information|\bEIA\b/i, 'EIA'], [/Federal Reserve/i, 'Federal Reserve'], [/Labor Statistics|\bBLS\b/i, 'BLS'], [/\bIMF\b|International Monetary/i, 'IMF'], [/Asian Development|\bADB\b/i, 'ADB'], [/Bangladesh Bank/i, 'Bangladesh Bank'], [/\bBBS\b|Bureau of Statistics/i, 'BBS']].forEach(([re, n]) => { if (re.test(t) && !out.includes(n)) out.push(n); });
   return out.length ? out.join(', ') : t.split(/[,(]/)[0].trim();
 }
+function renderGeo(code) { try { BDX.renderGeo(code); } catch (e) { /* map optional */ } }

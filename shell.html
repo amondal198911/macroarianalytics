@@ -61,8 +61,10 @@
           </div>
         </div>
         <div class="live-bar" aria-hidden="true"><i id="live-prog"></i></div>
+        <p class="eyebrow">1 · Charts</p>
+        <div class="live-top"><div id="live-spot"></div><div id="bd-mapbox" class="mapbox"></div></div>
+        <p class="eyebrow">2 · Summary</p>
         <div id="live-grid"></div>
-        <div id="live-spot"></div>
       </div>
     </section>
     <section class="band" aria-labelledby="hero-title">
@@ -184,6 +186,7 @@
       <p class="ai-note" id="c-ai-note" hidden>Written by Claude from the figures on this page. It can make mistakes, so check it against the charts below.</p>
     </div>
     <div class="kpis" id="c-kpis"></div>
+    <section class="cgeo" id="c-geo" aria-label="Geography and people"></section>
     <section class="cranks" id="c-ranks" hidden></section>
     <div class="range-bar">
       <div class="sec-links" id="c-seclinks" aria-label="Jump to a section"></div>
@@ -444,6 +447,7 @@
       <section class="block">
         <h2 id="me-cite-h">How to cite</h2>
         <div class="cite" id="me-cite"></div>
+        <div class="controls" style="margin-top:10px"><button class="btn" id="me-cite-btn" type="button" data-dl>Copy citation</button></div>
         <div class="controls" style="margin-top:10px"></div>
         <p class="note">Please credit the original sources too. World Bank data is licensed under CC BY 4.0, which requires attribution.</p>
       </section>
@@ -479,6 +483,11 @@
         <button class="btn" id="ct-btn" type="button">Leave a comment</button>
       </div>
     </div>
+    <section class="block" id="ct-form-sec">
+      <h2>Send a message</h2>
+      <p class="note">Fill in every field and press Submit. Your message goes straight to the site owner, and you’ll get a confirmation by email. Replies usually take up to 3 days.</p>
+      <div id="ct-form"></div>
+    </section>
     <section class="block prose">
       <h2>Reporting a data error</h2>
       <p>If you spot a figure that looks wrong, the publisher of the original statistics can confirm or correct it:</p>
@@ -506,6 +515,10 @@
         <h2>What is saved on your device</h2>
         <p>To remember your choices, the site keeps a few settings in your browser’s local storage: light or dark mode, pinned economies, the last economy you viewed, your comparison set, your chart range and log-scale choice, and whether the price ticker is paused. They stay on your device.</p>
         <div class="controls"><button class="btn" id="pv-clear" type="button">Clear my saved settings</button></div>
+      </section>
+      <section class="block">
+        <h2>Contact form</h2>
+        <p>The contact form is a Google Form. If you send a message, Google receives your subject, name, phone number, email address and message and passes them to the site owner, who uses them only to reply. Google’s privacy policy applies to the form.</p>
       </section>
       <section class="block" data-auth-only hidden>
         <h2>Signing in</h2>
@@ -576,6 +589,7 @@
 </div>
 <div class="acct-menu" id="acct-menu" hidden role="menu">
   <div class="acct-who"><b id="acct-name"></b><span id="acct-email"></span></div>
+  <a role="menuitem" id="acct-refresh" href="https://github.com/amondal198911/macroarianalytics/actions/workflows/update.yml" target="_blank" rel="noopener" hidden>Refresh all data now</a>
   <button type="button" role="menuitem" id="acct-out">Sign out</button>
   <button type="button" role="menuitem" id="acct-del" class="danger">Delete my account and record</button>
 </div>
