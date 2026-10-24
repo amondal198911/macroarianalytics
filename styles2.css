@@ -524,3 +524,12 @@ html:not(.owner) :is(.fig,.sumcard,.mapbox,.res-card,.chart-card,.geo-map,.lcard
 .boot-note{margin:10px 0;font-weight:650}
 #boot-bar{position:fixed;left:12px;right:12px;bottom:12px;z-index:300;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-radius:12px;background:#C8473A;color:#fff;font-weight:700;box-shadow:0 10px 30px rgba(0,0,0,.3)}
 #boot-bar .btn{background:#fff;color:#C8473A;border:0}
+
+/* ================= No frosted-glass blur (fails on some phone graphics chips) ================= */
+body::before,.topbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background-color:var(--bg);background-image:linear-gradient(var(--header),var(--header))}
+.gate{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:rgba(8,16,26,.86)}
+/* ================= Safe mode (?safe=1): every visual effect off ================= */
+html.safe *,html.safe *::before,html.safe *::after{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;animation:none!important;transition:none!important;box-shadow:none!important;text-shadow:none!important;filter:none!important}
+html.safe .topbar{position:relative!important}
+html.safe body::before{display:none!important}
+html.safe :is(.fig,.sumcard,.mapbox,.res-card,.chart-card,.geo-map,.lcard,.fq,.cat-one,.concl,.mx-wrap .table-wrap){background-image:none!important}

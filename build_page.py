@@ -34,6 +34,7 @@ def MAPS_DATA():
 
 
 FRAMEBUST = "if(window.top!==window.self){document.documentElement.style.display='none';try{window.top.location.replace(window.location.href)}catch(e){}}"
+SAFEMODE = "try{var q=location.search;if(/[?&]safe=1/.test(q))localStorage.setItem('mm.safe','1');if(/[?&]safe=0/.test(q))localStorage.removeItem('mm.safe');if(localStorage.getItem('mm.safe')==='1')document.documentElement.classList.add('safe')}catch(e){}"
 
 
 def harden(page, main=False):
@@ -41,7 +42,7 @@ def harden(page, main=False):
     import hashlib, base64
     anchor = '<meta charset="utf-8">' if '<meta charset="utf-8">' in page else '<head>'
     if main:
-        page = page.replace(anchor, anchor + '\n<script>' + FRAMEBUST + '</script>', 1)
+        page = page.replace(anchor, anchor + '\n<script>' + FRAMEBUST + '</script>\n<script>' + SAFEMODE + '</script>', 1)
     hashes = sorted({"'sha256-" + base64.b64encode(hashlib.sha256(m.group(1).encode('utf-8')).digest()).decode() + "'"
                      for m in re.finditer(r'<script(?![^>]*\bsrc=)(?![^>]*type="application/(?:ld\+)?json")[^>]*>(.*?)</script>', page, flags=re.S)})
     csp = ("default-src 'self'; script-src 'self' " + ' '.join(hashes) + " https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://translate.googleapis.com https://translate.google.com; "
@@ -50,6 +51,9 @@ def harden(page, main=False):
            "object-src 'none'; base-uri 'self'; form-action 'self' https://docs.google.com; upgrade-insecure-requests")
     meta = '<meta http-equiv="Content-Security-Policy" content="' + csp + '">\n<meta name="referrer" content="strict-origin-when-cross-origin">\n'
     return page.replace(anchor, anchor + '\n' + meta, 1)
+
+
+DIAG_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Phone check | Macroeconomic Monitor</title>\n<style>\nbody{margin:0;padding:16px;font:16px/1.5 Arial,Helvetica,sans-serif;background:#ffffff;color:#000000}\nh1{font-size:21px;margin:0 0 6px}\ntable{border-collapse:collapse;width:100%;font-size:14px;margin-top:10px}\ntd{border:1px solid #888;padding:6px;vertical-align:top;word-break:break-word}\n.t{padding:12px;margin:8px 0;border:2px solid #666;font-weight:700;font-size:17px}\n#ta{background:rgba(240,240,240,.7);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#000}\n#tb{background:#ffffff;color:#000000}\n#tc{background:#000000;color:#ffffff}\n#td{background:#123a66;color:#ffd000}\n.btn{display:inline-block;margin:8px 8px 0 0;padding:11px 15px;background:#0a7d4f;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px}\n</style></head><body>\n<h1>Macroeconomic Monitor: phone check</h1>\n<p>Please take a screenshot of this page (scroll down for a second one if needed) and send it to Claude.</p>\n<div class="t" id="ta">Test A: text inside a blurred box</div>\n<div class="t" id="tb">Test B: black text on white</div>\n<div class="t" id="tc">Test C: white text on black</div>\n<div class="t" id="td">Test D: yellow text on blue</div>\n<table id="info"><tr><td>Checking…</td></tr></table>\n<p><a class="btn" href="/?safe=1">Open the site in safe mode</a><a class="btn" href="/?safe=0">Open the site normally</a></p>\n<script>(function(){var r=[];function add(k,v){r.push(\'<tr><td>\'+k+\'</td><td>\'+String(v).replace(/&/g,\'&amp;\').replace(/</g,\'&lt;\')+\'</td></tr>\')}\nfunction mm(q){try{return matchMedia(q).matches?\'yes\':\'no\'}catch(e){return \'unknown\'}}\nadd(\'Browser\',navigator.userAgent);\nadd(\'Screen\',screen.width+\' x \'+screen.height+\', pixel ratio \'+window.devicePixelRatio);\nadd(\'Page area\',window.innerWidth+\' x \'+window.innerHeight);\nadd(\'Phone prefers dark\',mm(\'(prefers-color-scheme: dark)\'));\nadd(\'Reduce motion\',mm(\'(prefers-reduced-motion: reduce)\'));\nadd(\'Inside a frame\',window.top!==window.self?\'yes\':\'no\');\nvar s;try{s=\'theme=\'+localStorage.getItem(\'mm.theme\')+\', safe mode=\'+(localStorage.getItem(\'mm.safe\')||\'off\')+\', owner pass=\'+(localStorage.getItem(\'mm.owner\')?\'yes\':\'no\')}catch(e){s=\'storage blocked\'}\nadd(\'Saved settings\',s);\nvar el=document.createElement(\'div\');el.style.cssText=\'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px)\';document.body.appendChild(el);add(\'Top safe area\',Math.round(el.getBoundingClientRect().height)+\' px\');el.parentNode.removeChild(el);\nvar bf=window.CSS&&CSS.supports&&(CSS.supports(\'backdrop-filter\',\'blur(2px)\')||CSS.supports(\'-webkit-backdrop-filter\',\'blur(2px)\'));add(\'Blur supported\',bf?\'yes\':\'no\');\nadd(\'Language\',navigator.language);add(\'Checked at\',new Date().toString());\ndocument.getElementById(\'info\').innerHTML=r.join(\'\');})();</script>\n</body></html>\n'
 
 
 def extras_inject(page, artifact=False):
@@ -274,6 +278,8 @@ def main():
     except Exception as _e:
         print('live.json not written:', _e)
     (pub / '404.html').write_text(harden((pub / '404.html').read_text(encoding='utf-8')), encoding='utf-8')
+    dg = (ROOT / 'diag.html') if (ROOT / 'diag.html').exists() else None
+    (pub / 'diag.html').write_text(harden(dg.read_text(encoding='utf-8') if dg else DIAG_HTML), encoding='utf-8')
     print('Built public/ with', len(codes), 'country pages and', len(urls), 'sitemap entries')
 
 
