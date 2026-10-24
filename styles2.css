@@ -606,3 +606,11 @@ html[data-theme="dark"] .cell{box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
 .band .src-line,.band .src-line b,.page-head .src-line,.band .note{color:#E7DDC2!important}
 .band .btn:not(.primary){color:#F3EBD3!important;background:transparent!important;border-color:rgba(217,180,90,.75)!important}
 .btn.ghost{opacity:.9;border-style:dashed;color:var(--muted)}
+
+/* ================= Phone-friendly blinking: fades only (no per-frame repaint) ================= */
+@keyframes livepulse{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes mmGlow{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes mmLt{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* progress bar stretches instead of changing width: no page re-layout on every frame */
+.live-bar i{width:100%!important;transform:scaleX(0);transform-origin:left center;will-change:transform}

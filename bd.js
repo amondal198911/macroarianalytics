@@ -169,7 +169,7 @@ function S(name, data, o) {
 }
 function blinkOn() { return !RM && !document.documentElement.classList.contains('no-blink'); }
 function warnPoint(x, y, label, ax) {
-  return { name: 'Warning', type: blinkOn() ? 'effectScatter' : 'scatter', data: [[x, y]], yAxisIndex: ax, symbolSize: 10, z: 6, silent: true, tooltip: { show: false },
+  return { name: 'Warning', type: blinkOn() && !(window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 'effectScatter' : 'scatter', data: [[x, y]], yAxisIndex: ax, symbolSize: 10, z: 6, silent: true, tooltip: { show: false },
     rippleEffect: { brushType: 'stroke', scale: 3.4, period: 2.2 }, itemStyle: { color: BADC }, label: { show: true, position: 'top', distance: 8, formatter: '⚠ ' + label, color: BADC, fontSize: 10.5, fontWeight: 800 } };
 }
 function signBars(vals, TH) { return vals.map(v => v == null ? null : { value: v, itemStyle: { color: v >= 0 ? TH.pos : TH.neg } }); }
@@ -1103,9 +1103,10 @@ function watchTable(sel) {
   const t = $(sel);
   if (!t) return;
   let q = false;
-  const run = () => { q = false; pillify(t, { all: true }); };
+  const mo = new MutationObserver(() => { if (!q) { q = true; requestAnimationFrame(run); } });
+  /* stop watching while the cells are restyled, so the restyling cannot trigger itself in an endless loop */
+  function run() { q = false; mo.disconnect(); try { pillify(t, { all: true }); } finally { mo.takeRecords(); mo.observe(t, { childList: true, subtree: true }); } }
   run();
-  new MutationObserver(() => { if (!q) { q = true; requestAnimationFrame(run); } }).observe(t, { childList: true, subtree: true });
 }
 
 /* ---------- Data source under every chart, table and map ---------- */
@@ -2326,10 +2327,10 @@ async function liveCheck() {
 function liveSchedule() {
   clearTimeout(LIVE.timer);
   const prog = $('#live-prog');
-  if (prog) { prog.style.transition = 'none'; prog.style.width = '0%'; }
+  if (prog) { prog.style.transition = 'none'; prog.style.transform = 'scaleX(0)'; }
   if (LIVE.paused || !LIVE.int) { liveStatus(); return; }
   LIVE.next = Date.now() + LIVE.int * 1000;
-  if (prog && !RM) { void prog.offsetWidth; prog.style.transition = 'width ' + LIVE.int + 's linear'; prog.style.width = '100%'; }
+  if (prog && !RM) { void prog.offsetWidth; prog.style.transition = 'transform ' + LIVE.int + 's linear'; prog.style.transform = 'scaleX(1)'; }
   LIVE.timer = setTimeout(liveTick, LIVE.int * 1000);
   liveStatus();
 }

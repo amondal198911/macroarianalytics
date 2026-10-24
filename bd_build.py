@@ -1,27 +1,51 @@
 #!/usr/bin/env python3
-"""Curate the Bangladesh series for the website, grouped like Bangladesh Bank's Weekly Selected Economic Indicators.
+"""Bangladesh Monitor + Forecast lab: curate series and estimate all models.
 
-Input : data/bd/bd_catalog.json and bd_M / bd_Q / bd_FY / bd_CY.json (Bangladesh Bank Monthly Economic Trends, September 2026
-        edition and earlier editions; Bangladesh Bank / IMF National Summary Data Page tables), data/ref/bd_policy_rates.csv
-        (policy-rate decisions compiled from Bangladesh Bank announcements as reported in the press, one source per row).
-Output: build/bd_data.json  — categories, series (with source table, code and provenance for every series) and checks.
-Every transformation is listed in the series 'how' and 'note' fields, so each figure on the site can be traced to its table.
+Reads bd_catalog.json, bd_M.json, bd_Q.json, bd_CY.json, bd_FY.json (Bangladesh Bank / NSDP data)
+and build/data.json (World Bank WDI for the world analysis). Writes bd_models.json.
+
+usage: python bd_build.py [--data DIR] [--world FILE] [--out FILE]
 """
-import csv, datetime, json, math
+import argparse, datetime, json, math, warnings
 from pathlib import Path
+import numpy as np
+from scipy import stats
+warnings.filterwarnings('ignore')
+import statsmodels.api as sm
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from statsmodels.tsa.api import VAR
+from statsmodels.tsa.stattools import adfuller, kpss
 
-ROOT = Path(__file__).resolve().parent.parent
-D = ROOT / 'data' / 'bd'
-cat = json.load(open(D / 'bd_catalog.json'))
-META = {r[0]: r for r in cat}
-SER = {f: json.load(open(D / f'bd_{f}.json')) for f in ['M', 'Q', 'CY', 'FY']}
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent if HERE.name == 'scripts' else HERE
+ap = argparse.ArgumentParser()
+ap.add_argument('--data', default=str(ROOT))
+ap.add_argument('--world', default=str(ROOT / 'build' / 'data.json'))
+ap.add_argument('--out', default=str(ROOT / 'bd_models.json'))
+A = ap.parse_args()
+DATA = Path(A.data)
+RNG = np.random.RandomState(20261022)
 
-
-def r6(x):
-    if x is None or not isinstance(x, (int, float)) or not math.isfinite(x):
+# ------------------------------------------------------------------ helpers
+def r4(x, sig=5):
+    if x is None:
         return None
-    return float(f'{x:.6g}')
+    try:
+        x = float(x)
+    except Exception:
+        return None
+    if not math.isfinite(x):
+        return None
+    if x == 0:
+        return 0.0
+    return float(f'{x:.{sig}g}')
 
+def rl(a, sig=5):
+    return [r4(v, sig) for v in a]
+
+cat = json.load(open(DATA / 'bd_catalog.json'))
+META = {r[0]: r for r in cat}
+SER = {f: json.load(open(DATA / f'bd_{f}.json')) for f in ['M', 'Q', 'CY', 'FY']}
 
 def mk(y, m): return y * 12 + m - 1
 def mlab(k): return f'{k // 12}-{k % 12 + 1:02d}'
@@ -29,20 +53,20 @@ def qk(y, q): return y * 4 + q - 1
 def qlab(k): return f'{k // 4}-Q{k % 4 + 1}'
 LAB = {'M': mlab, 'Q': qlab, 'FY': lambda k: f'FY{k}', 'CY': str}
 
-
 def get(code, f):
     s = SER[f].get(code)
     if not s:
         return {}
     st, vals = s[0], s[1:]
-    k0 = mk(int(st[:4]), int(st[5:7])) if f == 'M' else qk(int(st[:4]), int(st[-1])) if f == 'Q' else int(st[2:]) if f == 'FY' else int(st)
+    if f == 'M':
+        k0 = mk(int(st[:4]), int(st[5:7]))
+    elif f == 'Q':
+        k0 = qk(int(st[:4]), int(st[-1]))
+    elif f == 'FY':
+        k0 = int(st[2:])
+    else:
+        k0 = int(st)
     return {k0 + i: float(v) for i, v in enumerate(vals) if v is not None and math.isfinite(float(v))}
-
-
-M = lambda c: get(c, 'M')
-Qs = lambda c: get(c, 'Q')
-FYs = lambda c: get(c, 'FY')
-
 
 def splice(*ds):
     out = {}
@@ -50,19 +74,8 @@ def splice(*ds):
         out.update(d)
     return out
 
-
 def yoy(d, lag):
     return {k: (v / d[k - lag] - 1) * 100 for k, v in d.items() if (k - lag) in d and d[k - lag] > 0}
-
-
-def roll(d, n, fn=sum):
-    out = {}
-    for k in d:
-        w = [d.get(j) for j in range(k - n + 1, k + 1)]
-        if all(v is not None for v in w):
-            out[k] = fn(w)
-    return out
-
 
 def src_of(codes):
     out = []
@@ -71,24 +84,32 @@ def src_of(codes):
         if not m:
             continue
         prov = m[6] or ''
-        newest = prov.split('newest:')[1].split(';')[0].strip() if 'newest:' in prov else ''
-        out.append({'code': c, 'pub': m[1], 'table': m[2], 'name': m[3], 'unit': m[4], 'prov': prov[:260], 'newest': newest})
+        newest = ''
+        if 'newest:' in prov:
+            newest = prov.split('newest:')[1].split(';')[0].strip()
+        elif 'Editions used' in prov:
+            newest = prov.split(':', 1)[1].split(',')[0].strip()
+        out.append({'code': c, 'pub': m[1], 'table': m[2], 'name': m[3], 'unit': m[4], 'prov': prov[:240], 'note': m[7], 'newest': newest})
     return out
 
-
-C, ORDER = {}, []
-
-
-def add(key, label, unit, f, cat_, codes, d, sub='', note='', how='raw', role='component', dec=2, good=None):
+def pack(d, f):
     if not d:
-        print('  (skipped, no data):', key)
-        return
-    C[key] = dict(key=key, label=label, sub=sub, unit=unit, f=f, cat=cat_, how=how, note=note, src=src_of(codes), data=d, role=role, dec=dec, good=good)
-    ORDER.append(key)
+        return None
+    ks = sorted(d)
+    k0, k1 = ks[0], ks[-1]
+    return {'f': f, 's': LAB[f](k0), 'k0': k0, 'v': [r4(d.get(k)) for k in range(k0, k1 + 1)]}
 
+# ------------------------------------------------------------------ curated series (WSEI-style chunks)
+C = {}
+def add(key, label, unit, f, chunk, codes, d, sub='', note='', how='raw'):
+    C[key] = dict(key=key, label=label, sub=sub, unit=unit, f=f, chunk=chunk, how=how, note=note, src=src_of(codes), data=d)
 
-# =============================================================== 1. INFLATION AND PRICES
+M = lambda c: get(c, 'M')
+def extend(base, newer):
+    last = max(base)
+    return splice(base, {k: v for k, v in newer.items() if k > last})
 def fillholes(base, donors):
+    """Fill missing months only from a donor table that agrees (within 0.06 points) on the neighbouring months, i.e. is on the same base."""
     out, ks, done = dict(base), sorted(base), []
     for k in range(ks[0], ks[-1] + 1):
         if k in out:
@@ -96,299 +117,686 @@ def fillholes(base, donors):
         for d in donors:
             nb = [j for j in (k - 1, k + 1) if j in base and j in d]
             if k in d and nb and all(abs(base[j] - d[j]) < 0.06 for j in nb):
-                out[k] = d[k]; done.append(mlab(k)); break
+                out[k] = d[k]
+                done.append(mlab(k))
+                break
     return out, done
-
-
 def link(old, new, newest, lo, hi):
+    """Old CPI base until the overlap month where old and new bases differ least, then the new base, then the newest base."""
     ov = [k for k in old if k in new and lo <= k <= hi]
     S = min(ov, key=lambda k: abs(old[k] - new[k]))
     out = {k: v for k, v in old.items() if k <= S}
     out.update({k: v for k, v in new.items() if k > S})
     out.update({k: v for k, v in newest.items() if k > max(new)})
     return out, S, abs(old[S] - new[S])
-
-
 OLD_END = mk(2013, 7)
-_n1, _ = fillholes(M('ET.SEI_B.002'), [M('ET.CPI.002')])
+_n1, _nf1 = fillholes(M('ET.SEI_B.002'), [M('ET.CPI.002')])
 _i1, S1, d1 = link({k: v for k, v in M('ET.SEI_B.001').items() if k <= OLD_END}, _n1, M('ET.CPI_B.002'), mk(2011, 5), OLD_END)
-_n3, _ = fillholes(M('ET.SEI_B.004'), [M('ET.CPI.003')])
+_n3, _nf3 = fillholes(M('ET.SEI_B.004'), [M('ET.CPI.003')])
 _i3, S3, d3 = link({k: v for k, v in M('ET.SEI_B.003').items() if k <= OLD_END}, _n3, M('ET.CPI_B.003'), mk(2012, 7), OLD_END)
-LINK = ('Linked series: CPI base 1995–96 to {s}, base 2005–06 from the next month to March 2023 (Table IB, second series, checked '
-        'against Table VII), base 2021–22 from April 2023 (Table VIII). The base switch is made in the month where the two bases '
-        'differ least ({g:.2f} points), so no artificial jump is created.')
-add('infl', 'Headline inflation', '% y/y', 'M', 'inflation', ['ET.SEI_B.001', 'ET.SEI_B.002', 'ET.CPI.002', 'ET.CPI_B.002'], _i1,
-    'point-to-point', LINK.format(s=mlab(S1), g=d1), 'splice', 'target', good='low')
-add('infl_avg', 'Headline inflation', '%', 'M', 'inflation', ['ET.SEI_B.003', 'ET.SEI_B.004', 'ET.CPI.003', 'ET.CPI_B.003'], _i3,
-    '12-month average', LINK.format(s=mlab(S3), g=d3), 'splice', good='low')
+for nm, ser_, S_, d_, nf_ in (('p2p', _i1, S1, d1, _nf1), ('avg', _i3, S3, d3, _nf3)):
+    print(f'linked {nm}: old base to {mlab(S_)} (gap {d_:.3f} pp), filled {nf_}, still missing', [mlab(k) for k in range(min(ser_), max(ser_) + 1) if k not in ser_], 'range', mlab(min(ser_)), mlab(max(ser_)))
+LINK_NOTE = ('Linked series: CPI base 1995–96 to ' + mlab(S1) + ', base 2005–06 from the next month to March 2023 (Table IB, second series, checked against Table VII), '
+             'base 2021–22 from April 2023 (Table VIII). The first switch is made in the month where the two bases differ least (' + f'{d1:.2f}' + ' points), so no artificial jump is created.')
+add('infl', 'Headline inflation', '% y/y', 'M', 'prices', ['ET.SEI_B.001', 'ET.SEI_B.002', 'ET.CPI.002', 'ET.CPI_B.002'], _i1, 'point-to-point', LINK_NOTE, 'splice')
+add('infl_avg', 'Headline inflation', '%', 'M', 'prices', ['ET.SEI_B.003', 'ET.SEI_B.004', 'ET.CPI.003', 'ET.CPI_B.003'], _i3, '12-month average', LINK_NOTE.replace(mlab(S1), mlab(S3)).replace(f'{d1:.2f}', f'{d3:.2f}'), 'splice')
 K12 = mk(2012, 7)
-COMP = 'From July 2012 (base 2005–06, Table VII), after that table’s change of base; base 2021–22 (Table VIII) from April 2023.'
-add('food', 'Food inflation', '% y/y', 'M', 'inflation', ['ET.CPI.005', 'ET.CPI_B.005'], {k: v for k, v in splice(M('ET.CPI.005'), M('ET.CPI_B.005')).items() if k >= K12}, 'point-to-point', COMP, 'splice', good='low')
-add('nonfood', 'Non-food inflation', '% y/y', 'M', 'inflation', ['ET.CPI.008', 'ET.CPI_B.008'], {k: v for k, v in splice(M('ET.CPI.008'), M('ET.CPI_B.008')).items() if k >= K12}, 'point-to-point', COMP, 'splice', good='low')
-add('food_avg', 'Food inflation', '%', 'M', 'inflation', ['ET.CPI.006', 'ET.CPI_B.006'], {k: v for k, v in splice(M('ET.CPI.006'), M('ET.CPI_B.006')).items() if k >= K12}, '12-month average', COMP, 'splice', good='low')
-add('nonfood_avg', 'Non-food inflation', '%', 'M', 'inflation', ['ET.CPI.009', 'ET.CPI_B.009'], {k: v for k, v in splice(M('ET.CPI.009'), M('ET.CPI_B.009')).items() if k >= K12}, '12-month average', COMP, 'splice', good='low')
-for c in [f'ET.CPI_B.0{i}' for i in range(11, 21)]:
+COMP_NOTE = 'From July 2012 (base 2005–06, Table VII), after that table’s change of base; base 2021–22 (Table VIII) from April 2023.'
+add('food', 'Food inflation', '% y/y', 'M', 'prices', ['ET.CPI.005', 'ET.CPI_B.005'], {k: v for k, v in splice(M('ET.CPI.005'), M('ET.CPI_B.005')).items() if k >= K12}, 'point-to-point', COMP_NOTE, 'splice')
+add('nonfood', 'Non-food inflation', '% y/y', 'M', 'prices', ['ET.CPI.008', 'ET.CPI_B.008'], {k: v for k, v in splice(M('ET.CPI.008'), M('ET.CPI_B.008')).items() if k >= K12}, 'point-to-point', COMP_NOTE, 'splice')
+_ov = [(k, M('ET.SEI_B.001')[k], M('ET.CPI_B.002')[k]) for k in M('ET.CPI_B.002') if k in M('ET.SEI_B.001')]
+print('check Table IB vs Table VIII overlap: months', len(_ov), 'max abs diff', round(max(abs(a - b) for _, a, b in _ov), 3) if _ov else None)
+_f = M('ET.CPI.005'); print('food Table VII 2012-04..09:', [_f.get(k) for k in range(mk(2012, 4), mk(2012, 10))])
+# CPI components (2021-22 base): year-on-year from the group indices
+comp = []
+for c in ['ET.CPI_B.004'] + [f'ET.CPI_B.0{i}' for i in range(11, 21)]:
     d = yoy(M(c), 12)
     if d:
-        nm = META[c][3].split('|')[-1].strip()
-        add('cpi_' + c[-2:], nm, '% y/y', 'M', 'inflation', [c], d, 'CPI group, base 2021–22', 'Calculated: change in the group index on a year earlier.', 'yoy', good='low')
-add('wage_g', 'Wage rate index growth', '% y/y', 'M', 'inflation', ['N.WE.2.0004'], yoy(M('N.WE.2.0004'), 12), 'nominal wage rate index (BBS)', 'Calculated from the BBS wage rate index (NSDP).', 'yoy')
-add('ppi_g', 'Producer price inflation', '% y/y', 'M', 'inflation', ['N.PPI.1.0005'], yoy(M('N.PPI.1.0005'), 12), 'manufacturing PPI, base 2015–16', 'Calculated from the BBS producer price index (NSDP).', 'yoy', good='low')
-add('rice_px', 'Coarse rice price, Dhaka', 'Tk per kg', 'M', 'inflation', ['ET.AVGPRICE.003'], M('ET.AVGPRICE.003'), 'retail market price', '', 'raw', dec=1)
-add('brent_bdt', 'Brent crude oil (Economic Trends)', 'US$ per barrel', 'M', 'inflation', ['ET.COMMOD.005'], M('ET.COMMOD.005'), 'international market price', '', 'raw', 'driver', dec=1)
-
-# =============================================================== 2. EXCHANGE RATE
+        nm = META[c][3].split('|')[-1].strip() if c != 'ET.CPI_B.004' else 'Food'
+        k = max(d)
+        comp.append({'name': nm, 'code': c, 'period': mlab(k), 'v': r4(d[k]), 'prev': r4(d.get(k - 1)), 'series': pack(d, 'M')})
+gdp_fy = splice(get('ET.NA_KEY.029', 'FY'), get('ET.NA_KEY.030', 'FY'))
+add('gdp_fy', 'Real GDP growth', '%', 'FY', 'real', ['ET.NA_KEY.029', 'ET.NA_KEY.030'], gdp_fy, 'fiscal year', 'Base 2005–06 to FY2016, base 2015–16 from FY2017.', 'splice')
+add('gdp_q', 'Real GDP growth', '% y/y', 'Q', 'real', ['ET.QGDP.034'], get('ET.QGDP.034', 'Q'), 'quarterly, constant prices')
+add('inv_gdp', 'Investment', '% of GDP', 'FY', 'real', ['ET.NA_KEY.021', 'ET.NA_KEY.022'], splice(get('ET.NA_KEY.021', 'FY'), get('ET.NA_KEY.022', 'FY')), '', '', 'splice')
+add('sav_gdp', 'National savings', '% of GDP', 'FY', 'real', ['ET.NA_KEY.017', 'ET.NA_KEY.018'], splice(get('ET.NA_KEY.017', 'FY'), get('ET.NA_KEY.018', 'FY')), '', '', 'splice')
+add('cons_gdp', 'Consumption', '% of GDP', 'FY', 'real', ['ET.NA_KEY.011', 'ET.NA_KEY.012'], splice(get('ET.NA_KEY.011', 'FY'), get('ET.NA_KEY.012', 'FY')), '', '', 'splice')
+add('iip', 'Industrial production', '% y/y', 'M', 'real', ['ET.SEI_B.008'], yoy(M('ET.SEI_B.008'), 12), 'manufacturing, mining and electricity', '', 'yoy')
+add('m2', 'Broad money (M2)', '% y/y', 'M', 'money', ['ET.SEI_A.015'], yoy(M('ET.SEI_A.015'), 12), '', '', 'yoy')
+add('rm', 'Reserve money', '% y/y', 'M', 'money', ['ET.RM_SRC.009'], yoy(M('ET.RM_SRC.009'), 12), '', '', 'yoy')
+add('pcredit', 'Private sector credit', '% y/y', 'M', 'money', ['ET.MS_M2.010'], yoy(M('ET.MS_M2.010'), 12), '', '', 'yoy')
+add('cdr', 'Credit–deposit ratio', '%', 'M', 'money', ['ET.SEI_A.061'], M('ET.SEI_A.061'), 'deposit money banks')
+add('npl', 'Non-performing loans', '% of gross loans', 'Q', 'money', ['N.FSD.1.0022'], get('N.FSD.1.0022', 'Q'), 'deposit takers')
+add('crar', 'Capital to risk-weighted assets', '%', 'Q', 'money', ['N.FSD.1.0007'], get('N.FSD.1.0007', 'Q'), 'deposit takers')
+add('call', 'Call money rate', '%', 'M', 'rates', ['ET.CALLMONEY.003'], M('ET.CALLMONEY.003'), 'weighted average')
+add('dep', 'Deposit rate', '%', 'M', 'rates', ['ET.SEI_A.066'], M('ET.SEI_A.066'), 'scheduled banks, weighted average')
+add('lend', 'Lending rate', '%', 'M', 'rates', ['ET.SEI_A.067'], M('ET.SEI_A.067'), 'scheduled banks, weighted average')
+add('spread', 'Lending–deposit spread', 'pp', 'M', 'rates', ['ET.SEI_A.068'], M('ET.SEI_A.068'))
+add('bankrate', 'Bank rate', '%', 'M', 'rates', ['ET.SEI_A.065'], M('ET.SEI_A.065'))
+rl_ = {k: C['lend']['data'][k] - C['infl']['data'][k] for k in C['lend']['data'] if k in C['infl']['data']}
+add('real_lend', 'Real lending rate', '%', 'M', 'rates', ['ET.SEI_A.067', 'ET.CPI.002', 'ET.CPI_B.002'], rl_, 'lending rate minus headline inflation', 'Calculated: lending rate minus point-to-point inflation.', 'derived')
 xr = M('ET.SEI_B.013')
-add('xr', 'Exchange rate', 'Tk per US$', 'M', 'exchange', ['ET.SEI_B.013'], xr, 'weighted average, period average', '', 'raw', 'target', good='low')
-add('xr_end', 'Exchange rate', 'Tk per US$', 'M', 'exchange', ['ET.SEI_B.014'], M('ET.SEI_B.014'), 'weighted average, end of period', '', 'raw', good='low')
-add('xr_dep', 'Taka depreciation against the US$', '% y/y', 'M', 'exchange', ['ET.SEI_B.013'], yoy(xr, 12), 'positive = weaker Taka', 'Calculated: change in Taka per US$ on a year earlier.', 'yoy', good='low')
-add('xr_mom', 'Taka depreciation, month on month', '%', 'M', 'exchange', ['ET.SEI_B.013'], yoy(xr, 1), 'positive = weaker Taka', 'Calculated: change in Taka per US$ on the previous month.', 'yoy')
-for code, nm in [('ET.EXR.013', 'Euro'), ('ET.EXR.069', 'UK pound'), ('ET.EXR.017', 'Indian rupee'), ('ET.EXR.009', 'Chinese yuan'), ('ET.EXR.023', 'Japanese yen'),
-                 ('ET.EXR.047', 'Saudi riyal'), ('ET.EXR.065', 'UAE dirham'), ('ET.EXR.027', 'Malaysian ringgit'), ('ET.EXR.051', 'Singapore dollar'), ('ET.EXR.061', 'SDR')]:
-    if code in META:
-        add('fx_' + nm.split()[-1].lower(), 'Taka per ' + nm, 'Tk per unit', 'M', 'exchange', [code], M(code), 'period average (Table XX)', '', 'raw', dec=3)
-
-# =============================================================== 3. REMITTANCES
-remit = M('ET.MIGR.002')
-add('remit', 'Remittance inflows', 'US$ mn', 'M', 'remittances', ['ET.MIGR.002'], remit, 'wage earners’ remittances, monthly', '', 'raw', 'target', dec=1, good='high')
-add('remit_g', 'Remittance growth', '% y/y', 'M', 'remittances', ['ET.MIGR.002'], yoy(remit, 12), '', 'Calculated: change on the same month a year earlier.', 'yoy', good='high')
-add('remit_12m', 'Remittances, last 12 months', 'US$ bn', 'M', 'remittances', ['ET.MIGR.002'], {k: v / 1000 for k, v in roll(remit, 12).items()}, 'rolling 12-month sum', 'Calculated: sum of the latest 12 months.', 'derived', good='high')
-add('migr', 'Workers leaving for jobs abroad', 'persons', 'M', 'remittances', ['ET.MIGR.001'], M('ET.MIGR.001'), 'Table XVIII', '', 'raw', 'driver', dec=0)
-tot = M('ET.REMIT_CTRY.020')
-for i, nm in [(1, 'Saudi Arabia'), (2, 'UAE'), (3, 'UK'), (5, 'USA'), (14, 'Malaysia'), (16, 'Italy'), (4, 'Kuwait'), (7, 'Qatar'), (8, 'Oman')]:
-    c = f'ET.REMIT_CTRY.{i:03d}'
-    sh = {k: v / tot[k] * 100 for k, v in M(c).items() if tot.get(k)}
-    add('rsh_' + nm.lower().replace(' ', '_'), 'Share from ' + nm, '% of total', 'M', 'remittances', [c, 'ET.REMIT_CTRY.020'], sh, 'country share (Table XIX)', 'Calculated: country inflow ÷ total (both in Taka crore).', 'derived', dec=1)
-
-# =============================================================== 4. EXPORTS AND IMPORTS
-exp_ = M('ET.SEI_B.009')
-imp = splice(M('ET.SEI_B.015'), {k: v for k, v in M('ET.SEI_B.010').items() if k > mk(2024, 7)})
-add('exp', 'Exports', 'US$ mn', 'M', 'trade', ['ET.SEI_B.009'], exp_, 'shipments (EPB), monthly', 'Export Promotion Bureau shipment data (Table IB). Bangladesh Bank’s f.o.b. export figures in the WSEI are lower after the 2024 data revision.', 'raw', 'target', dec=1, good='high')
-add('exp_g', 'Export growth', '% y/y', 'M', 'trade', ['ET.SEI_B.009'], yoy(exp_, 12), '', 'Calculated.', 'yoy', good='high')
-add('imp', 'Imports', 'US$ mn', 'M', 'trade', ['ET.SEI_B.015', 'ET.SEI_B.010'], imp, 'payments to July 2024, shipments after', 'Import payments to July 2024, import shipments afterwards: the two measures differ.', 'splice', dec=1)
-add('imp_g', 'Import growth', '% y/y', 'M', 'trade', ['ET.SEI_B.015', 'ET.SEI_B.010'], yoy(imp, 12), '', 'Calculated; the change of measure in August 2024 affects the year-on-year rate until July 2025.', 'yoy')
-tb = {k: exp_[k] - imp[k] for k in exp_ if k in imp}
-add('tbal', 'Trade balance', 'US$ mn', 'M', 'trade', ['ET.SEI_B.009', 'ET.SEI_B.015', 'ET.SEI_B.010'], tb, 'exports minus imports', 'Calculated.', 'derived', dec=1, good='high')
-add('exp_12m', 'Exports, last 12 months', 'US$ bn', 'M', 'trade', ['ET.SEI_B.009'], {k: v / 1000 for k, v in roll(exp_, 12).items()}, 'rolling 12-month sum', 'Calculated.', 'derived', good='high')
-add('imp_12m', 'Imports, last 12 months', 'US$ bn', 'M', 'trade', ['ET.SEI_B.015', 'ET.SEI_B.010'], {k: v / 1000 for k, v in roll(imp, 12).items()}, 'rolling 12-month sum', 'Calculated.', 'derived')
-
-# =============================================================== 5. BALANCE OF PAYMENTS (Table IIIA, Taka crore -> US$ mn at the monthly average rate)
-def to_usd(d):
-    return {k: v * 10 / xr[k] for k, v in d.items() if xr.get(k)}
-
-
-bop_note = 'Table IIIA is published in Taka crore; converted to US$ million at the month’s average exchange rate (Tk crore × 10 ÷ Tk per US$).'
-for key, code, lab, role in [('ca_m', 'ET.BOP.013', 'Current account balance', 'target'), ('goods_m', 'ET.BOP.003', 'Trade balance (goods, BoP)', 'component'),
-                             ('serv_m', 'ET.BOP.006', 'Services, net', 'component'), ('pinc_m', 'ET.BOP.009', 'Primary income, net', 'component'),
-                             ('sinc_m', 'ET.BOP.012', 'Secondary income, net', 'component'), ('kap_m', 'ET.BOP.014', 'Capital account', 'component'),
-                             ('fin_m', 'ET.BOP.019', 'Financial account', 'component'), ('fdi_m', 'ET.BOP.015', 'Direct investment, net', 'component'),
-                             ('eo_m', 'ET.BOP.020', 'Errors and omissions', 'component')]:
-    add(key, lab, 'US$ mn', 'M', 'bop', [code, 'ET.SEI_B.013'], to_usd(M(code)), 'monthly, Table IIIA', bop_note, 'derived', role, dec=1, good='high' if key in ('ca_m', 'goods_m') else None)
-for key, code, lab in [('ca_fy', 'BGD_BOP_BCA_FY_USD', 'Current account balance'), ('goods_fy', 'BGD_BOP_BG_FY_USD', 'Trade balance (goods)'),
-                       ('serv_fy', 'BGD_BOP_BS_FY_USD', 'Services balance'), ('pinc_fy', 'BGD_BOP_BIP_FY_USD', 'Primary income'),
-                       ('sinc_fy', 'BGD_BOP_BIS_FY_USD', 'Secondary income (mainly remittances)'), ('kap_fy', 'BGD_BOP_BK_FY_USD', 'Capital account'),
-                       ('fin_fy', 'BGD_BOP_BF_FY_USD', 'Financial account'), ('bop_fy', 'BGD_BOP_BOP_FY_USD', 'Overall balance'),
-                       ('fdi_fy', 'BGD_BOP_BFFDI_FY_USD', 'Foreign direct investment (net)')]:
-    add(key, lab, 'US$ mn', 'FY', 'bop', ['N.BOPALT.' + code], FYs('N.BOPALT.' + code), 'fiscal year (NSDP, BPM6 presentation)', '', 'raw', dec=0, good='high' if key in ('ca_fy', 'bop_fy') else None)
-add('xdebt', 'Gross external debt', 'US$ mn', 'Q', 'bop', ['N.EXD.1.0015'], Qs('N.EXD.1.0015'), 'quarterly (NSDP)', '', 'raw', dec=0, good='low')
-add('xdebt_st', 'Short-term external debt', 'US$ mn', 'Q', 'bop', ['N.EXD.1.0016'], Qs('N.EXD.1.0016'), 'quarterly (NSDP)', '', 'raw', dec=0, good='low')
-add('fdi_in', 'FDI inflows', 'US$ mn', 'FY', 'bop', ['ET.FDI.004'], FYs('ET.FDI.004'), 'gross inflows (Table IIIB)', '', 'raw', dec=0, good='high')
-
-# =============================================================== 6. FOREIGN EXCHANGE RESERVES
+add('xr', 'Exchange rate', 'Tk per US$', 'M', 'ext', ['ET.SEI_B.013'], xr, 'period average')
+add('xr_dep', 'Taka depreciation', '% y/y', 'M', 'ext', ['ET.SEI_B.013'], yoy(xr, 12), 'against the US dollar', 'Calculated: change in Taka per US$ on a year earlier; positive = weaker Taka.', 'yoy')
 res = M('ET.SEI_B.011')
-add('res', 'Gross foreign exchange reserves', 'US$ mn', 'M', 'reserves', ['ET.SEI_B.011'], res, 'Bangladesh Bank gross reserves', '', 'raw', 'target', dec=0, good='high')
-add('res_bpm6', 'Reserves, BPM6 definition', 'US$ mn', 'M', 'reserves', ['ET.SEI_B.012'], M('ET.SEI_B.012'), 'IMF BPM6 measure (from June 2023)', '', 'raw', dec=0, good='high')
+add('res', 'Gross foreign exchange reserves', 'US$ mn', 'M', 'ext', ['ET.SEI_B.011'], res)
+add('res_bpm6', 'Reserves, BPM6 definition', 'US$ mn', 'M', 'ext', ['ET.SEI_B.012'], M('ET.SEI_B.012'))
+remit = M('ET.MIGR.002')
+add('remit', 'Remittances', 'US$ mn', 'M', 'ext', ['ET.MIGR.002'], remit)
+add('remit_g', 'Remittance growth', '% y/y', 'M', 'ext', ['ET.MIGR.002'], yoy(remit, 12), '', '', 'yoy')
+exp_ = M('ET.SEI_B.009')
+add('exp', 'Exports', 'US$ mn', 'M', 'ext', ['ET.SEI_B.009'], exp_, 'shipments')
+add('exp_g', 'Export growth', '% y/y', 'M', 'ext', ['ET.SEI_B.009'], yoy(exp_, 12), '', '', 'yoy')
+imp = splice(M('ET.SEI_B.015'), {k: v for k, v in M('ET.SEI_B.010').items() if k > mk(2024, 7)})
+add('imp', 'Imports', 'US$ mn', 'M', 'ext', ['ET.SEI_B.015', 'ET.SEI_B.010'], imp, '', 'Import payments to July 2024, import shipments afterwards: the two measures differ.', 'splice')
 cover = {}
 for k, v in res.items():
-    w = [imp.get(j) for j in range(k - 11, k + 1)]
-    if all(x is not None for x in w):
-        cover[k] = v / (sum(w) / 12)
-add('cover', 'Import cover of reserves', 'months', 'M', 'reserves', ['ET.SEI_B.011', 'ET.SEI_B.015', 'ET.SEI_B.010'], cover, 'gross reserves ÷ average monthly imports (12 months)', 'Calculated. A common rule of thumb is at least 3 months (IMF).', 'derived', dec=2, good='high')
-add('res_g', 'Reserve growth', '% y/y', 'M', 'reserves', ['ET.SEI_B.011'], yoy(res, 12), '', 'Calculated.', 'yoy', good='high')
-add('res_chg', 'Change in reserves', 'US$ mn', 'M', 'reserves', ['ET.SEI_B.011'], {k: v - res[k - 1] for k, v in res.items() if (k - 1) in res}, 'month on month', 'Calculated.', 'derived', dec=0, good='high')
-
-# =============================================================== 7. CALL MONEY MARKET
-call = M('ET.CALLMONEY.003')
-add('call', 'Call money rate', '%', 'M', 'callmoney', ['ET.CALLMONEY.003'], call, 'weighted average (Table XVI)', '', 'raw', 'target')
-add('call_hi', 'Call money rate, highest', '%', 'M', 'callmoney', ['ET.CALLMONEY.001'], M('ET.CALLMONEY.001'), 'monthly high', '', 'raw')
-add('call_lo', 'Call money rate, lowest', '%', 'M', 'callmoney', ['ET.CALLMONEY.002'], M('ET.CALLMONEY.002'), 'monthly low', '', 'raw')
-add('excess_res', 'Excess reserves of banks', 'Tk crore', 'M', 'callmoney', ['ET.SEI_A.041'], M('ET.SEI_A.041'), 'balances with Bangladesh Bank above requirement', '', 'raw', 'driver', dec=0)
-
-# =============================================================== 8. POLICY AND INTEREST RATES
-pol_rows = list(csv.DictReader(open(ROOT / 'data' / 'ref' / 'bd_policy_rates.csv', encoding='utf-8')))
-def step(col):
-    out, cur = {}, None
-    ev = sorted(((datetime.date.fromisoformat(r['effective']), r) for r in pol_rows), key=lambda t: t[0])
-    k0, k1 = mk(2016, 1), max(call) if call else mk(2026, 9)
-    for k in range(k0, k1 + 1):
-        y, m = k // 12, k % 12 + 1
-        last_day = (datetime.date(y + (m == 12), m % 12 + 1, 1) - datetime.timedelta(days=1))
-        for d, r in ev:
-            if d <= last_day and r[col]:
-                cur = float(r[col])
-        if cur is not None:
-            out[k] = cur
-    return out
-pol = step('policy_rate'); floor_ = step('floor_rate'); ceil_ = step('ceiling_rate')
-POLNOTE = ('Compiled from Bangladesh Bank decisions as reported in the press (one source per decision, listed on the Sources page). '
-           'Monthly value = rate in force on the last day of the month.')
-C_POL_SRC = [{'code': 'policy-rates.csv', 'pub': 'Bangladesh Bank decisions (press reports)', 'table': 'Policy rate decisions 2016–2026', 'name': r['decision'], 'unit': '%',
-              'prov': r['source'], 'url': r['url'], 'newest': r['effective']} for r in pol_rows]
-for key, d, lab, sub in [('policy', pol, 'Policy (repo) rate', 'rate in force at month end'), ('sdf', floor_, 'Corridor floor: reverse repo / SDF', 'standing deposit facility from July 2023'),
-                         ('slf', ceil_, 'Corridor ceiling: SLF', 'standing lending facility, from July 2023')]:
-    C[key] = dict(key=key, label=lab, sub=sub, unit='%', f='M', cat='policy', how='compiled', note=POLNOTE, src=C_POL_SRC, data=d, role='target' if key == 'policy' else 'component', dec=2, good=None)
-    ORDER.append(key)
-add('lend', 'Lending rate', '%', 'M', 'policy', ['ET.SEI_A.067'], M('ET.SEI_A.067'), 'scheduled banks, weighted average', '', 'raw')
-add('dep', 'Deposit rate', '%', 'M', 'policy', ['ET.SEI_A.066'], M('ET.SEI_A.066'), 'scheduled banks, weighted average', '', 'raw')
-add('spread', 'Lending–deposit spread', 'pp', 'M', 'policy', ['ET.SEI_A.068'], M('ET.SEI_A.068'), 'scheduled banks', '', 'raw')
-add('bankrate', 'Bank rate', '%', 'M', 'policy', ['ET.SEI_A.065'], M('ET.SEI_A.065'), '', '', 'raw')
-add('real_lend', 'Real lending rate', '%', 'M', 'policy', ['ET.SEI_A.067', 'ET.CPI_B.002'], {k: v - _i1[k] for k, v in M('ET.SEI_A.067').items() if k in _i1}, 'lending rate minus headline inflation', 'Calculated: lending rate minus point-to-point inflation.', 'derived')
-add('real_policy', 'Real policy rate', '%', 'M', 'policy', ['ET.CPI_B.002'], {k: v - _i1[k] for k, v in pol.items() if k in _i1}, 'policy rate minus headline inflation', 'Calculated.', 'derived')
-add('nbfi_lend', 'NBFI lending rate', '%', 'M', 'policy', ['ET.SEI_A.070'], M('ET.SEI_A.070'), 'non-bank financial institutions', '', 'raw')
-
-# =============================================================== 9. MONEY AND CREDIT
-m2 = M('ET.SEI_A.015')
-add('m2', 'Broad money (M2) growth', '% y/y', 'M', 'money', ['ET.SEI_A.015'], yoy(m2, 12), '', 'Calculated from the M2 stock (Table IA).', 'yoy', 'target')
-add('rm', 'Reserve money growth', '% y/y', 'M', 'money', ['ET.RM_SRC.009'], yoy(M('ET.RM_SRC.009'), 12), '', 'Calculated (Table IID).', 'yoy')
-add('m1', 'Narrow money (M1) growth', '% y/y', 'M', 'money', ['ET.SEI_A.014'], yoy(M('ET.SEI_A.014'), 12), '', 'Calculated.', 'yoy')
-add('pcredit', 'Private sector credit growth', '% y/y', 'M', 'money', ['ET.MS_M2.010'], yoy(M('ET.MS_M2.010'), 12), '', 'Calculated (Table IIA).', 'yoy', good='high')
-add('govcredit', 'Net credit to government growth', '% y/y', 'M', 'money', ['ET.MS_M2.006'], yoy(M('ET.MS_M2.006'), 12), 'banking system', 'Calculated (Table IIA).', 'yoy')
-add('opcredit', 'Credit to other public sector growth', '% y/y', 'M', 'money', ['ET.MS_M2.009'], yoy(M('ET.MS_M2.009'), 12), '', 'Calculated (Table IIA).', 'yoy')
-add('dcredit', 'Domestic credit growth', '% y/y', 'M', 'money', ['ET.MS_M2.011'], yoy(M('ET.MS_M2.011'), 12), '', 'Calculated (Table IIA).', 'yoy')
-add('nfa_g', 'Net foreign assets growth', '% y/y', 'M', 'money', ['ET.MS_M2.003'], yoy(M('ET.MS_M2.003'), 12), '', 'Calculated (Table IIA).', 'yoy')
-mm = {k: m2[k] / v for k, v in M('ET.RM_SRC.009').items() if k in m2 and v}
-add('mult', 'Money multiplier', 'M2 ÷ reserve money', 'M', 'money', ['ET.SEI_A.015', 'ET.RM_SRC.009'], mm, '', 'Calculated.', 'derived', dec=3)
-add('cdr', 'Credit–deposit ratio', '%', 'M', 'money', ['ET.SEI_A.061'], M('ET.SEI_A.061'), 'deposit money banks', '', 'raw')
-add('cob_g', 'Currency outside banks growth', '% y/y', 'M', 'money', ['ET.SEI_A.005'], yoy(M('ET.SEI_A.005'), 12), '', 'Calculated.', 'yoy')
-
-# =============================================================== 10. BANKING SOUNDNESS AND FINANCIAL INCLUSION
-for key, code, lab, unit, good in [('npl', 'N.FSD.1.0022', 'Non-performing loans', '% of gross loans', 'low'), ('crar', 'N.FSD.1.0007', 'Capital to risk-weighted assets', '%', 'high'),
-                                   ('tier1', 'N.FSD.1.0010', 'Tier 1 capital to risk-weighted assets', '%', 'high'), ('prov', 'N.FSD.1.0028', 'Provisions to non-performing loans', '%', 'high'),
-                                   ('roa', 'N.FSD.1.0031', 'Return on assets', '%', 'high'), ('roe', 'N.FSD.1.0034', 'Return on equity', '%', 'high'),
-                                   ('liq', 'N.FSD.1.0043', 'Liquid assets to total assets', '%', 'high'), ('liq_st', 'N.FSD.1.0046', 'Liquid assets to short-term liabilities', '%', 'high')]:
-    add(key, lab, unit, 'Q', 'banking', [code], Qs(code), 'deposit takers, IMF financial soundness indicators (NSDP)', '', 'raw', 'target' if key == 'npl' else 'component', good=good)
-add('dep_g', 'Bank deposit growth', '% y/y', 'M', 'banking', ['ET.SEI_A.039'], yoy(M('ET.SEI_A.039'), 12), 'total deposit liabilities', 'Calculated.', 'yoy')
-add('adv_g', 'Bank advances growth', '% y/y', 'M', 'banking', ['ET.SEI_A.020'], yoy(M('ET.SEI_A.020'), 12), 'total advances', 'Calculated.', 'yoy')
-add('mfs_g', 'Mobile financial services, value growth', '% y/y', 'M', 'banking', ['FI.MFSTransac.003'], yoy(M('FI.MFSTransac.003'), 12), 'all MFS transactions', 'Calculated (FIDFS e-banking statistics).', 'yoy')
-add('mfs_acc', 'Mobile financial services accounts', 'million', 'M', 'banking', ['FI.MFSAccount.016'], {k: v / 1e6 if v > 1e5 else v for k, v in M('FI.MFSAccount.016').items()}, 'total accounts', '', 'raw', dec=1)
-add('ab_dep', 'Agent banking deposits', 'Tk crore', 'M', 'banking', ['FI.AgentBanki.004.2'], M('FI.AgentBanki.004.2'), 'deposit balance', '', 'raw', dec=0)
-
-# =============================================================== 11. FISCAL
-nbr = M('ET.TAX.010')
-add('tax', 'NBR tax revenue', 'Tk crore', 'M', 'fiscal', ['ET.TAX.010'], nbr, 'monthly collection (Table XXIII)', '', 'raw', 'target', dec=0, good='high')
-add('tax_g', 'NBR tax revenue growth', '% y/y', 'M', 'fiscal', ['ET.TAX.010'], yoy(nbr, 12), '', 'Calculated.', 'yoy', good='high')
-add('tax_12m', 'NBR revenue, last 12 months', 'Tk crore', 'M', 'fiscal', ['ET.TAX.010'], roll(nbr, 12), 'rolling 12-month sum', 'Calculated.', 'derived', dec=0, good='high')
-for key, code, lab in [('vat_d', 'ET.TAX.005', 'VAT, domestic'), ('vat_i', 'ET.TAX.006', 'VAT, imports'), ('inc_tax', 'ET.TAX.004', 'Income tax'), ('customs', 'ET.TAX.001', 'Customs duty')]:
-    add(key, lab, 'Tk crore', 'M', 'fiscal', [code], M(code), 'monthly collection', '', 'raw', dec=0)
-add('nsc_net', 'National savings certificates, net sales', 'Tk crore', 'M', 'fiscal', ['ET.NSAV.017'], M('ET.NSAV.017'), 'Table XXVIII', '', 'raw', dec=0)
-add('nsc_out', 'National savings certificates, outstanding', 'Tk crore', 'M', 'fiscal', ['ET.NSAV.018'], M('ET.NSAV.018'), 'Table XXVIII', '', 'raw', dec=0)
-gdpn = splice(FYs('ET.NA_KEY.001'), FYs('ET.NA_KEY.002'))
-for key, code, lab, good in [('bud_rev', 'ET.BUDGET.003', 'Government revenue', 'high'), ('bud_exp', 'ET.BUDGET.017', 'Government expenditure', None), ('bud_def', 'ET.BUDGET.018', 'Overall budget deficit', 'high'),
-                             ('bud_dfin', 'ET.BUDGET.020', 'Domestic financing', None), ('bud_ffin', 'ET.BUDGET.019', 'Foreign financing (net)', None)]:
-    d = {k: v / gdpn[k] * 100 for k, v in FYs(code).items() if gdpn.get(k)}
-    add(key, lab, '% of GDP', 'FY', 'fiscal', [code, 'ET.NA_KEY.001', 'ET.NA_KEY.002'], d, 'budget outturn (Table XXIX)', 'Calculated: Taka amount ÷ nominal GDP (base 2005–06 to FY2015, 2015–16 from FY2016).', 'derived', good=good)
-debt = Qs('N.CGD.1.0027')
-add('gdebt', 'Central government gross debt', 'Tk bn', 'Q', 'fiscal', ['N.CGD.1.0027'], {k: v / 1000 for k, v in debt.items()}, 'quarterly (NSDP)', '', 'raw', dec=0, good='low')
-
-# =============================================================== 12. REAL SECTOR
-gdp_fy = splice(FYs('ET.NA_KEY.029'), FYs('ET.NA_KEY.030'))
-add('gdp_fy', 'Real GDP growth', '%', 'FY', 'real', ['ET.NA_KEY.029', 'ET.NA_KEY.030'], gdp_fy, 'fiscal year', 'Base 2005–06 to FY2016, base 2015–16 from FY2017.', 'splice', 'target', good='high')
-add('gdp_q', 'Real GDP growth, quarterly', '% y/y', 'Q', 'real', ['ET.QGDP.034'], Qs('ET.QGDP.034'), 'constant prices', '', 'raw', good='high')
-for key, code, lab in [('agr_q', 'ET.QGDP.018', 'Agriculture growth'), ('ind_q', 'ET.QGDP.023', 'Industry growth'), ('srv_q', 'ET.QGDP.030', 'Services growth'), ('mfg_q', 'ET.QGDP.020', 'Manufacturing growth')]:
-    add(key, lab, '% y/y', 'Q', 'real', [code], yoy(Qs(code), 4), 'quarterly GDP, constant prices', 'Calculated from quarterly value added.', 'yoy', good='high')
-qiip = splice(M('N.PI.2.0011'), {k: v for k, v in M('N.PI.1.0011').items()})
-add('iip', 'Industrial production growth', '% y/y', 'M', 'real', ['N.PI.2.0011', 'N.PI.1.0011'], splice(yoy(M('N.PI.2.0011'), 12), yoy(M('N.PI.1.0011'), 12)), 'manufacturing, mining and electricity', 'Calculated from the BBS production index (base 2005–06 to June 2021, 2015–16 from July 2022).', 'yoy', good='high')
-add('inv_gdp', 'Investment', '% of GDP', 'FY', 'real', ['ET.NA_KEY.021', 'ET.NA_KEY.022'], splice(FYs('ET.NA_KEY.021'), FYs('ET.NA_KEY.022')), '', '', 'splice', good='high')
-add('sav_gdp', 'National savings', '% of GDP', 'FY', 'real', ['ET.NA_KEY.017', 'ET.NA_KEY.018'], splice(FYs('ET.NA_KEY.017'), FYs('ET.NA_KEY.018')), '', '', 'splice', good='high')
-add('cons_gdp', 'Consumption', '% of GDP', 'FY', 'real', ['ET.NA_KEY.011', 'ET.NA_KEY.012'], splice(FYs('ET.NA_KEY.011'), FYs('ET.NA_KEY.012')), '', '', 'splice')
-add('defl_g', 'GDP deflator inflation', '%', 'FY', 'real', ['ET.NA_KEY.031', 'ET.NA_KEY.032'], splice(yoy(FYs('ET.NA_KEY.031'), 1), yoy(FYs('ET.NA_KEY.032'), 1)), '', 'Calculated.', 'yoy', good='low')
-for key, code, lab in [('boro', 'ET.AGRI.005', 'Boro rice production'), ('aman', 'ET.AGRI.003', 'Aman rice production'), ('wheat', 'ET.AGRI.007', 'Wheat production')]:
-    add(key, lab, "'000 tonnes", 'FY', 'real', [code], FYs(code), 'Table V', '', 'raw', dec=0, good='high')
-add('unemp', 'Unemployment rate', '%', 'Q', 'real', ['N.LMI.1.0009'], Qs('N.LMI.1.0009'), 'quarterly labour force survey (NSDP)', '', 'raw', good='low')
-
-# =============================================================== 13. CAPITAL MARKET
-dse = splice(M('N.SPI.1.0004'), M('ET.SHAREIDX.001'))
-add('dse', 'DSE broad index (DSEX)', 'index', 'M', 'capital', ['ET.SHAREIDX.001', 'N.SPI.1.0004'], M('ET.SHAREIDX.001'), 'month end (Table X)', '', 'raw', 'target', dec=0, good='high')
-add('dse_g', 'DSE index change', '% y/y', 'M', 'capital', ['ET.SHAREIDX.001'], yoy(M('ET.SHAREIDX.001'), 12), '', 'Calculated.', 'yoy', good='high')
+    win = [imp.get(j) for j in range(k - 11, k + 1)]
+    if all(w is not None for w in win):
+        cover[k] = v / (sum(win) / 12)
+add('cover', 'Import cover of reserves', 'months', 'M', 'ext', ['ET.SEI_B.011', 'ET.SEI_B.015', 'ET.SEI_B.010'], cover, 'reserves ÷ average monthly imports (12 months)', 'Calculated. A common rule of thumb is at least 3 months.', 'derived')
+for key, code, lab in [('ca', 'BGD_BOP_BCA_FY_USD', 'Current account balance'), ('fa', 'BGD_BOP_BF_FY_USD', 'Financial account'),
+                       ('goods', 'BGD_BOP_BG_FY_USD', 'Trade balance (goods)'), ('secinc', 'BGD_BOP_BIS_FY_USD', 'Secondary income (mainly remittances)'),
+                       ('bop', 'BGD_BOP_BOP_FY_USD', 'Overall balance'), ('fdi', 'BGD_BOP_BFFDI_FY_USD', 'Foreign direct investment (net)')]:
+    full = 'N.BOPALT.' + code
+    add(key, lab, 'US$ mn', 'FY', 'ext', [full], get(full, 'FY'), 'balance of payments, fiscal year')
+add('govcredit', 'Net bank credit to government', '% y/y', 'M', 'fiscal', ['ET.MS_M2.006'], yoy(M('ET.MS_M2.006'), 12), 'banking-system financing of the budget', '', 'yoy')
+add('nsav_net', 'Net sales of national savings certificates', 'Tk crore', 'M', 'fiscal', ['ET.NSAV.017'], M('ET.NSAV.017'))
+add('nsav_out', 'Outstanding national savings certificates', 'Tk crore', 'M', 'fiscal', ['ET.NSAV.018'], M('ET.NSAV.018'))
+tax_tot = [r[0] for r in cat if r[0].startswith('ET.TAX.') and 'total' in r[3].lower() and 'M' in r[5]]
+if tax_tot:
+    t = M(tax_tot[0])
+    add('tax', 'NBR tax revenue', 'Tk crore', 'M', 'fiscal', [tax_tot[0]], t, 'monthly collection')
+    add('tax_g', 'NBR tax revenue growth', '% y/y', 'M', 'fiscal', [tax_tot[0]], yoy(t, 12), '', '', 'yoy')
 mcap = M('ET.MCAP.016')
-add('mcap', 'Market capitalisation', 'Tk crore', 'M', 'capital', ['ET.MCAP.016'], mcap, 'listed companies (Table XI)', '', 'raw', dec=0, good='high')
-add('mcap_gdp', 'Market capitalisation', '% of GDP', 'M', 'capital', ['ET.MCAP.016', 'ET.NA_KEY.002'], {k: v / gdpn[(k // 12) + (1 if k % 12 >= 6 else 0)] * 100 for k, v in mcap.items() if gdpn.get((k // 12) + (1 if k % 12 >= 6 else 0))}, 'of the fiscal year’s nominal GDP', 'Calculated.', 'derived', good='high')
-add('turnover', 'DSE turnover', 'Tk crore', 'M', 'capital', ['ET.SHAREIDX.002'], M('ET.SHAREIDX.002'), 'monthly (Table X)', '', 'raw', dec=0)
+add('mcap', 'Market capitalisation', 'Tk crore', 'M', 'cap', ['ET.MCAP.016'], mcap, 'listed companies')
+add('mcap_g', 'Market capitalisation growth', '% y/y', 'M', 'cap', ['ET.MCAP.016'], yoy(mcap, 12), '', '', 'yoy')
+sectors = []
+for i in range(1, 16):
+    c = f'ET.MCAP.{i:03d}'
+    d = M(c)
+    if d:
+        k = max(d)
+        sectors.append({'name': META[c][3].split('|')[-1].strip().replace('Pharmaceu-ticals', 'Pharmaceuticals'), 'v': r4(d[k]), 'period': mlab(k), 'code': c})
+# SAARC peers (quarterly): reserves and exchange rates from Economic Trends Table XXVII
+peers = []
+for r in cat:
+    if r[0].startswith('ET.SAARC.') and r[0] in SER['Q'] and r[3].split('|')[0].strip() in ('Foreign Exchange Reserve', 'Exchange Rate (CY/$)'):
+        d = get(r[0], 'Q')
+        if d:
+            k = max(d)
+            peers.append({'ind': r[3].split('|')[0].strip(), 'country': r[3].split('|')[-1].strip(), 'period': qlab(k), 'v': r4(d[k]), 'code': r[0], 'series': pack(d, 'Q')})
 
-# =============================================================== categories (Weekly Selected Economic Indicators order)
-CATS = [
-    dict(id='inflation', title='Inflation and prices', wsei='Inflation (national, base 2021–22)', target='infl', drivers=['xr_dep', 'm2', 'call', 'policy', 'brent_bdt'], wdi='inflation',
-         desc='Consumer price inflation (point-to-point and 12-month average), food and non-food inflation, CPI groups, wages and producer prices.',
-         bench=[dict(y=7.5, label='Government target FY26: 7.5%', src='The Daily Star, 31 Jul 2026')], events=['covid', 'commodity', 'transition']),
-    dict(id='exchange', title='Exchange rate', wsei='Reserves and exchange rate', target='xr', drivers=['res', 'remit_g', 'exp_g', 'call', 'infl'], wdi='fx_change',
-         desc='Taka per US dollar (average and end of period), depreciation, and the Taka against other major currencies.', events=['commodity', 'crawl', 'transition']),
-    dict(id='remittances', title='Remittances', wsei='Remittances', target='remit', drivers=['xr', 'migr', 'xr_dep'], wdi='remittances',
-         desc='Monthly remittance inflows, growth, 12-month totals, workers leaving for jobs abroad and the main source countries.', events=['covid', 'crawl', 'transition']),
-    dict(id='trade', title='Exports and imports', wsei='Imports and exports', target='exp', drivers=['xr', 'imp', 'remit'], wdi='exports',
-         desc='Merchandise exports and imports, the trade balance and 12-month totals.', events=['covid', 'commodity']),
-    dict(id='bop', title='Balance of payments', wsei='Current account balance', target='ca_m', drivers=['exp', 'imp', 'remit', 'xr'], wdi='current_account',
-         desc='Current account and its parts, the financial account, the overall balance, FDI and external debt.', events=['covid', 'commodity']),
-    dict(id='reserves', title='Foreign exchange reserves', wsei='Reserves and exchange rate', target='res', drivers=['ca_m', 'xr', 'remit', 'exp'], wdi='reserves',
-         desc='Gross and BPM6 reserves, import cover and monthly changes.', bench=[dict(y=3, label='3 months of imports (IMF rule of thumb)', src='IMF (2011), Assessing Reserve Adequacy', series='cover')], events=['commodity', 'transition']),
-    dict(id='callmoney', title='Call money market', wsei='Money market: call money rate', target='call', drivers=['policy', 'rm', 'excess_res', 'govcredit'], wdi='lending_rate',
-         desc='Weighted average, highest and lowest call money rates and banks’ excess reserves.', events=['covid', 'transition']),
-    dict(id='policy', title='Policy and interest rates', wsei='Interest rates: lending rates', target='lend', drivers=['policy', 'call', 'infl', 'm2'], wdi='lending_rate',
-         desc='Policy (repo) rate and corridor, bank lending and deposit rates, spread and real interest rates.', events=['covid', 'commodity', 'transition']),
-    dict(id='money', title='Money and credit', wsei='Monetary aggregates and credit', target='m2', drivers=['rm', 'pcredit', 'govcredit', 'call', 'infl'], wdi='money_growth',
-         desc='Reserve money, broad and narrow money, credit to the private sector, the government and other public bodies.', events=['covid', 'transition']),
-    dict(id='banking', title='Banking soundness and inclusion', wsei='Classified loans', target='npl', drivers=['crar', 'pcredit', 'lend'], wdi='private_credit',
-         desc='Non-performing loans, capital adequacy, profitability and liquidity of banks; deposits and advances; mobile and agent banking.',
-         bench=[dict(y=12.5, label='Basel III capital requirement 12.5%', src='Bangladesh Bank Basel III guidelines', series='crar')], events=['covid', 'transition']),
-    dict(id='fiscal', title='Fiscal and government finance', wsei='Tax revenue and national savings certificates', target='tax', drivers=['imp', 'infl', 'gdp_fy'], wdi='budget',
-         desc='NBR tax revenue and its main taxes, the budget balance and its financing, national savings certificates and government debt.', events=['covid', 'transition']),
-    dict(id='real', title='Real sector and growth', wsei='GDP growth (base 2015–16)', target='gdp_fy', drivers=['inv_gdp', 'iip', 'pcredit', 'infl'], wdi='gdp_growth',
-         desc='GDP growth (annual and quarterly), sector growth, industrial production, investment, savings, crops and unemployment.', events=['covid', 'commodity', 'transition']),
-    dict(id='capital', title='Capital market', wsei='Capital market: DSEX and CASPI', target='dse', drivers=['call', 'lend', 'xr_dep', 'pcredit'], wdi='mktcap',
-         desc='The Dhaka Stock Exchange broad index, market capitalisation and turnover.', events=['covid', 'transition']),
-]
-EVENTS = dict(
-    covid=dict(label='COVID-19', start='2020-03', end='2020-12', src='WHO pandemic declaration 11 March 2020; Bangladesh general holiday from 26 March 2020'),
-    commodity=dict(label='Global commodity and dollar shock', start='2022-03', end='2022-12', src='Russia–Ukraine war (Feb 2022) and the US Federal Reserve tightening cycle'),
-    crawl=dict(label='Crawling peg introduced', start='2024-05', end='2024-05', src='Bangladesh Bank, 8 May 2024 (crawling peg mid-rate Tk 117 per US$)'),
-    transition=dict(label='Political transition', start='2024-07', end='2024-08', src='Change of government in August 2024'),
-)
-for c in CATS:
-    c['series'] = [k for k in ORDER if C[k]['cat'] == c['id']]
+CH = {'prices': 'Prices and inflation', 'real': 'Real sector', 'money': 'Money and banking', 'rates': 'Interest rates',
+      'ext': 'External sector', 'fiscal': 'Fiscal', 'cap': 'Capital market'}
 
-# =============================================================== checks (stop if something looks broken)
-issues = []
-def last(k):
-    d = C[k]['data']; return max(d), d[max(d)]
-for k in ['infl', 'xr', 'remit', 'res', 'call', 'm2', 'npl', 'tax', 'gdp_fy', 'dse', 'exp', 'policy']:
-    kk, v = last(k)
-    print(f'  latest {k:8s} {LAB[C[k]["f"]](kk):9s} {v:10.2f}')
-assert 0 < last('infl')[1] < 20 and 80 < last('xr')[1] < 200 and 1000 < last('remit')[1] < 6000, 'implausible headline values'
-assert abs(sum(FYs('ET.MIGR.002').get(k, 0) for k in [2026]) - 35594.3961) < 1, 'FY26 remittance total changed: check against the WSEI (US$ 35.59 bn)'
+def reading(key):
+    s = C[key]
+    d, f = s['data'], s['f']
+    if not d:
+        return None
+    k = max(d)
+    lag = {'M': 12, 'Q': 4, 'FY': 1, 'CY': 1}[f]
+    prev = d.get(k - 1)
+    ya = d.get(k - lag)
+    win = [d[j] for j in range(k - lag + 1, k + 1) if j in d]
+    hist = [d[j] for j in sorted(d)]
+    pct = stats.percentileofscore(hist, d[k]) if len(hist) > 10 else None
+    return {'key': key, 'period': LAB[f](k), 'v': r4(d[k]), 'prev': r4(prev), 'ya': r4(ya), 'avg': r4(sum(win) / len(win)) if win else None,
+            'min': r4(min(hist)), 'max': r4(max(hist)), 'pct': r4(pct, 3), 'n': len(hist)}
+
+# ------------------------------------------------------------------ statistics
+def describe(x):
+    x = np.asarray([v for v in x if v is not None and math.isfinite(v)], float)
+    n = len(x)
+    if n < 8:
+        return None
+    q1, med, q3 = np.percentile(x, [25, 50, 75])
+    sd = x.std(ddof=1)
+    jb = stats.jarque_bera(x)
+    ar1 = np.corrcoef(x[1:], x[:-1])[0, 1] if n > 3 else None
+    tq = {lvl: float(stats.t.ppf(0.5 + lvl / 200, n - 1)) for lvl in (68, 80, 90, 95, 99)}
+    return {'n': n, 'mean': r4(x.mean()), 'median': r4(med), 'sd': r4(sd), 'min': r4(x.min()), 'q1': r4(q1), 'q3': r4(q3), 'max': r4(x.max()),
+            'skew': r4(stats.skew(x)), 'kurt': r4(stats.kurtosis(x)), 'jb': r4(jb.statistic), 'jb_p': r4(jb.pvalue), 'ar1': r4(ar1), 'se': r4(sd / math.sqrt(n)),
+            't': {str(k): r4(v) for k, v in tq.items()}}
+
+def unitroot(x):
+    x = np.asarray(x, float)
+    out = {}
+    for lab, y in (('level', x), ('diff', np.diff(x))):
+        try:
+            a = adfuller(y, regression='c', autolag='AIC')
+            k = kpss(y, regression='c', nlags='auto')
+            out[lab] = {'adf': r4(a[0]), 'adf_p': r4(a[1]), 'adf_lags': int(a[2]), 'adf_cv5': r4(a[4]['5%']), 'kpss': r4(k[0]), 'kpss_p': r4(k[1]), 'kpss_lags': int(k[2])}
+        except Exception:
+            out[lab] = None
+    lv = out.get('level') or {}
+    if lv:
+        a_st, k_st = lv['adf_p'] < 0.05, lv['kpss_p'] > 0.05
+        out['verdict'] = 'Stationary, I(0)' if a_st and k_st else 'Unit root, I(1)' if (not a_st and not k_st) else 'Mixed evidence'
+    return out
+
+# ------------------------------------------------------------------ ARIMA / SARIMA
+def window(key, start=None):
+    s = C[key]
+    d = s['data']
+    ks = sorted(d)
+    k0 = start if start and start > ks[0] else ks[0]
+    k1 = ks[-1]
+    ks = [k for k in range(k0, k1 + 1)]
+    while ks and ks[0] not in d:
+        ks.pop(0)
+    f = filled(d)
+    return ks, np.asarray([f[k] for k in ks], float)
+
+def filled(d, maxgap=3):
+    """Linear interpolation of isolated gaps (up to 3 periods) for model inputs only."""
+    out = dict(d)
+    ks = sorted(d)
+    for a, b in zip(ks, ks[1:]):
+        if 1 < b - a <= maxgap + 1:
+            for j in range(a + 1, b):
+                out[j] = d[a] + (d[b] - d[a]) * (j - a) / (b - a)
+    return out
+
+def fit(y, order, sorder, trend):
+    m = SARIMAX(y, order=order, seasonal_order=sorder, trend=trend)
+    return m.fit(disp=False, maxiter=200)
+
+def select(y, seasonal):
+    best = None
+    grid = []
+    P = range(0, 2) if seasonal else range(0, 3)
+    for d in (0, 1):
+        for trend in (['c'] if d == 0 else ['n', 't']):
+            for p in P:
+                for q in P:
+                    for so in ([(0, 1, 1, 12), (1, 1, 0, 12)] if seasonal else [(0, 0, 0, 0)]):
+                        grid.append(((p, d, q), so, trend))
+    tried = []
+    for order, so, trend in grid:
+        try:
+            r = fit(y, order, so, trend)
+            if not np.isfinite(r.aic):
+                continue
+            tried.append((r.aic, r.bic, order, so, trend))
+            if best is None or r.aic < best[0]:
+                best = (r.aic, order, so, trend, r)
+        except Exception:
+            pass
+    tried.sort(key=lambda t: t[0])
+    return best, tried[:5]
+
+def dm_test(e1, e2, h):
+    d = np.asarray(e1) ** 2 - np.asarray(e2) ** 2
+    n = len(d)
+    if n < 8:
+        return None, None
+    db = d.mean()
+    g = [np.sum((d[k:] - db) * (d[:n - k] - db)) / n for k in range(h)]
+    var = (g[0] + 2 * sum(g[1:])) / n
+    if var <= 0:
+        return None, None
+    dm = db / math.sqrt(var) * math.sqrt((n + 1 - 2 * h + h * (h - 1) / n) / n)
+    return r4(dm, 4), r4(2 * (1 - stats.t.cdf(abs(dm), n - 1)), 4)
+
+H = [1, 3, 6, 12]
+def arima_suite(key, log=False, seasonal=False, start=None, n_bt=24):
+    ks, y0 = window(key, start)
+    y = np.log(y0) if log else y0
+    best, top = select(y, seasonal)
+    if best is None:
+        return None
+    aic, order, so, trend, r = best
+    tab = []
+    names = r.model.param_names
+    for nm, b, se, pv in zip(names, r.params, r.bse, r.pvalues):
+        tab.append({'term': nm, 'coef': r4(b, 4), 'se': r4(se, 3), 'z': r4(b / se if se else None, 3), 'p': r4(pv, 3)})
+    lb = sm.stats.acorr_ljungbox(r.resid[max(order[1], so[1] * 12):], lags=[6, 12, 24])
+    lbt = [{'lag': int(l), 'q': r4(qv, 4), 'p': r4(pv, 3)} for l, qv, pv in zip([6, 12, 24], lb['lb_stat'], lb['lb_pvalue'])]
+    fc = r.get_forecast(12)
+    mean = np.asarray(fc.predicted_mean)
+    bands = {}
+    for lvl in (68, 80, 95):
+        ci = np.asarray(fc.conf_int(alpha=1 - lvl / 100))
+        bands[str(lvl)] = [rl(np.exp(ci[:, 0]) if log else ci[:, 0], 5), rl(np.exp(ci[:, 1]) if log else ci[:, 1], 5)]
+    mean_o = np.exp(mean) if log else mean
+    # rolling-origin backtest, fixed order, re-estimated at each origin
+    errs = {h: {'m': [], 'rw': [], 'sn': []} for h in H}
+    T = len(y)
+    for o in range(T - n_bt - 12, T - 1):
+        try:
+            rr = fit(y[:o + 1], order, so, trend)
+            f = np.asarray(rr.get_forecast(12).predicted_mean)
+        except Exception:
+            continue
+        for h in H:
+            if o + h < T:
+                act = y0[o + h]
+                pm = math.exp(f[h - 1]) if log else f[h - 1]
+                errs[h]['m'].append(act - pm)
+                errs[h]['rw'].append(act - y0[o])
+                if seasonal and o + h - 12 >= 0:
+                    errs[h]['sn'].append(act - y0[o + h - 12 * math.ceil(h / 12)])
+    bt = []
+    for h in H:
+        e, w = np.asarray(errs[h]['m']), np.asarray(errs[h]['rw'])
+        if len(e) < 6:
+            continue
+        rm, rw = math.sqrt(np.mean(e ** 2)), math.sqrt(np.mean(w ** 2))
+        dmv, dmp = dm_test(e, w, h)
+        act = np.asarray([0])
+        row = {'h': h, 'n': len(e), 'rmse': r4(rm, 4), 'mae': r4(np.mean(np.abs(e)), 4), 'rmse_rw': r4(rw, 4), 'theil_u': r4(rm / rw if rw else None, 3),
+               'skill': r4(1 - rm / rw if rw else None, 3), 'dm': dmv, 'dm_p': dmp}
+        if errs[h]['sn']:
+            sn = np.asarray(errs[h]['sn'])
+            row['rmse_sn'] = r4(math.sqrt(np.mean(sn ** 2)), 4)
+        bt.append(row)
+    lastk = ks[-1]
+    hist_k0 = max(ks[0], lastk - 95)
+    return {'key': key, 'label': C[key]['label'], 'unit': C[key]['unit'], 'log': log, 'seasonal': seasonal,
+            'spec': f"ARIMA{order}" + (f"×{so[:3]}₁₂" if seasonal else '') + {'c': ' with constant', 't': ' with drift', 'n': ''}[trend],
+            'order': list(order), 'sorder': list(so), 'trend': trend, 'aic': r4(aic, 6), 'bic': r4(r.bic, 6), 'nobs': int(r.nobs),
+            'sample': [mlab(ks[0]), mlab(lastk)], 'coefs': tab, 'ljungbox': lbt,
+            'alts': [{'spec': f"ARIMA{t[2]}" + (f"×{t[3][:3]}₁₂" if seasonal else '') + {'c': ' c', 't': ' drift', 'n': ''}[t[4]], 'aic': r4(t[0], 6), 'bic': r4(t[1], 6)} for t in top],
+            'fc_start': mlab(lastk + 1), 'fc': rl(mean_o, 5), 'bands': bands, 'backtest': bt,
+            'hist': {'s': mlab(hist_k0), 'v': rl([y0[ks.index(k)] for k in range(hist_k0, lastk + 1)], 5)},
+            'fitted': rl((np.exp(np.asarray(r.fittedvalues)) if log else np.asarray(r.fittedvalues))[-(lastk - hist_k0 + 1):], 5)}
+
+print('ARIMA models…')
+AR = {}
+for key, lg, sea in [('infl', False, False), ('food', False, False), ('nonfood', False, False), ('xr', True, False), ('res', True, False),
+                     ('remit', True, True), ('exp', True, True), ('m2', False, False), ('pcredit', False, False), ('call', False, False)]:
+    try:
+        AR[key] = arima_suite(key, lg, sea, start=mk(2012, 7) if key in ('food', 'nonfood') else mk(2010, 1))
+        print(' ', key, AR[key]['spec'] if AR[key] else None)
+    except Exception as e:
+        print('  failed', key, e)
+
+# ------------------------------------------------------------------ VAR / SVAR
+print('VAR…')
+VKEYS = ['infl', 'm2', 'call', 'xr_dep']
+VLAB = ['Inflation', 'M2 growth', 'Call money rate', 'Taka depreciation']
+FD = {k: filled(C[k]['data']) for k in VKEYS}
+common = sorted(set.intersection(*[set(FD[k]) for k in VKEYS]))
+common = [k for k in common if k >= mk(2010, 1)]
+# contiguous block ending at the last common month
+blk = [common[-1]]
+for k in reversed(common[:-1]):
+    if k == blk[-1] - 1:
+        blk.append(k)
+    else:
+        break
+blk = blk[::-1]
+Y = np.array([[FD[k][t] for k in VKEYS] for t in blk])
+N_FILLED = sum(1 for k in VKEYS for t in blk if t not in C[k]['data'])
+sel = VAR(Y).select_order(12)
+lagtab = [{'p': p, **{ic: r4(sel.ics[ic][p], 6) for ic in ('aic', 'bic', 'hqic', 'fpe')}} for p in range(len(sel.ics['aic']))]
+chosen = {ic: int(v) for ic, v in sel.selected_orders.items()}
+# lag rule: the shortest information-criterion choice whose residuals pass the Portmanteau test (5%); else AIC
+LAG_RULE = 'AIC'
+p = max(1, chosen['aic'])
+for cand, ic in sorted({(max(1, chosen[ic]), ic) for ic in ('bic', 'hqic', 'aic')}):
+    if VAR(Y).fit(cand).test_whiteness(nlags=24).pvalue > 0.05:
+        p, LAG_RULE = cand, ic.upper()
+        break
+vr = VAR(Y).fit(p)
+comp_m = np.zeros((4 * p, 4 * p))
+comp_m[:4, :] = np.hstack(list(vr.coefs))
+if p > 1:
+    comp_m[4:, :-4] = np.eye(4 * (p - 1))
+mods = np.sort(np.abs(np.linalg.eigvals(comp_m)))[::-1]
+wt = vr.test_whiteness(nlags=24)
+nt = vr.test_normality()
+gr = []
+for i in range(4):
+    for j in range(4):
+        if i != j:
+            t = vr.test_causality(j, [i], kind='f')
+            gr.append({'cause': i, 'effect': j, 'f': r4(t.test_statistic, 4), 'p': r4(t.pvalue, 4), 'df': [int(t.df[0]), int(t.df[1])]})
+irf = vr.irf(24)
+lo, hi = irf.errband_mc(orth=True, repl=500, signif=0.10, rng=np.random.RandomState(7))
+oi = irf.orth_irfs
+IRF = {'h': 24, 'mean': [[rl(oi[:, r, s], 4) for s in range(4)] for r in range(4)],
+       'lo': [[rl(lo[:, r, s], 4) for s in range(4)] for r in range(4)], 'hi': [[rl(hi[:, r, s], 4) for s in range(4)] for r in range(4)]}
+fe = vr.fevd(25).decomp  # (var, horizon, shock)
+FEVD = [[rl(fe[v, :, s] * 100, 4) for s in range(4)] for v in range(4)]
+fc_mean, fc_lo95, fc_hi95 = vr.forecast_interval(Y[-p:], steps=12, alpha=0.05)
+_, fc_lo80, fc_hi80 = vr.forecast_interval(Y[-p:], steps=12, alpha=0.20)
+# VAR backtest for inflation (fixed lag, rolling origin) and ensemble with ARIMA
+vb = {h: [] for h in H}
+ab = {h: [] for h in H}
+rw = {h: [] for h in H}
+yi = Y[:, 0]
+T = len(Y)
+a_order, a_so, a_tr = AR['infl']['order'], AR['infl']['sorder'], AR['infl']['trend']
+for o in range(T - 24 - 12, T - 1):
+    try:
+        vf = VAR(Y[:o + 1]).fit(p).forecast(Y[o + 1 - p:o + 1], 12)[:, 0]
+        af = np.asarray(fit(yi[:o + 1], tuple(a_order), tuple(a_so), a_tr).get_forecast(12).predicted_mean)
+    except Exception:
+        continue
+    for h in H:
+        if o + h < T:
+            vb[h].append(yi[o + h] - vf[h - 1])
+            ab[h].append(yi[o + h] - af[h - 1])
+            rw[h].append(yi[o + h] - yi[o])
+ENS = []
+for h in H:
+    v, a, w = np.asarray(vb[h]), np.asarray(ab[h]), np.asarray(rw[h])
+    if len(v) < 6:
+        continue
+    mv, ma = np.mean(v ** 2), np.mean(a ** 2)
+    wv = (1 / mv) / (1 / mv + 1 / ma)
+    e = wv * v + (1 - wv) * a
+    dmv, dmp = dm_test(e, w, h)
+    ENS.append({'h': h, 'n': len(v), 'rmse_var': r4(math.sqrt(mv), 4), 'rmse_arima': r4(math.sqrt(ma), 4), 'w_var': r4(wv, 3),
+                'rmse_ens': r4(math.sqrt(np.mean(e ** 2)), 4), 'rmse_rw': r4(math.sqrt(np.mean(w ** 2)), 4),
+                'q10': r4(np.percentile(e, 10), 4), 'q90': r4(np.percentile(e, 90), 4), 'q025': r4(np.percentile(e, 2.5), 4), 'q975': r4(np.percentile(e, 97.5), 4),
+                'dm_vs_rw': dmv, 'dm_p': dmp})
+# combined inflation path (interpolate weights across horizons)
+wh = {row['h']: row['w_var'] for row in ENS}
+def w_at(h):
+    hs = sorted(wh)
+    if h <= hs[0]:
+        return wh[hs[0]]
+    for a_, b_ in zip(hs, hs[1:]):
+        if a_ <= h <= b_:
+            return wh[a_] + (wh[b_] - wh[a_]) * (h - a_) / (b_ - a_)
+    return wh[hs[-1]]
+ens_path = []
+sd_h = {row['h']: row['rmse_ens'] for row in ENS}
+def sd_at(h):
+    hs = sorted(sd_h)
+    if h <= hs[0]:
+        return sd_h[hs[0]]
+    for a_, b_ in zip(hs, hs[1:]):
+        if a_ <= h <= b_:
+            return sd_h[a_] + (sd_h[b_] - sd_h[a_]) * (h - a_) / (b_ - a_)
+    return sd_h[hs[-1]]
+for h in range(1, 13):
+    w_ = w_at(h)
+    m_ = w_ * fc_mean[h - 1, 0] + (1 - w_) * AR['infl']['fc'][h - 1]
+    s_ = sd_at(h)
+    ens_path.append({'h': h, 'mean': r4(m_, 4), 'sd': r4(s_, 4), 'lo80': r4(m_ - 1.2816 * s_, 4), 'hi80': r4(m_ + 1.2816 * s_, 4), 'lo95': r4(m_ - 1.96 * s_, 4), 'hi95': r4(m_ + 1.96 * s_, 4),
+                     'p_gt8': r4(1 - stats.norm.cdf(8, m_, s_), 3), 'p_lt6': r4(stats.norm.cdf(6, m_, s_), 3), 'p_gt10': r4(1 - stats.norm.cdf(10, m_, s_), 3)})
+
+# ------------------------------------------------------------------ robustness, placebo, rolling
+print('Robustness and placebo…')
+def peak(arr):
+    a = np.asarray(arr)
+    i = int(np.argmax(np.abs(a)))
+    return r4(a[i], 4), i
+ROB_LAG = []
+for pp in sorted(set([1, 2, 4, 6, p, 12])):
+    try:
+        rr = VAR(Y).fit(pp)
+        ii = rr.irf(24).orth_irfs
+        g_ = rr.test_causality(0, [3], kind='f').pvalue
+        g2 = rr.test_causality(0, [1], kind='f').pvalue
+        pk, at = peak(ii[:, 0, 3])
+        pk2, at2 = peak(ii[:, 0, 2])
+        ROB_LAG.append({'p': pp, 'aic': r4(rr.aic, 6), 'stable': bool(rr.is_stable()), 'irf_xr_peak': pk, 'irf_xr_at': at, 'irf_call_peak': pk2, 'irf_call_at': at2,
+                        'g_xr_p': r4(g_, 4), 'g_m2_p': r4(g2, 4)})
+    except Exception:
+        pass
+ORDERS = [[0, 1, 2, 3], [3, 1, 2, 0], [3, 0, 1, 2], [2, 1, 0, 3]]
+ROB_ORD = []
+for od in ORDERS:
+    rr = VAR(Y[:, od]).fit(p)
+    ii = rr.irf(24).orth_irfs
+    ip = od.index(0)
+    pk, at = peak(ii[:, ip, od.index(3)])
+    pk2, at2 = peak(ii[:, ip, od.index(2)])
+    pk3, at3 = peak(ii[:, ip, od.index(1)])
+    ROB_ORD.append({'order': [VLAB[i] for i in od], 'xr_peak': pk, 'xr_at': at, 'call_peak': pk2, 'call_at': at2, 'm2_peak': pk3, 'm2_at': at3})
+split = mk(2020, 1)
+ROB_SUB = []
+for lab_, mask in [('2010–2019', [t < split for t in blk]), ('2020–' + mlab(blk[-1])[:4], [t >= split for t in blk])]:
+    Ys = Y[np.array(mask)]
+    try:
+        ps = int(max(1, min(VAR(Ys).select_order(6).selected_orders['aic'], 4)))
+        rr = VAR(Ys).fit(ps)
+        x = Ys[:, 0]
+        b1 = sm.OLS(x[1:], sm.add_constant(x[:-1])).fit()
+        ROB_SUB.append({'sample': lab_, 'n': len(Ys), 'p': ps, 'g_xr_p': r4(rr.test_causality(0, [3], kind='f').pvalue, 4),
+                        'g_m2_p': r4(rr.test_causality(0, [1], kind='f').pvalue, 4), 'g_call_p': r4(rr.test_causality(0, [2], kind='f').pvalue, 4),
+                        'ar1': r4(b1.params[1], 4), 'ar1_se': r4(b1.bse[1], 3), 'mean_infl': r4(x.mean(), 4)})
+    except Exception as e:
+        print('  subsample failed', lab_, e)
+roll = []
+x = Y[:, 0]
+for i in range(60, len(x)):
+    seg = x[i - 60:i]
+    b = sm.OLS(seg[1:], sm.add_constant(seg[:-1])).fit()
+    rc = np.corrcoef(Y[i - 36:i, 0], Y[i - 36:i, 3])[0, 1]
+    roll.append([mlab(blk[i - 1]), r4(b.params[1], 4), r4(b.params[1] - 1.96 * b.bse[1], 4), r4(b.params[1] + 1.96 * b.bse[1], 4), r4(rc, 4)])
+# placebo 1: circular shifts of the exchange-rate series (keeps its own dynamics, breaks timing)
+biv = VAR(Y[:, [0, 3]]).fit(p)
+f_act = biv.test_causality(0, [1], kind='f').test_statistic
+shifts = RNG.randint(24, len(Y) - 24, size=500)
+f_pl = []
+for s_ in shifts:
+    z = np.column_stack([Y[:, 0], np.roll(Y[:, 3], s_)])
+    try:
+        f_pl.append(VAR(z).fit(p).test_causality(0, [1], kind='f').test_statistic)
+    except Exception:
+        pass
+f_pl = np.asarray(f_pl)
+# placebo 2: fake random-walk drivers should be "significant" only ~5% of the time
+fake = []
+for _ in range(300):
+    z = np.column_stack([Y[:, 0], np.cumsum(RNG.randn(len(Y)))])
+    try:
+        fake.append(VAR(z).fit(p).test_causality(0, [1], kind='f').pvalue)
+    except Exception:
+        pass
+fake = np.asarray(fake)
+hist_pl, edges = np.histogram(f_pl, bins=30)
+PLACEBO = {'f_actual': r4(f_act, 4), 'p_actual': r4(biv.test_causality(0, [1], kind='f').pvalue, 4), 'n_shift': int(len(f_pl)),
+           'p_placebo': r4(float(np.mean(f_pl >= f_act)), 4), 'f_q95': r4(np.percentile(f_pl, 95), 4),
+           'hist': {'edges': rl(edges, 4), 'counts': [int(c) for c in hist_pl]},
+           'fake_n': int(len(fake)), 'fake_rate05': r4(float(np.mean(fake < 0.05)), 3), 'fake_rate10': r4(float(np.mean(fake < 0.10)), 3),
+           'fake_q05': r4(float(np.percentile(fake, 5)), 4)}
+
+# ------------------------------------------------------------------ calibrated New Keynesian DSGE (Galí 2015, ch. 3)
+beta, sigma, phi, alpha_, eps, theta = 0.99, 1.0, 5.0, 0.25, 9.0, 0.75
+lam = (1 - theta) * (1 - beta * theta) / theta * (1 - alpha_) / (1 - alpha_ + alpha_ * eps)
+kappa = lam * (sigma + (phi + alpha_) / (1 - alpha_))
+phi_pi, phi_y = 1.5, 0.5 / 4
+DS = {'params': [
+    {'sym': 'β', 'name': 'Discount factor', 'v': beta, 'src': 'Galí (2015), ch. 3'},
+    {'sym': 'σ', 'name': 'Inverse elasticity of intertemporal substitution', 'v': sigma, 'src': 'Galí (2015)'},
+    {'sym': 'φ', 'name': 'Inverse Frisch elasticity of labour supply', 'v': phi, 'src': 'Galí (2015)'},
+    {'sym': 'α', 'name': 'Labour share complement (1 − α = labour elasticity)', 'v': alpha_, 'src': 'Galí (2015)'},
+    {'sym': 'ε', 'name': 'Elasticity of substitution between goods', 'v': eps, 'src': 'Galí (2015)'},
+    {'sym': 'θ', 'name': 'Calvo price stickiness (share of firms not resetting)', 'v': theta, 'src': 'Galí (2015)'},
+    {'sym': 'κ', 'name': 'Slope of the Phillips curve (derived)', 'v': r4(kappa, 4), 'src': 'Calculated'},
+    {'sym': 'φπ', 'name': 'Taylor-rule response to inflation', 'v': phi_pi, 'src': 'Taylor (1993)'},
+    {'sym': 'φy', 'name': 'Taylor-rule response to the output gap (quarterly)', 'v': phi_y, 'src': 'Taylor (1993)'}],
+    'determinacy': r4(kappa * (phi_pi - 1) + (1 - beta) * phi_y, 4), 'irf': {}}
+for shock, rho, unit in [('Monetary policy', 0.5, (0, 0, 0.25)), ('Demand', 0.5, (0.5, 0, 0)), ('Cost-push', 0.5, (0, 0.25, 0))]:
+    Mx = np.array([[1 - rho, -rho / sigma, 1 / sigma], [-kappa, 1 - beta * rho, 0], [-phi_y, -phi_pi, 1]])
+    a_, b_, c_ = np.linalg.solve(Mx, np.array(unit))
+    hs = np.arange(0, 17)
+    DS['irf'][shock] = {'rho': rho, 'x': rl(a_ * rho ** hs, 4), 'pi': rl(4 * b_ * rho ** hs, 4), 'i': rl(4 * c_ * rho ** hs, 4)}
+
+# ------------------------------------------------------------------ ridgelines ("mountain maps")
+def kde_rows(groups, lo_, hi_, n=90):
+    xs = np.linspace(lo_, hi_, n)
+    rows = []
+    for lab_, vals in groups:
+        vals = np.asarray([v for v in vals if v is not None and math.isfinite(v)])
+        if len(vals) < 6 or np.std(vals) == 0:
+            continue
+        dens = stats.gaussian_kde(np.clip(vals, lo_, hi_))(xs)
+        rows.append({'label': lab_, 'n': int(len(vals)), 'median': r4(np.median(vals), 4), 'y': rl(dens, 4)})
+    return {'x': rl(xs, 4), 'rows': rows}
+fy_groups = {}
+for k, v in C['infl']['data'].items():
+    y_, m_ = k // 12, k % 12 + 1
+    fy = y_ + 1 if m_ >= 7 else y_
+    fy_groups.setdefault(fy, []).append(v)
+RIDGE_BD = kde_rows([(f'FY{fy % 100:02d}', fy_groups[fy]) for fy in sorted(fy_groups) if len(fy_groups[fy]) >= 9], 0, 14)
+
+# ------------------------------------------------------------------ world analysis (World Bank WDI)
+print('World analysis…')
+W = json.load(open(A.world))
+WS = W['s']
+ECON = {e[0]: e for e in W['econ']}
+def wser(key, code):
+    s = WS.get(key, {}).get(code)
+    if not s:
+        return {}
+    y0_, st = s
+    return {y0_ + i: float(v) for i, v in enumerate(st.split(',')) if v != ''}
+countries = [e for e in W['econ'] if not e[6]]
+# heterogeneity: inflation persistence and volatility by region, Kruskal-Wallis
+het = []
+for e in countries:
+    inf = wser('inflation', e[0])
+    g = wser('gdp_growth', e[0])
+    yrs = [y_ for y_ in range(2000, 2026) if y_ in inf]
+    if len(yrs) < 18 or max(inf[y_] for y_ in yrs) > 100:
+        continue
+    xx = np.array([inf[y_] for y_ in yrs])
+    b = sm.OLS(xx[1:], sm.add_constant(xx[:-1])).fit()
+    gv = [g[y_] for y_ in range(2000, 2026) if y_ in g]
+    het.append({'code': e[0], 'name': e[1], 'region': e[3], 'pers': float(b.params[1]), 'mean': float(xx.mean()), 'gsd': float(np.std(gv, ddof=1)) if len(gv) > 5 else None})
+REG = ['Africa', 'Americas', 'Asia', 'Europe', 'Oceania']
+def box(vals):
+    v = np.sort(np.asarray(vals))
+    q1_, md, q3_ = np.percentile(v, [25, 50, 75])
+    iqr = q3_ - q1_
+    lo_w, hi_w = v[v >= q1_ - 1.5 * iqr].min(), v[v <= q3_ + 1.5 * iqr].max()
+    return [r4(lo_w, 4), r4(q1_, 4), r4(md, 4), r4(q3_, 4), r4(hi_w, 4)]
+HET = {'measures': []}
+for meas, lab_ in [('pers', 'Inflation persistence (AR(1) coefficient, 2000–2025)'), ('mean', 'Average inflation, 2000–2025 (%)'), ('gsd', 'Volatility of real GDP growth (SD, pp)')]:
+    groups = [[h[meas] for h in het if h['region'] == rg and h[meas] is not None] for rg in REG]
+    ok = [g for g in groups if len(g) >= 3]
+    kw = stats.kruskal(*ok)
+    rows = []
+    for rg, g in zip(REG, groups):
+        if len(g) >= 3:
+            rows.append({'region': rg, 'n': len(g), 'box': box(g), 'mean': r4(np.mean(g), 4)})
+    bgd = next((h[meas] for h in het if h['code'] == 'BGD'), None)
+    HET['measures'].append({'key': meas, 'label': lab_, 'rows': rows, 'kw_h': r4(kw.statistic, 4), 'kw_p': r4(kw.pvalue, 4), 'kw_df': len(ok) - 1, 'bgd': r4(bgd, 4)})
+# convergence: beta (unconditional and conditional, HC1 robust), sigma
+cv = []
+for e in countries:
+    g = wser('gdp_growth', e[0]); pg = wser('pop_growth', e[0]); ppp = wser('gdp_pc_ppp', e[0]); inv = wser('investment', e[0])
+    yrs = [y_ for y_ in range(2000, 2025) if y_ in g and y_ in pg]
+    if len(yrs) < 20 or 2000 not in ppp:
+        continue
+    invs = [inv[y_] for y_ in range(2000, 2025) if y_ in inv]
+    cv.append({'code': e[0], 'name': e[1], 'region': e[3], 'g': float(np.mean([g[y_] - pg[y_] for y_ in yrs])), 'y0': math.log(ppp[2000]),
+               'inv': float(np.mean(invs)) if len(invs) >= 15 else None, 'n': float(np.mean([pg[y_] for y_ in yrs]))})
+yv = np.array([c['g'] for c in cv]); x0 = np.array([c['y0'] for c in cv])
+m1 = sm.OLS(yv, sm.add_constant(x0)).fit(cov_type='HC1')
+cc = [c for c in cv if c['inv'] and c['inv'] > 0 and c['n'] / 100 + 0.05 > 0]
+X2 = np.column_stack([[c['y0'] for c in cc], [math.log(c['inv']) for c in cc], [math.log(c['n'] / 100 + 0.05) for c in cc]])
+m2_ = sm.OLS(np.array([c['g'] for c in cc]), sm.add_constant(X2)).fit(cov_type='HC1')
+def regtab(m, names):
+    return [{'term': n, 'coef': r4(b, 4), 'se': r4(s, 3), 'p': r4(pv, 4)} for n, b, s, pv in zip(names, m.params, m.bse, m.pvalues)]
+xs_ = np.linspace(x0.min(), x0.max(), 40)
+pr = m1.get_prediction(sm.add_constant(xs_)).summary_frame(alpha=0.05)
+CONV = {'pts': [[r4(c['y0'], 4), r4(c['g'], 4), c['code'], c['name'], c['region']] for c in cv],
+        'm1': {'rows': regtab(m1, ['Constant', 'ln GDP per person, 2000 (PPP)']), 'n': int(m1.nobs), 'r2': r4(m1.rsquared, 3), 'f_p': r4(m1.f_pvalue, 4)},
+        'm2': {'rows': regtab(m2_, ['Constant', 'ln GDP per person, 2000 (PPP)', 'ln investment share', 'ln (population growth + 0.05)']), 'n': int(m2_.nobs), 'r2': r4(m2_.rsquared, 3), 'f_p': r4(m2_.f_pvalue, 4)},
+        'line': {'x': rl(xs_, 4), 'y': rl(np.asarray(pr['mean']), 4), 'lo': rl(np.asarray(pr['mean_ci_lower']), 4), 'hi': rl(np.asarray(pr['mean_ci_upper']), 4)},
+        'half_life': r4(math.log(2) / (-m1.params[1] / 100) if m1.params[1] < 0 else None, 3)}
+sig = []
+for y_ in range(1990, 2025):
+    vals = [math.log(v) for e in countries for v in [wser('gdp_pc_ppp', e[0]).get(y_)] if v]
+    if len(vals) > 100:
+        sig.append([y_, r4(np.std(vals, ddof=1), 4), len(vals)])
+CONV['sigma'] = sig
+# world ridgeline of inflation across countries
+RIDGE_W = kde_rows([(str(y_), [wser('inflation', e[0]).get(y_) for e in countries]) for y_ in [2000, 2005, 2008, 2010, 2015, 2019, 2020, 2021, 2022, 2023, 2024, 2025]], -5, 25)
+# cross-country Spearman correlations (2023 cross-section)
+CK = [('gdp_growth', 'Growth'), ('inflation', 'Inflation'), ('unemployment', 'Unemployment'), ('current_account', 'Current account'),
+      ('private_credit', 'Private credit'), ('remittances', 'Remittances'), ('exports', 'Exports'), ('gdp_pc_ppp', 'GDP per person (PPP)')]
+YR = 2023
+tbl = {k: {e[0]: wser(k, e[0]).get(YR) for e in countries} for k, _ in CK}
+CORR = {'labels': [l for _, l in CK], 'year': YR, 'rho': [], 'p': [], 'n': []}
+for k1, _ in CK:
+    rr_, pp_, nn_ = [], [], []
+    for k2, _ in CK:
+        pairs = [(tbl[k1][c], tbl[k2][c]) for c in tbl[k1] if tbl[k1][c] is not None and tbl[k2].get(c) is not None]
+        if len(pairs) > 20:
+            rho, pv = stats.spearmanr([a for a, _ in pairs], [b for _, b in pairs])
+            rr_.append(r4(rho, 3)); pp_.append(r4(pv, 3)); nn_.append(len(pairs))
+        else:
+            rr_.append(None); pp_.append(None); nn_.append(len(pairs))
+    CORR['rho'].append(rr_); CORR['p'].append(pp_); CORR['n'].append(nn_)
+# cross-country ARMA projections (annual), 3 years ahead
+FCW = []
+for code in ['WLD', 'BGD', 'IND', 'PAK', 'LKA', 'NPL', 'CHN', 'IDN', 'VNM', 'USA', 'JPN', 'DEU', 'GBR', 'BRA', 'MEX', 'TUR', 'SAU', 'EGY', 'NGA', 'ZAF']:
+    if code not in ECON:
+        continue
+    row = {'code': code, 'name': ECON[code][1]}
+    for key in ('gdp_growth', 'inflation'):
+        d = wser(key, code)
+        yrs = [y_ for y_ in range(1995, 2026) if y_ in d]
+        if len(yrs) < 20 or yrs[-1] - yrs[0] + 1 != len(yrs):
+            continue
+        yy = np.array([d[y_] for y_ in yrs])
+        best = None
+        for p_ in range(3):
+            for q_ in range(3):
+                try:
+                    r_ = SARIMAX(yy, order=(p_, 0, q_), trend='c').fit(disp=False, maxiter=200)
+                    if best is None or r_.aic < best[0]:
+                        best = (r_.aic, (p_, 0, q_), r_)
+                except Exception:
+                    pass
+        if not best:
+            continue
+        f = best[2].get_forecast(3)
+        ci80 = np.asarray(f.conf_int(alpha=0.2)); ci95 = np.asarray(f.conf_int(alpha=0.05))
+        e1, e0 = [], []
+        for o in range(len(yy) - 8, len(yy)):
+            try:
+                pf = SARIMAX(yy[:o], order=best[1], trend='c').fit(disp=False, maxiter=200).forecast(1)[0]
+                e1.append(yy[o] - pf); e0.append(yy[o] - yy[o - 1])
+            except Exception:
+                pass
+        row[key] = {'last': [yrs[-1], r4(yy[-1], 4)], 'spec': f'ARMA({best[1][0]},{best[1][2]})', 'fc': rl(np.asarray(f.predicted_mean), 4),
+                    'lo80': rl(ci80[:, 0], 4), 'hi80': rl(ci80[:, 1], 4), 'lo95': rl(ci95[:, 0], 4), 'hi95': rl(ci95[:, 1], 4),
+                    'rmse': r4(math.sqrt(np.mean(np.square(e1))), 3) if e1 else None, 'rmse_naive': r4(math.sqrt(np.mean(np.square(e0))), 3) if e0 else None}
+    FCW.append(row)
+
+# ------------------------------------------------------------------ assemble
+DESC, UR = [], []
+for key in ['infl', 'food', 'nonfood', 'xr_dep', 'res', 'remit_g', 'exp_g', 'm2', 'pcredit', 'call', 'lend', 'real_lend']:
+    _, y_ = window(key, mk(2010, 1))
+    dd = describe(y_)
+    if dd:
+        DESC.append({'key': key, 'label': C[key]['label'], 'unit': C[key]['unit'], 'sample': [mlab(min(C[key]['data'])), mlab(max(C[key]['data']))], **dd})
+        u = unitroot(y_)
+        UR.append({'key': key, 'label': C[key]['label'], **u})
+
+series_out = {}
 for k, s in C.items():
-    vals = list(s['data'].values())
-    if any(not math.isfinite(v) for v in vals):
-        issues.append(f'{k}: non-finite values')
-    if s['unit'].startswith('%') and s['how'] == 'yoy' and max(abs(v) for v in vals) > 500:
-        issues.append(f'{k}: growth above 500% (max {max(vals):.0f})')
-print('issues:', issues or 'none')
-
-
-def pack(d, f):
-    ks = sorted(d); k0, k1 = ks[0], ks[-1]
-    return {'f': f, 's': LAB[f](k0), 'v': [r6(d.get(k)) for k in range(k0, k1 + 1)]}
-
-
-out_series = {}
-for k in ORDER:
-    s = C[k]
-    out_series[k] = {kk: s[kk] for kk in ('label', 'sub', 'unit', 'f', 'cat', 'how', 'note', 'src', 'role', 'dec', 'good')}
-    out_series[k].update(pack(s['data'], s['f']))
-OUT = dict(meta=dict(built=datetime.date.today().isoformat(), vintage='Bangladesh Bank, Monthly Economic Trends (September 2026 and earlier editions); Bangladesh Bank / IMF National Summary Data Page; BBS',
-                     n_catalog=len(cat), n_series=len(out_series)),
-           cats=CATS, events=EVENTS, series=out_series, policy=pol_rows)
-(ROOT / 'build').mkdir(exist_ok=True)
-js = json.dumps(OUT, separators=(',', ':'), ensure_ascii=False)
-(ROOT / 'build' / 'bd_data.json').write_text(js, encoding='utf-8')
-print('series', len(out_series), 'bytes', len(js))
-for c in CATS:
-    print(f"  {c['id']:12s} {len(c['series']):3d} series, target {c['target']}: " + ', '.join(c['series'][:14]))
+    series_out[k] = {kk: vv for kk, vv in s.items() if kk != 'data'}
+    series_out[k]['series'] = pack(s['data'], s['f'])
+    series_out[k]['reading'] = reading(k)
+OUT = {
+    'meta': {'estimated': datetime.date.today().isoformat(), 'vintage': 'Bangladesh Bank, Monthly Economic Trends, September 2026 edition, and earlier editions; NSDP (IMF e-GDDS) tables',
+             'n_catalog': len(cat), 'chunks': CH},
+    'series': series_out, 'cpi_components': comp, 'mcap_sectors': sectors, 'saarc': peers,
+    'desc': DESC, 'unitroot': UR, 'arima': AR,
+    'var': {'vars': VLAB, 'keys': VKEYS, 'sample': [mlab(blk[0]), mlab(blk[-1])], 'nobs': int(vr.nobs), 'p': p, 'lag_rule': LAG_RULE, 'filled': N_FILLED, 'chosen': chosen, 'lagtab': lagtab,
+            'stable': bool(vr.is_stable()), 'moduli': rl(mods[:8], 4), 'white': {'stat': r4(wt.test_statistic, 5), 'p': r4(wt.pvalue, 4), 'df': int(wt.df)},
+            'normal': {'stat': r4(nt.test_statistic, 5), 'p': r4(nt.pvalue, 4)}, 'granger': gr, 'irf': IRF, 'fevd': FEVD,
+            'fc': {'start': mlab(blk[-1] + 1), 'mean': [rl(fc_mean[:, i], 4) for i in range(4)], 'lo95': [rl(fc_lo95[:, i], 4) for i in range(4)],
+                   'hi95': [rl(fc_hi95[:, i], 4) for i in range(4)], 'lo80': [rl(fc_lo80[:, i], 4) for i in range(4)], 'hi80': [rl(fc_hi80[:, i], 4) for i in range(4)]},
+            'aic': r4(vr.aic, 6), 'bic': r4(vr.bic, 6)},
+    'ensemble': {'backtest': ENS, 'path': ens_path, 'start': AR['infl']['fc_start']},
+    'robust': {'lags': ROB_LAG, 'orders': ROB_ORD, 'subsamples': ROB_SUB, 'rolling': roll},
+    'placebo': PLACEBO, 'dsge': DS, 'ridge_bd': RIDGE_BD,
+    'world': {'het': HET, 'conv': CONV, 'ridge': RIDGE_W, 'corr': CORR, 'fc': FCW},
+}
+js = json.dumps(OUT, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
+Path(A.out).write_text(js, encoding='utf-8')
+print('wrote', A.out, len(js), 'bytes;', len(series_out), 'series;', len(AR), 'ARIMA;', 'VAR p =', p, 'sample', OUT['var']['sample'])
