@@ -14,5 +14,49 @@
     "apple": false,
     "owner": "ed7f244d868fafe01f34800b4db3ec3d7482a91d54161182c8c802b47d1971ae"
   },
-  "contact_form": ""
+  "contact_form": "",
+  "alert_endpoint": "",
+  "earn": {
+    "adsense_client": "",
+    "ad_slot_side": "",
+    "ad_slot_bottom": "",
+    "plans": [
+      {
+        "name": "Free",
+        "price": "Free",
+        "period": "",
+        "features": [
+          "Every chart, map, table and analysis",
+          "Ads shown at the side and bottom"
+        ],
+        "link": ""
+      },
+      {
+        "name": "Supporter",
+        "price": "US$ 3",
+        "period": "a month",
+        "features": [
+          "No ads",
+          "Monthly email brief from the editor",
+          "Early access to new pages"
+        ],
+        "link": ""
+      },
+      {
+        "name": "Professional",
+        "price": "US$ 30",
+        "period": "a year",
+        "features": [
+          "No ads",
+          "Monthly email brief from the editor",
+          "Data tables on request (CSV) within two working days",
+          "Priority answers to your questions"
+        ],
+        "link": ""
+      }
+    ],
+    "donate_link": "",
+    "newsletter_form": "",
+    "advertise_form": ""
+  }
 }

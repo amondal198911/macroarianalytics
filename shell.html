@@ -26,6 +26,7 @@
       <button type="button" data-go="bangladesh">Bangladesh</button>
       <button type="button" data-go="lab">Forecast lab</button>
       <button type="button" data-go="countries">Countries</button>
+      <button type="button" data-go="cl">Country analysis</button><button type="button" data-go="plans">Subscribe</button>
       <button type="button" data-go="compare">Compare</button>
       <button type="button" data-go="explore">Explore</button>
       <button type="button" data-go="map">World map</button>
@@ -327,6 +328,24 @@
   </div>
 
   <!-- ============ LEARN ============ -->
+  <div class="view" id="v-cl">
+    <div class="wrap">
+      <div class="page-head"><p class="eyebrow">Country analysis</p><h1>Every economy, topic by topic</h1><p class="lede">Choose an economy and a topic. Each topic has its own pages, in order: charts and map, summary, tables, comparisons, analysis, forecasting, results, tests, heterogeneity, robustness, validation, placebo test, decisions, discussion, conclusions, and sources.</p></div>
+      <div class="controls" id="cl-pick"></div>
+      <div class="bd-tabs" id="cl-cats" role="tablist" aria-label="Topics"></div>
+      <nav class="cl-secs" id="cl-secs" aria-label="Pages in this topic"></nav>
+      <div id="cl-body"></div>
+    </div>
+  </div>
+  <div class="view" id="v-plans">
+    <div class="wrap">
+      <div class="page-head"><p class="eyebrow">Subscribe and support</p><h1>Keep the monitor independent</h1><p class="lede">Everything on this site stays free to read. Subscribers remove the ads, get the editor’s monthly brief and help keep the data and models up to date.</p></div>
+      <div class="plans" id="pl-cards"></div>
+      <div class="pl-more" id="pl-more"></div>
+      <section class="block" id="pl-ads"><h2>Advertise with us</h2><p>Reach economists, students, bankers, journalists and policymakers who follow Bangladesh and the world economy. Placements: a banner at the side of every page on wide screens, a banner at the bottom of every page on all devices, and sponsorship of the monthly brief.</p><p id="pl-adv"></p></section>
+      <section class="block"><h2>How subscriptions work</h2><ol class="cl-list"><li>Sign in with your Google account (top right).</li><li>Choose a plan and pay through the secure payment page.</li><li>Your subscription is switched on within one working day; ads disappear when you are signed in.</li><li>Cancel any time through the payment provider; your plan runs to the end of the period you paid for.</li></ol></section>
+    </div>
+  </div>
   <div class="view" id="v-learn">
   <div class="wrap">
     <div class="page-head">
@@ -524,6 +543,8 @@
       <p class="lede" data-auth-only hidden>The short version: this site shows no ads. The front page and this notice are open to everyone. To see the other pages you sign in with Google, and the site then records your name, email address and the pages you open.</p>
     </div>
     <div class="prose">
+      <section class="block"><h2>Advertising and subscriptions</h2><p>Visitors who do not subscribe may see advertisements. If Google AdSense is used, Google and its partners use cookies to show and measure ads; visitors in the European Economic Area, the United Kingdom and Switzerland are asked for consent first. Subscribers who are signed in see no ads. Payments are handled by the payment provider; this site never sees your card or account details.</p></section>
+      <section class="block"><h2>Security protection</h2><p>To protect its content, this site records attempts to copy, save, print or inspect protected material: the time, the page, the browser type and screen size, and your account email if you are signed in. A visitor who repeats these attempts is paused for 10 minutes, and the site owner may be emailed about it. Nothing else is recorded, and the owner does not sell or share this information.</p></section>
       <section class="block">
         <h2>What is saved on your device</h2>
         <p>To remember your choices, the site keeps a few settings in your browser’s local storage: light or dark mode, pinned economies, the last economy you viewed, your comparison set, your chart range and log-scale choice, and whether the price ticker is paused. They stay on your device.</p>
@@ -557,12 +578,14 @@
   </div>
 </main>
 
+<div class="ad-slot ad-bottom" data-ad="bottom" aria-label="Advertisement"></div>
+<aside class="ad-slot ad-side" data-ad="side" aria-label="Advertisement"></aside>
 <footer class="foot">
   <div class="wrap foot-grid">
     <div class="foot-brand"><b>Macroeconomic Monitor and Forecasting</b><p>Official statistics on more than 200 economies and a dedicated Bangladesh monitor, with model-based forecasts, explained in plain language.</p><p data-owner-gate hidden>Owned by {{OWNER}}.</p></div>
     <nav aria-label="Explore the data"><h3>Explore</h3><button type="button" data-go="overview">Overview</button><button type="button" data-go="bangladesh">Bangladesh</button><button type="button" data-go="lab">Forecast lab</button><button type="button" data-go="countries">Countries</button><button type="button" data-go="compare">Compare</button><button type="button" data-go="explore">Explore</button><button type="button" data-go="map">World map</button><button type="button" data-go="rankings">Rankings</button><button type="button" data-go="markets">Markets</button></nav>
     <nav aria-label="Learn"><h3>Learn</h3><button type="button" data-go="learn">Learn the indicators</button><button type="button" data-go="faq">Frequently asked questions</button><button type="button" data-go="methods">Methods and notes</button><button type="button" data-go="methods" data-anchor="me-notes-h">Country notes</button><button type="button" data-go="methods" data-anchor="me-cite-h">How to cite</button><button type="button" data-go="methods" data-anchor="me-log-h">Update log</button></nav>
-    <nav aria-label="About the site"><h3>About</h3><button type="button" data-go="about">About</button><button type="button" data-go="contact">Contact</button><button type="button" data-go="privacy">Privacy</button><button type="button" data-go="about" data-anchor="ab-disclaimer">Disclaimer</button></nav>
+    <nav aria-label="About the site"><h3>About</h3><button type="button" data-go="about">About</button><button type="button" data-go="plans">Subscribe</button><button type="button" data-go="plans" data-jump="pl-ads">Advertise with us</button><button type="button" data-go="contact">Contact</button><button type="button" data-go="privacy">Privacy</button><button type="button" data-go="about" data-anchor="ab-disclaimer">Disclaimer</button></nav>
   </div>
   <div class="wrap foot-legal">© 2026 <span data-owner-gate hidden>{{OWNER}}</span><span data-owner-alt>Macroeconomic Monitor and Forecasting</span>. All rights reserved. Data: World Bank (CC BY 4.0), U.S. Energy Information Administration, Federal Reserve, U.S. Bureau of Labor Statistics. For information only, not investment advice. <button type="button" class="linklike blink-tg" id="blink-tg">Blinking warnings: on</button></div>
 </footer>

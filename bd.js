@@ -48,6 +48,8 @@ const STD = {
 const STDK = { infl: 'infl', infl_avg: 'infl', food: 'infl', nonfood: 'infl', gdp_q: 'gdp', gdp_fy: 'gdp', cover: 'cover', crar: 'crar', npl: 'npl', pcredit: 'credit', real_lend: 'real', xr_dep: 'dep', inflation: 'infl', gdp_growth: 'gdp', current_account: 'ca' };
 const stdOf = k => STD[STDK[k]] || null;
 function stdOut(rule, v) { return !!rule && v != null && isFinite(v) && ((rule.lo != null && v < rule.lo) || (rule.hi != null && v > rule.hi)); }
+const flagOn = (k, r) => stdOut(stdOf(k), r.v) || (!stdOf(k) && r.ya != null && r.ya !== 0 && r.v != null && Math.abs(r.v / r.ya - 1) >= 0.1);
+const flagMsg = (k, r) => stdOf(k) ? stdMsg(stdOf(k), r.v) + ': ' + stdOf(k).src : 'Changed by ' + nf((r.v / r.ya - 1) * 100, 2) + '% on a year earlier (values blink at a 10% change, up or down, when no benchmark band exists)';
 function stdMsg(rule, v) { return (rule.lo != null && v < rule.lo ? 'Below' : 'Above') + ' benchmark (' + rule.txt + ')'; }
 const bdState = { tab: 'glance' }, labState = { tab: 'overview', arima: 'infl', shock: 3, fevd: 0, ci: '95', het: 0, desc_ci: '95' };
 let FIGN = 0;
@@ -81,10 +83,24 @@ function smallBtn(label, fn) { const b = document.createElement('button'); b.typ
 function axisBase(TH) { return { axisLine: { lineStyle: { color: TH.line } }, axisTick: { show: false }, axisLabel: { color: TH.muted, fontSize: 11, hideOverlap: true } }; }
 function valAxis(TH, name, o) {
   o = o || {};
-  return { type: 'value', name: name || '', nameTextStyle: { color: TH.muted, fontSize: 11, align: o.right ? 'right' : 'left' }, scale: !!o.scale, min: o.min, max: o.max,
+  return { type: 'value', name: name || '', nameTextStyle: { color: TH.muted, fontSize: 11, align: o.right ? 'right' : 'left' }, nameTruncate: { maxWidth: 150, ellipsis: '…' }, scale: !!o.scale, min: o.min, max: o.max,
     splitLine: { show: !o.right, lineStyle: { color: TH.grid } }, axisLabel: { color: TH.muted, fontSize: 11, formatter: o.fmt } };
 }
-function tsOption(TH, labels, series, o) {
+function tsOption(TH, labels, series, o) { return declutter(tsOption0(TH, labels, series, o), labels); }
+function declutter(r, labels) {
+  if (!r || !Array.isArray(r.series)) return r;
+  const lines = r.series.filter(s => s && s.type === 'line' && !s.stack).length;
+  const dense = (labels || []).length > 36 || (lines > 1 && (labels || []).length > 18);
+  r.series.forEach(s => {
+    if (!s || s.type !== 'line') return;
+    s.labelLayout = Object.assign({ hideOverlap: true }, s.labelLayout || {});
+    if (dense && s.label && s.label.show) s.label = Object.assign({}, s.label, { show: false });
+    if (dense && Array.isArray(s.data)) s.data = s.data.map(d => (d && typeof d === 'object' && !Array.isArray(d) && d.label ? Object.assign({}, d, { label: Object.assign({}, d.label, { show: false }) }) : d));
+  });
+  (Array.isArray(r.graphic) ? r.graphic : r.graphic ? [r.graphic] : []).forEach(x => { if (x && x.style && /macroarianalytics/.test(x.style.text || '')) { delete x.top; x.bottom = 34; x.right = 14; x.style.opacity = 0.3; x.style.fontSize = 10; } });
+  return r;
+}
+function tsOption0(TH, labels, series, o) {
   o = o || {};
   if (FSTATE && labels.length) {
     const t = tsTransform(labels.map(String), series, FSTATE);
@@ -311,7 +327,7 @@ function matrix(host, keys, caption, groupBy) {
     const dir = DIR[k] || 0;
     const pct = r.pct == null ? null : Math.max(0, Math.min(100, r.pct));
     html += '<tr><th scope="row"><span class="mx-l">' + esc(s.label) + '</span>' + (s.sub ? '<span class="mx-s">' + esc(s.sub) + '</span>' : '') + '<span class="mx-u">' + esc(s.unit) + '</span></th>' +
-      '<td>' + esc(r.period) + '</td><td class="num big' + (stdOut(stdOf(k), r.v) ? ' warn-std' : '') + '"' + (stdOut(stdOf(k), r.v) ? ' title="' + esc(stdMsg(stdOf(k), r.v) + ': ' + stdOf(k).src) + '"' : '') + (pct == null ? '' : ' data-pct="' + pct + '"') + '>' + fv(s.unit, r.v) + '</td><td class="num">' + fv(s.unit, r.prev) + '</td>' + chg(s.unit, r.v, r.prev, dir) +
+      '<td>' + esc(r.period) + '</td><td class="num big' + (flagOn(k, r) ? ' warn-std' : '') + '"' + (flagOn(k, r) ? ' title="' + esc(flagMsg(k, r)) + '"' : '') + (pct == null ? '' : ' data-pct="' + pct + '"') + '>' + fv(s.unit, r.v) + '</td><td class="num">' + fv(s.unit, r.prev) + '</td>' + chg(s.unit, r.v, r.prev, dir) +
       '<td class="num">' + fv(s.unit, r.ya) + '</td>' + chg(s.unit, r.v, r.ya, dir) + '<td class="num">' + fv(s.unit, r.avg) + '</td>' +
       '<td class="rngc">' + (pct == null ? '' : '<span class="rng" title="Percentile ' + nf(pct, 0) + ' of ' + r.n + ' observations"><i style="left:' + pct + '%"></i></span><span class="rng-l"><small>' + fv(s.unit, r.min) + '</small><small>' + fv(s.unit, r.max) + '</small></span>') + '</td>' +
       '<td class="spkc">' + spark(k) + '</td><td class="srcc"><span class="src-ag" title="' + esc('Series ' + s.src.map(x => x.code).join(', ')) + '">' + esc(srcKeys([k]).replace(/\.$/, '')) + '</span></td></tr>';
@@ -990,6 +1006,7 @@ function labRefs(body) {
   s.append(ol);
 }
 function routeBD(h) {
+  if (/^cl(~|$)/.test(h)) return routeCL(h);
   const m = /^(bangladesh|lab|learn|faq)(?:~([a-z0-9-]+))?$/.exec(h);
   if (!m) return false;
   if (m[1] === 'learn' || m[1] === 'faq') {
@@ -1280,7 +1297,7 @@ async function initAuth() {
     AUTH.fb.getRedirectResult().catch(e => { AUTH.err = authErr(e); showGate('error'); });
     AUTH.fb.onAuthStateChanged(u => {
       const was = AUTH.user;
-      AUTH.user = u || null;
+      AUTH.user = u || null; try { checkSub(AUTH.user); } catch (e) { /* subscriptions optional */ }
       AUTH.ready = true;
       renderAcct();
       if (u) {
@@ -1381,7 +1398,7 @@ function profileTable(host, iso, M) {
 function renderGeo(iso) {
   const host = $('#c-geo');
   if (!host || !RAW.econ) return;
-  host.innerHTML = '<div class="block-head"><h2>Geography and people</h2><p class="note">Where the economy is, who lives there and how they live. Tap a neighbour to open its profile.</p></div><div class="geo-grid"><div class="geo-map" id="c-geo-map"><p class="note">Loading map…</p></div><div class="geo-prof" id="c-geo-prof"></div></div>';
+  host.innerHTML = '<div class="block-head"><h2>Geography and people</h2><p class="note">Where the economy is, who lives there and how they live. Tap a neighbour to open its profile.</p><p><a class="btn sm" href="#cl~' + iso + '~inflation~charts">Analyse this economy topic by topic →</a></p></div><div class="geo-grid"><div class="geo-map" id="c-geo-map"><p class="note">Loading map…</p></div><div class="geo-prof" id="c-geo-prof"></div></div>';
   const done = M => { const mp = $('#c-geo-map'); if (!mp) return; const svg = M ? countrySVG(iso, M) : ''; mp.innerHTML = svg ? svg + '<p class="src-line"><b>Source:</b> Natural Earth.</p>' : '<p class="note">' + (M ? 'No map outline is available for this economy.' : 'The map opens on macroarianalytics.com.') + '</p>'; $('#c-geo-prof').innerHTML = ''; profileTable($('#c-geo-prof'), iso, M); };
   profileTable($('#c-geo-prof'), iso, null);
   loadMaps().then(done).catch(() => done(null));
@@ -2255,10 +2272,13 @@ function tileHTML(t, i) {
   const lvl = !/%/.test(t.unit);
   const c = d == null ? null : lvl ? (prev[1] ? (v / prev[1] - 1) * 100 : null) : d;
   const cls = d == null || !t.dir ? 'nt' : d * t.dir > 0 ? 'gd' : d * t.dir < 0 ? 'bd' : 'nt';
-  const so = stdOut(t.std, v);
+  const lagN = { M: 12, Q: 4, A: 1, FY: 1 }[t.freq];
+  let ya = lagN && n > lagN ? t.pts[n - 1 - lagN][1] : null;
+  if (t.freq === 'D') { const cut = new Date(new Date(last[0]).getTime() - 365 * 864e5).toISOString().slice(0, 10); const q = t.pts.filter(x => x[0] <= cut).pop(); ya = q ? q[1] : null; }
+  const so = t.std ? stdOut(t.std, v) : (ya != null && ya !== 0 && Math.abs(v / ya - 1) >= 0.1);
   const ct = c == null ? '–' : (c > 0 ? '▲ +' : c < 0 ? '▼ ' : '') + nf(c, 2) + (lvl ? '%' : ' pp');
   const since = { D: 'on the day', M: 'on the month', Q: 'on the quarter', A: 'on the year', FY: 'on the year' }[t.freq] || '';
-  return '<tr class="lt' + (i === LIVE.i ? ' on' : '') + (so ? ' lt-warn' : '') + '" data-lt="' + i + '" tabindex="0" title="' + esc(so ? stdMsg(t.std, v) + ': ' + t.std.src : t.label + ', ' + fmtPeriod(last[0])) + '">' +
+  return '<tr class="lt' + (i === LIVE.i ? ' on' : '') + (so ? ' lt-warn' : '') + '" data-lt="' + i + '" tabindex="0" title="' + esc(so ? (t.std ? stdMsg(t.std, v) + ': ' + t.std.src : 'Changed by ' + nf((v / ya - 1) * 100, 2) + '% on a year earlier (blinks at a 10% change, up or down, when no benchmark band exists)') : t.label + ', ' + fmtPeriod(last[0])) + '">' +
     '<th scope="row">' + esc(t.label) + '</th><td class="sv"><span class="cell' + (so ? ' warn' : '') + '">' + nf(v, 2) + '</span><small>' + esc(t.unit) + '</small></td>' +
     '<td class="sc ' + cls + '" title="Change ' + since + '">' + ct + '</td><td class="sp">' + esc(shortPer(last[0])) + '</td></tr>';
 }
@@ -2423,18 +2443,507 @@ function initPeers() {
   ['cut', 'contextmenu', 'dragstart', 'selectstart'].forEach(t => document.addEventListener(t, e => { if (!ok(e.target)) e.preventDefault(); }));
   document.addEventListener('keydown', e => { const k = (e.key || '').toLowerCase(); if ((e.ctrlKey || e.metaKey) && ['c', 'x', 's', 'p', 'u', 'a'].includes(k) && !ok(e.target)) e.preventDefault(); });
 })();
-setTimeout(() => { try { initOwner(); } catch (e) { /* optional */ } try { initAuth(); } catch (e) { /* sign-in optional */ } try { initContact(); } catch (e) { /* optional */ } try { initFront(); } catch (e) { /* optional */ } try { initBlink(); } catch (e) { /* optional */ } try { initPeers(); } catch (e) { /* table optional */ } try { initLive(); } catch (e) { /* dashboard optional */ } try { staticSources(); } catch (e) { /* optional */ } }, 0);
-return { initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo, initLearnX, initFAQ };
+setTimeout(() => { try { BDX.initSecurity(); } catch (e) { /* optional */ } try { BDX.renderAds(); } catch (e) { /* ads optional */ } try { initOwner(); } catch (e) { /* optional */ } try { initAuth(); } catch (e) { /* sign-in optional */ } try { initContact(); } catch (e) { /* optional */ } try { initFront(); } catch (e) { /* optional */ } try { initBlink(); } catch (e) { /* optional */ } try { initPeers(); } catch (e) { /* table optional */ } try { initLive(); } catch (e) { /* dashboard optional */ } try { staticSources(); } catch (e) { /* optional */ } }, 0);
+
+/* ================= Country analysis: economy → topic → section pages ================= */
+const CL_CATS = [
+  { id: 'inflation', t: 'Inflation', w: ['inflation', 'real_rate'], bd: ['infl', 'infl_avg', 'food', 'nonfood'], cpi: true },
+  { id: 'growth', t: 'Growth and output', w: ['gdp_growth', 'gdp_pc', 'gdp_pc_ppp', 'gdp_usd', 'investment', 'savings'], bd: ['gdp_q', 'gdp_fy', 'iip', 'inv_gdp', 'sav_gdp', 'cons_gdp'] },
+  { id: 'exchange', t: 'Exchange rate', w: ['fx', 'fx_change'], bd: ['xr', 'xr_dep'] },
+  { id: 'remittances', t: 'Remittances', w: ['remittances'], bd: ['remit', 'remit_g'] },
+  { id: 'external', t: 'External sector', w: ['exports', 'imports', 'reserves', 'fdi', 'ext_debt', 'debt_service'], bd: ['exp', 'exp_g', 'imp', 'res', 'res_bpm6', 'cover'] },
+  { id: 'bop', t: 'Balance of payments', w: ['current_account', 'fdi', 'exports', 'imports'], bd: ['ca', 'fa', 'goods', 'secinc', 'bop', 'fdi'] },
+  { id: 'rates', t: 'Interest and policy rates', w: ['lending_rate', 'real_rate'], bd: ['call', 'bankrate', 'lend', 'dep', 'spread', 'real_lend'] },
+  { id: 'money', t: 'Money and banking', w: ['money_growth', 'private_credit'], bd: ['m2', 'rm', 'pcredit', 'cdr', 'npl', 'crar'] },
+  { id: 'fiscal', t: 'Public finance', w: ['revenue', 'tax', 'spending', 'budget', 'gov_debt'], bd: ['govcredit', 'tax', 'tax_g', 'nsav_net', 'nsav_out'] },
+  { id: 'labour', t: 'Jobs and labour', w: ['unemployment', 'youth_unemp_f', 'youth_unemp_m', 'lfp_f', 'lfp_m'] },
+  { id: 'poverty', t: 'Poverty and inequality', w: ['poverty', 'poverty_nat', 'gini', 'top20', 'bottom20'] },
+  { id: 'people', t: 'Population', w: ['population', 'pop_growth'] }
+];
+const CL_SECS = [['charts', 'Charts and map'], ['summary', 'Summary'], ['tables', 'Tables'], ['compare', 'Comparisons'], ['analysis', 'Analysis'], ['forecast', 'Forecasting'], ['results', 'Results'], ['tests', 'Tests'],
+  ['hetero', 'Heterogeneity'], ['robust', 'Robustness'], ['valid', 'Validation'], ['placebo', 'Placebo test'], ['decisions', 'Decisions'], ['discussion', 'Discussion'], ['conclusions', 'Conclusions'], ['sources', 'Sources and notes']];
+const CL = { iso: 'BGD', cat: 'inflation', sec: 'charts', cmp: 'sub', sel: {}, bdsel: {}, idx: false, fk: null, hk: null };
+// ---------- statistics (browser) ----------
+function lgam(x) { const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lgam(1 - x); x -= 1; let a = c[0]; const t = x + 7.5; for (let i = 1; i < 9; i++) a += c[i] / (x + i); return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a); }
+function gamP(a, x) { if (x <= 0) return 0; if (x < a + 1) { let s = 1 / a, d = s, ap = a; for (let n = 0; n < 300; n++) { ap += 1; d *= x / ap; s += d; if (Math.abs(d) < Math.abs(s) * 1e-13) break; } return s * Math.exp(-x + a * Math.log(x) - lgam(a)); }
+  let b = x + 1 - a, c = 1e300, d = 1 / b, h = d; for (let i = 1; i < 300; i++) { const an = -i * (i - a); b += 2; d = an * d + b; if (Math.abs(d) < 1e-300) d = 1e-300; c = b + an / c; if (Math.abs(c) < 1e-300) c = 1e-300; d = 1 / d; const de = d * c; h *= de; if (Math.abs(de - 1) < 1e-13) break; } return 1 - Math.exp(-x + a * Math.log(x) - lgam(a)) * h; }
+const chi2p = (x, k) => Math.max(0, Math.min(1, 1 - gamP(k / 2, x / 2)));
+function betacf(a, b, x) { let qab = a + b, qap = a + 1, qam = a - 1, c = 1, d = 1 - qab * x / qap; if (Math.abs(d) < 1e-300) d = 1e-300; d = 1 / d; let h = d;
+  for (let m = 1; m < 300; m++) { const m2 = 2 * m; let aa = m * (b - m) * x / ((qam + m2) * (a + m2)); d = 1 + aa * d; if (Math.abs(d) < 1e-300) d = 1e-300; c = 1 + aa / c; if (Math.abs(c) < 1e-300) c = 1e-300; d = 1 / d; h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2)); d = 1 + aa * d; if (Math.abs(d) < 1e-300) d = 1e-300; c = 1 + aa / c; if (Math.abs(c) < 1e-300) c = 1e-300; d = 1 / d; const de = d * c; h *= de; if (Math.abs(de - 1) < 1e-13) break; } return h; }
+function ibeta(a, b, x) { if (x <= 0) return 0; if (x >= 1) return 1; const bt = Math.exp(lgam(a + b) - lgam(a) - lgam(b) + a * Math.log(x) + b * Math.log(1 - x)); return x < (a + 1) / (a + b + 2) ? bt * betacf(a, b, x) / a : 1 - bt * betacf(b, a, 1 - x) / b; }
+const tp2 = (t, df) => (df > 0 && isFinite(t) ? ibeta(df / 2, 0.5, df / (df + t * t)) : null);
+function ols(X, y) { const k = X[0].length, n = y.length, A = Array.from({ length: k }, () => Array(k).fill(0)), v = Array(k).fill(0);
+  X.forEach((r, i) => { for (let a = 0; a < k; a++) { v[a] += r[a] * y[i]; for (let b = 0; b < k; b++) A[a][b] += r[a] * r[b]; } });
+  const M = A.map((r, i) => r.concat(Array.from({ length: k }, (_, j) => (i === j ? 1 : 0))));
+  for (let c = 0; c < k; c++) { let p = c; for (let r = c + 1; r < k; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r; [M[c], M[p]] = [M[p], M[c]]; const pv = M[c][c]; if (Math.abs(pv) < 1e-12) return null; for (let j = 0; j < 2 * k; j++) M[c][j] /= pv; for (let r = 0; r < k; r++) if (r !== c) { const f = M[r][c]; for (let j = 0; j < 2 * k; j++) M[r][j] -= f * M[c][j]; } }
+  const inv = M.map(r => r.slice(k)), beta = inv.map(r => r.reduce((s, x, j) => s + x * v[j], 0));
+  const res = y.map((yy, i) => yy - X[i].reduce((s, x, j) => s + x * beta[j], 0)), sse = res.reduce((s, e) => s + e * e, 0), df = n - k, s2 = df > 0 ? sse / df : NaN;
+  return { beta, se: inv.map((r, i) => Math.sqrt(Math.max(0, r[i] * s2))), res, sse, df }; }
+function trendOf(pts) { if (pts.length < 5) return null; const t0 = pts[0][0]; const r = ols(pts.map(p => [1, p[0] - t0]), pts.map(p => p[1])); if (!r) return null; const b = r.beta[1], se = r.se[1], t = b / se; return { b, se, t, p: tp2(t, r.df), res: r.res, a: r.beta[0], t0 }; }
+function adf(y) { if (y.length < 10) return null; const d = y.slice(1).map((v, i) => v - y[i]); const X = [], Y = []; for (let i = 1; i < d.length; i++) { X.push([1, y[i], d[i - 1]]); Y.push(d[i]); } const r = ols(X, Y); if (!r) return null;
+  const tau = r.beta[1] / r.se[1], T = Y.length, cv = (b0, b1, b2) => b0 + b1 / T + b2 / (T * T);
+  return { tau, cv1: cv(-3.43035, -6.5393, -16.786), cv5: cv(-2.86154, -2.8903, -4.234), cv10: cv(-2.56677, -1.5384, -2.809), T }; }
+function jb(x) { const n = x.length; if (n < 8) return null; const m = x.reduce((a, b) => a + b, 0) / n, c = k => x.reduce((s, v) => s + Math.pow(v - m, k), 0) / n, s2 = c(2); if (!s2) return null; const S = c(3) / Math.pow(s2, 1.5), K = c(4) / (s2 * s2); const J = n / 6 * (S * S + (K - 3) * (K - 3) / 4); return { J, p: chi2p(J, 2), S, K }; }
+function lbox(x, h) { const n = x.length; if (n < h + 5) return null; const m = x.reduce((a, b) => a + b, 0) / n, den = x.reduce((s, v) => s + (v - m) * (v - m), 0); if (!den) return null; let Q = 0;
+  for (let k = 1; k <= h; k++) { let num = 0; for (let t = k; t < n; t++) num += (x[t] - m) * (x[t - k] - m); const rk = num / den; Q += rk * rk / (n - k); } Q *= n * (n + 2); return { Q, p: chi2p(Q, h), h }; }
+function holtFit(y, a, b) { let l = y[0], t = y.length > 1 ? y[1] - y[0] : 0, sse = 0; for (let i = 1; i < y.length; i++) { const f = l + t, e = y[i] - f; sse += e * e; const ln = a * y[i] + (1 - a) * (l + t); t = b * (ln - l) + (1 - b) * t; l = ln; } return { l, t, sse, a, b, n: y.length - 1 }; }
+function holtBest(y) { let best = null; [0.2, 0.35, 0.5, 0.65, 0.8, 0.95].forEach(a => [0.05, 0.15, 0.3, 0.5].forEach(b => { const r = holtFit(y, a, b); if (!best || r.sse < best.sse) best = r; })); return best; }
+function holtFc(y, H) { const m = holtBest(y), s = Math.sqrt(m.sse / Math.max(1, m.n - 2)); const out = []; for (let h = 1; h <= H; h++) { let v = 1; for (let j = 1; j < h; j++) v += Math.pow(m.a * (1 + j * m.b), 2); const sd = s * Math.sqrt(v), f = m.l + h * m.t; out.push({ h, f, lo80: f - 1.2816 * sd, hi80: f + 1.2816 * sd, lo95: f - 1.96 * sd, hi95: f + 1.96 * sd }); } return { m, s, out }; }
+function fc1(y, model) { if (model === 'naive') return y[y.length - 1]; if (model === 'trend') { const tr = trendOf(y.map((v, i) => [i, v])); return tr ? tr.a + tr.b * y.length : y[y.length - 1]; } const m = holtBest(y); return m.l + m.t; }
+function backtest(y, model, k) { const e = []; for (let i = Math.max(6, y.length - k); i < y.length; i++) e.push(y[i] - fc1(y.slice(0, i), model)); return e.length ? { rmse: Math.sqrt(e.reduce((s, v) => s + v * v, 0) / e.length), mae: e.reduce((s, v) => s + Math.abs(v), 0) / e.length, n: e.length } : null; }
+function kwH(groups) { const all = []; groups.forEach((g, j) => g.forEach(v => all.push([v, j]))); const N = all.length; if (N < 6 || groups.length < 2) return null; all.sort((a, b) => a[0] - b[0]);
+  const rk = Array(N); for (let i = 0; i < N;) { let j = i; while (j + 1 < N && all[j + 1][0] === all[i][0]) j++; for (let q = i; q <= j; q++) rk[q] = (i + j) / 2 + 1; i = j + 1; }
+  const R = groups.map(() => 0); all.forEach((x, i) => { R[x[1]] += rk[i]; }); const H = 12 / (N * (N + 1)) * groups.reduce((s, g, j) => s + (g.length ? R[j] * R[j] / g.length : 0), 0) - 3 * (N + 1); const k = groups.filter(g => g.length).length; return { H, p: chi2p(H, k - 1), k, N }; }
+function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function permTrend(pts, reps) { const tr = trendOf(pts); if (!tr) return null; const rnd = mulberry(20261024), ys = pts.map(p => p[1]); let ge = 0;
+  for (let r = 0; r < reps; r++) { const s = ys.slice(); for (let i = s.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [s[i], s[j]] = [s[j], s[i]]; } const t2 = trendOf(pts.map((p, i) => [p[0], s[i]])); if (t2 && Math.abs(t2.b) >= Math.abs(tr.b)) ge++; }
+  return { b: tr.b, p: ge / reps, reps, pt: tr.p }; }
+// ---------- data helpers ----------
+function wser(k, iso) { const s = RAW.s && RAW.s[k] && RAW.s[k][iso]; if (!s) return []; return String(s[1]).split(',').map((v, i) => [+s[0] + i, v === '' ? null : +v]).filter(x => x[1] != null && isFinite(x[1])); }
+const indL = k => (IND[k] && IND[k].label) || k;
+const indU = k => (IND[k] && IND[k].unit) || '';
+const isoName = c => ((EMAPB()[c] || [])[1] || c);
+function clCountries() { return RAW.econ.filter(e => !e[6]).sort((a, b) => a[1].localeCompare(b[1])); }
+function lastOfS(k, iso) { const s = wser(k, iso); return s.length ? s[s.length - 1] : null; }
+function incomeGroup(iso) { const g = lastOfS('gdp_pc', iso); if (!g) return null; const v = g[1]; return v <= 1135 ? 'Low income' : v <= 4495 ? 'Lower-middle income' : v <= 13935 ? 'Upper-middle income' : 'High income'; }
+function peersOf(iso, mode) {
+  const E = clCountries(), me = EMAPB()[iso];
+  if (mode === 'sub') return E.filter(e => e[4] === (me || [])[4]).map(e => e[0]);
+  if (mode === 'dev') { const g = incomeGroup(iso); return g ? E.filter(e => incomeGroup(e[0]) === g).map(e => e[0]) : [iso]; }
+  const x = lastOfS('gdp_pc_ppp', iso); if (!x) return [iso];
+  return E.map(e => [e[0], lastOfS('gdp_pc_ppp', e[0])]).filter(z => z[1]).map(z => [z[0], Math.abs(Math.log(z[1][1]) - Math.log(x[1]))]).sort((a, b) => a[1] - b[1]).slice(0, 11).map(z => z[0]);
+}
+const clCat = () => CL_CATS.find(c => c.id === CL.cat) || CL_CATS[0];
+const catKeys = c => c.w.filter(k => IND[k]);
+const availKeys = (c, iso) => catKeys(c).filter(k => wser(k, iso).length >= 3);
+function clDefaults(c) { if (!CL.sel[c.id]) CL.sel[c.id] = new Set(availKeys(c, CL.iso).slice(0, 4)); return CL.sel[c.id]; }
+// ---------- page frame ----------
+function initCL() {
+  const pick = $('#cl-pick');
+  if (!pick || !RAW.econ) return;
+  pick.innerHTML = '<label class="field grow"><span>Economy</span><select id="cl-iso">' + clCountries().map(e => '<option value="' + e[0] + '"' + (e[0] === CL.iso ? ' selected' : '') + '>' + esc(e[1]) + '</option>').join('') + '</select></label>';
+  $('#cl-iso').addEventListener('change', e => { CL.iso = e.target.value; CL.sel = {}; CL.bdsel = {}; renderCL(); });
+  $('#cl-cats').addEventListener('click', e => { const b = e.target.closest('[data-clc]'); if (b) { CL.cat = b.getAttribute('data-clc'); CL.fk = CL.hk = null; renderCL(); } });
+  $('#cl-secs').addEventListener('click', e => { const b = e.target.closest('[data-cls]'); if (b) { CL.sec = b.getAttribute('data-cls'); renderCL(); } });
+  renderCL();
+}
+function renderCL() {
+  const body = $('#cl-body');
+  if (!body) return;
+  disposeIn(body); body.innerHTML = '';
+  FIGN = 0; TABN = 0; labState.prefix = 'C';
+  const iso = CL.iso, c = clCat();
+  if ($('#cl-iso')) $('#cl-iso').value = iso;
+  $('#cl-cats').innerHTML = CL_CATS.map(k => '<button type="button" role="tab" data-clc="' + k.id + '" aria-selected="' + (k.id === c.id) + '">' + esc(k.t) + '</button>').join('');
+  $('#cl-secs').innerHTML = CL_SECS.map(([id, t], i) => '<button type="button" data-cls="' + id + '" aria-current="' + (id === CL.sec ? 'page' : 'false') + '"><span>' + (i + 1) + '</span>' + esc(t) + '</button>').join('');
+  try { history.replaceState(null, '', '#cl~' + iso + '~' + c.id + '~' + CL.sec); } catch (e) { /* framed */ }
+  const head = document.createElement('div');
+  head.className = 'cl-head';
+  head.innerHTML = '<h2>' + esc(isoName(iso)) + ': ' + esc(c.t) + '</h2><p class="note">' + esc((CL_SECS.find(s => s[0] === CL.sec) || [])[1] || '') + ' · page ' + (CL_SECS.findIndex(s => s[0] === CL.sec) + 1) + ' of ' + CL_SECS.length + '</p>';
+  body.append(head);
+  const keys = availKeys(c, iso);
+  TSRC = 'World Bank.';
+  const fn = { charts: clCharts, summary: clSummary, tables: clTables, compare: clCompare, analysis: clAnalysis, forecast: clForecast, results: clResults, tests: clTests, hetero: clHetero, robust: clRobust, valid: clValid, placebo: clPlacebo, decisions: clDecisions, discussion: clDiscussion, conclusions: clConclusions, sources: clSources }[CL.sec] || clCharts;
+  if (!keys.length && !(iso === 'BGD' && c.bd)) { body.insertAdjacentHTML('beforeend', '<p class="empty">The World Bank has no data on this topic for ' + esc(isoName(iso)) + '. Try another topic.</p>'); return; }
+  fn(body, c, keys, iso);
+  const i = CL_SECS.findIndex(s => s[0] === CL.sec), nav = document.createElement('div');
+  nav.className = 'cl-nav';
+  nav.innerHTML = (i > 0 ? '<button type="button" class="btn" data-cls="' + CL_SECS[i - 1][0] + '">← ' + esc(CL_SECS[i - 1][1]) + '</button>' : '<span></span>') + (i < CL_SECS.length - 1 ? '<button type="button" class="btn primary" data-cls="' + CL_SECS[i + 1][0] + '">' + esc(CL_SECS[i + 1][1]) + ' →</button>' : '');
+  nav.addEventListener('click', e => { const b = e.target.closest('[data-cls]'); if (b) { CL.sec = b.getAttribute('data-cls'); renderCL(); window.scrollTo(0, $('#cl-secs').offsetTop - 70); } });
+  body.append(nav);
+}
+// ---------- 1. charts and map (with series pickers) ----------
+function seriesPicker(host, c, onChange) {
+  const sel = clDefaults(c), d = document.createElement('div');
+  d.className = 'picker';
+  const box = (k, on) => '<label class="pk"><input type="checkbox" data-k="' + k + '"' + (on ? ' checked' : '') + '><span>' + esc(indL(k)) + '</span></label>';
+  const others = CL_CATS.filter(x => x.id !== c.id).map(x => '<div class="pk-g"><b>' + esc(x.t) + '</b>' + catKeys(x).filter(k => wser(k, CL.iso).length >= 3).map(k => box(k, sel.has(k))).join('') + '</div>').join('');
+  d.innerHTML = '<div class="pk-row">' + availKeys(c, CL.iso).map(k => box(k, sel.has(k))).join('') + '</div>' +
+    '<div class="pk-act"><button type="button" class="btn sm" data-pk="all">Select all in ' + esc(c.t.toLowerCase()) + '</button><button type="button" class="btn sm" data-pk="none">Clear all</button><label class="pk"><input type="checkbox" data-pk="idx"' + (CL.idx ? ' checked' : '') + '><span>Show as index (first year = 100)</span></label></div>' +
+    '<details class="pk-more"><summary>Add series from other topics</summary>' + others + '</details>';
+  d.addEventListener('change', e => { const i = e.target; if (i.getAttribute('data-pk') === 'idx') { CL.idx = i.checked; onChange(); return; } const k = i.getAttribute('data-k'); if (!k) return; if (i.checked) sel.add(k); else sel.delete(k); d.querySelectorAll('input[data-k="' + k + '"]').forEach(x => { x.checked = i.checked; }); onChange(); });
+  d.addEventListener('click', e => { const b = e.target.closest('[data-pk]'); if (!b || b.tagName !== 'BUTTON') return; if (b.getAttribute('data-pk') === 'all') availKeys(c, CL.iso).forEach(k => sel.add(k)); else sel.clear(); d.querySelectorAll('input[data-k]').forEach(x => { x.checked = sel.has(x.getAttribute('data-k')); }); onChange(); });
+  host.append(d);
+}
+function annualOption(TH, keys, iso, idx) {
+  const S2 = keys.map(k => [k, wser(k, iso)]).filter(z => z[1].length);
+  if (!S2.length) return { title: { text: 'Select at least one series', left: 'center', top: 'middle', textStyle: { color: TH.muted, fontSize: 13 } } };
+  const y0 = Math.min(...S2.map(z => z[1][0][0])), y1 = Math.max(...S2.map(z => z[1][z[1].length - 1][0]));
+  const labels = []; for (let y = y0; y <= y1; y++) labels.push(String(y));
+  const units = [...new Set(S2.map(z => indU(z[0])))];
+  const useIdx = idx || units.length > 2;
+  const series = S2.map(([k, pts], i) => {
+    const m = new Map(pts), base = pts[0][1];
+    const data = labels.map(l => { const v = m.get(+l); return v == null ? null : useIdx ? (base ? v / base * 100 : null) : v; });
+    return S(indL(k), data, { ax: useIdx ? 0 : (units.indexOf(indU(k)) > 0 ? 1 : 0), end: true, dec: 2, std: STDK[k] ? k : undefined });
+  });
+  const o = tsOption(TH, labels, series, { y1: useIdx ? 'index' : units[0], y2: !useIdx && units.length === 2 ? units[1] : undefined, dec: 2, zoom: labels.length > 30, events: false });
+  return o;
+}
+function clCharts(body, c, keys, iso) {
+  const top = document.createElement('div');
+  top.className = 'geo-grid';
+  body.append(top);
+  const mapBox = document.createElement('div');
+  mapBox.className = 'geo-map';
+  mapBox.innerHTML = '<p class="note">Loading map…</p>';
+  top.append(mapBox);
+  loadMaps().then(M => { mapBox.innerHTML = (countrySVG(iso, M) || '<p class="note">No map outline for this economy.</p>') + '<p class="src-line"><b>Source:</b> Natural Earth.</p>'; }).catch(() => { mapBox.innerHTML = '<p class="note">The map opens on macroarianalytics.com.</p>'; });
+  const side = document.createElement('div');
+  top.append(side);
+  const facts = keys.slice(0, 4).map(k => { const l = lastOfS(k, iso); return l ? '<div class="bdf"><span>' + esc(indL(k)) + '</span><b>' + nf(l[1], 2) + '</b><small>' + l[0] + '</small></div>' : ''; }).join('');
+  side.innerHTML = '<div class="bdfacts cl-facts">' + facts + '</div>';
+  const s = sec(body, 'International data (annual)', 'Tick or untick series to add or remove them from the chart. Series with different units use a second axis; with more than two units the chart switches to an index.');
+  if (keys.length) {
+    let node = null;
+    seriesPicker(s, c, () => { if (node) rerender(node); });
+    const g = grid(s);
+    const f = figure(g, { prefix: 'C', wide: true, title: c.t + ': ' + isoName(iso), sub: 'annual data; tick series above', h: 380, source: 'World Bank.', render: TH => annualOption(TH, [...clDefaults(c)], iso, CL.idx) });
+    node = f.querySelector('.chart');
+  }
+  if (iso === 'BGD' && c.bd) bdCatCharts(body, c);
+}
+function bdCatCharts(body, c) {
+  const pool = c.bd.filter(k => SER(k)).map(k => ({ k, label: SER(k).label + (SER(k).sub ? ' (' + SER(k).sub + ')' : ''), pk: PK(k), unit: SER(k).unit }));
+  if (c.cpi) BD.cpi_components.forEach(cc => { if (cc.series) pool.push({ k: 'cpi:' + cc.code, label: 'CPI group: ' + cc.name, pk: cc.series, unit: '% y/y' }); });
+  if (!pool.length) return;
+  const s = sec(body, 'Bangladesh Bank and BBS data', 'Monthly, quarterly and fiscal-year series. Tick or untick to add or remove; each frequency has its own chart with Month, Quarter and Year buttons.');
+  if (!CL.bdsel[c.id]) CL.bdsel[c.id] = new Set(pool.slice(0, 4).map(p => p.k));
+  const sel = CL.bdsel[c.id], nodes = [];
+  const d = document.createElement('div');
+  d.className = 'picker';
+  d.innerHTML = '<div class="pk-row">' + pool.map(p => '<label class="pk"><input type="checkbox" data-k="' + esc(p.k) + '"' + (sel.has(p.k) ? ' checked' : '') + '><span>' + esc(p.label) + '</span></label>').join('') + '</div><div class="pk-act"><button type="button" class="btn sm" data-pk="all">Select all</button><button type="button" class="btn sm" data-pk="none">Clear all</button></div>';
+  s.append(d);
+  const g = grid(s);
+  const draw = () => { disposeIn(g); g.innerHTML = ''; FIGN = 0;
+    const byF = {};
+    pool.filter(p => sel.has(p.k) && p.pk).forEach(p => { (byF[p.pk.f] = byF[p.pk.f] || []).push(p); });
+    Object.entries(byF).forEach(([f, ps]) => {
+      let k0 = Infinity, k1 = -Infinity; ps.forEach(p => { k0 = Math.min(k0, p.pk.k0); k1 = Math.max(k1, p.pk.k0 + p.pk.v.length - 1); });
+      if (f === 'M') k0 = Math.max(k0, 2010 * 12);
+      const labels = []; for (let k = k0; k <= k1; k++) labels.push(bdLab(f, k));
+      const units = [...new Set(ps.map(p => p.unit))];
+      figure(g, { prefix: 'C', wide: true, title: 'Bangladesh: ' + c.t.toLowerCase() + ' (' + ({ M: 'monthly', Q: 'quarterly', FY: 'fiscal year' }[f] || f) + ')', sub: units.join(' · '), h: 360,
+        source: srcKeys(ps.filter(p => !p.k.startsWith('cpi:')).map(p => p.k)).replace(/\.$/, '') + (ps.some(p => p.k.startsWith('cpi:')) ? ', BBS' : '') + '.',
+        render: TH => tsOption(TH, labels, ps.map(p => S(p.label, labels.map((l, i) => { const j = k0 + i - p.pk.k0; return j >= 0 && j < p.pk.v.length ? p.pk.v[j] : null; }), { ax: units.indexOf(p.unit) > 0 ? 1 : 0, end: true, dec: 2 })), { y1: units[0], y2: units.length > 1 ? units[1] : undefined, zoom: labels.length > 40, dec: 2 }) });
+    });
+    if (!Object.keys(byF).length) g.innerHTML = '<p class="note">Tick at least one series.</p>';
+  };
+  d.addEventListener('change', e => { const k = e.target.getAttribute('data-k'); if (!k) return; if (e.target.checked) sel.add(k); else sel.delete(k); draw(); });
+  d.addEventListener('click', e => { const b = e.target.closest('[data-pk]'); if (!b) return; if (b.getAttribute('data-pk') === 'all') pool.forEach(p => sel.add(p.k)); else sel.clear(); d.querySelectorAll('input[data-k]').forEach(x => { x.checked = sel.has(x.getAttribute('data-k')); }); draw(); });
+  draw();
+}
+// ---------- 2. summary ----------
+function regionMean(k, iso, year) { const sub = (EMAPB()[iso] || [])[4]; const vals = clCountries().filter(e => e[4] === sub).map(e => { const m = new Map(wser(k, e[0])); return m.get(year); }).filter(v => v != null); return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null; }
+function worldRank(k, iso) { const me = lastOfS(k, iso); if (!me) return null; const vals = clCountries().map(e => { const m = new Map(wser(k, e[0])); return m.get(me[0]); }).filter(v => v != null); return [vals.filter(v => v > me[1]).length + 1, vals.length]; }
+function clSummary(body, c, keys, iso) {
+  if (keys.length) {
+    let h = '<thead><tr><th scope="col">Indicator</th><th scope="col">Year</th><th scope="col" class="num">Latest</th><th scope="col" class="num">Previous</th><th scope="col" class="num">Change</th><th scope="col" class="num">5-year average</th><th scope="col" class="num">Sub-continent average</th><th scope="col" class="num">World rank</th><th scope="col">Benchmark</th></tr></thead><tbody>';
+    keys.forEach(k => {
+      const s = wser(k, iso), l = s[s.length - 1], p = s[s.length - 2], last5 = s.slice(-5).map(x => x[1]), rm = regionMean(k, iso, l[0]), wr = worldRank(k, iso), st = stdOf(k);
+      const out = st && stdOut(st, l[1]), big = !st && p && p[1] && Math.abs(l[1] / p[1] - 1) >= 0.1;
+      h += '<tr><th scope="row"><span class="mx-l">' + esc(indL(k)) + '</span><span class="mx-u">' + esc(indU(k)) + '</span></th><td>' + l[0] + '</td><td class="num big' + (out || big ? ' warn-std' : '') + '">' + nf(l[1], 2) + '</td><td class="num">' + (p ? nf(p[1], 2) : '–') + '</td><td class="num">' + (p ? nf(l[1] - p[1], 2) : '–') + '</td><td class="num">' + nf(last5.reduce((a, b) => a + b, 0) / last5.length, 2) + '</td><td class="num">' + (rm == null ? '–' : nf(rm, 2)) + '</td><td class="num">' + (wr ? wr[0] + ' of ' + wr[1] : '–') + '</td><td>' + (st ? esc(st.txt) + (out ? ' · outside' : ' · inside') : big ? 'changed ≥10% on the year' : '–') + '</td></tr>';
+    });
+    tableWrap(body, h + '</tbody>', tcap('Summary: ' + c.t.toLowerCase()), 'Highest value ranks 1. Blinking values are outside their benchmark, or (where no benchmark exists) changed by 10% or more in a year.', { src: 'World Bank.' });
+  }
+  if (iso === 'BGD' && c.bd) { TSRC = 'Bangladesh Bank, BBS.'; matrix(body, c.bd.filter(k => SER(k)), tcap('Bangladesh Bank and BBS: latest readings')); }
+}
+// ---------- 3. tables ----------
+function clTables(body, c, keys, iso) {
+  if (keys.length) {
+    const S2 = keys.map(k => [k, new Map(wser(k, iso))]); const ys = [...new Set(S2.flatMap(z => [...z[1].keys()]))].sort((a, b) => b - a).slice(0, 25);
+    let h = '<thead><tr><th scope="col">Year</th>' + keys.map(k => '<th scope="col" class="num" title="' + esc(indU(k)) + '">' + esc(indL(k)) + '</th>').join('') + '</tr></thead><tbody>';
+    ys.forEach(y => { h += '<tr><th scope="row">' + y + '</th>' + S2.map(z => '<td class="num">' + (z[1].has(y) ? nf(z[1].get(y), 2) : '–') + '</td>').join('') + '</tr>'; });
+    tableWrap(body, h + '</tbody>', tcap('Annual data, last 25 years'), 'Units: ' + keys.map(k => indL(k) + ' — ' + indU(k)).join('; ') + '.', { src: 'World Bank.', heat: 'col' });
+  }
+  if (iso === 'BGD' && c.bd) {
+    const bk = c.bd.filter(k => SER(k) && PK(k));
+    const fs = [...new Set(bk.map(k => PK(k).f))];
+    fs.forEach(f => {
+      const ks = bk.filter(k => PK(k).f === f), a = align(ks);
+      const n = a.labels.length, from = Math.max(0, n - 24);
+      let h = '<thead><tr><th scope="col">Period</th>' + ks.map(k => '<th scope="col" class="num" title="' + esc(SER(k).unit) + '">' + esc(SER(k).label + (SER(k).sub ? ' (' + SER(k).sub + ')' : '')) + '</th>').join('') + '</tr></thead><tbody>';
+      for (let i = n - 1; i >= from; i--) h += '<tr><th scope="row">' + esc(a.labels[i]) + '</th>' + a.cols.map(col => '<td class="num">' + (col[i] == null ? '–' : nf(col[i], 2)) + '</td>').join('') + '</tr>';
+      TSRC = 'Bangladesh Bank, BBS.';
+      tableWrap(body, h + '</tbody>', tcap('Bangladesh: latest ' + Math.min(24, n) + ' periods (' + ({ M: 'monthly', Q: 'quarterly', FY: 'fiscal year' }[f] || f) + ')'), '', { src: srcKeys(ks), heat: 'col' });
+    });
+  }
+}
+// ---------- 4. comparisons (sub-pages) ----------
+function clCompare(body, c, keys, iso) {
+  const modes = [['sub', 'Same sub-continent', 'Economies in ' + ((EMAPB()[iso] || [])[4] || 'the same sub-region')], ['gdp', 'Similar GDP per person', 'The ten economies with the closest GDP per person (PPP)'], ['dev', 'Same development group', (incomeGroup(iso) || 'Income group') + ' economies (World Bank thresholds applied to GDP per person, approximate)']];
+  const tabs = document.createElement('div');
+  tabs.className = 'bd-tabs cl-sub';
+  tabs.innerHTML = modes.map(m => '<button type="button" role="tab" data-cm="' + m[0] + '" aria-selected="' + (m[0] === CL.cmp) + '">' + esc(m[1]) + '</button>').join('');
+  tabs.addEventListener('click', e => { const b = e.target.closest('[data-cm]'); if (b) { CL.cmp = b.getAttribute('data-cm'); renderCL(); } });
+  body.append(tabs);
+  if (!keys.length) { body.insertAdjacentHTML('beforeend', '<p class="note">No World Bank data on this topic for comparisons.</p>'); return; }
+  const m = modes.find(x => x[0] === CL.cmp) || modes[0], peers = peersOf(iso, m[0]);
+  let h = '<thead><tr><th scope="col">Economy</th>' + keys.map(k => '<th scope="col" class="num" title="' + esc(indU(k)) + '">' + esc(indL(k)) + '</th>').join('') + '</tr></thead><tbody>';
+  const rows = peers.map(p => [p, keys.map(k => lastOfS(k, p))]);
+  rows.sort((a, b) => ((b[1][0] || [0, -Infinity])[1]) - ((a[1][0] || [0, -Infinity])[1]));
+  rows.forEach(([p, vals]) => { h += '<tr' + (p === iso ? ' class="hl"' : '') + '><th scope="row"><a href="#cl~' + p + '~' + c.id + '~' + CL.sec + '">' + esc(isoName(p)) + '</a></th>' + vals.map(v => '<td class="num">' + (v ? nf(v[1], 2) + '<sup>’' + String(v[0]).slice(2) + '</sup>' : '–') + '</td>').join('') + '</tr>'; });
+  const avg = keys.map(k => { const v = rows.map(r => r[1][keys.indexOf(k)]).filter(Boolean).map(x => x[1]); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; });
+  h += '<tr class="foot"><th scope="row">Group average</th>' + avg.map(v => '<td class="num">' + (v == null ? '–' : nf(v, 2)) + '</td>').join('') + '</tr>';
+  tableWrap(body, h + '</tbody>', tcap(m[1] + ': ' + c.t.toLowerCase()), m[2] + '. Sorted by the first indicator; small numbers after a value give its year. Tap an economy to open the same page for it.', { src: 'World Bank.', heat: 'col' });
+  const k0 = keys[0], bars = rows.map(r => [isoName(r[0]), r[1][0] ? r[1][0][1] : null, r[0]]).filter(x => x[1] != null).sort((a, b) => a[1] - b[1]);
+  const g = grid(body);
+  figure(g, { prefix: 'C', wide: true, title: indL(k0) + ': ' + m[1].toLowerCase(), sub: indU(k0) + '; latest year for each economy', h: Math.max(260, 26 * bars.length + 40), source: 'World Bank.',
+    render: TH => ({ aria: { enabled: true }, animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 56, top: 8, bottom: 6, containLabel: true }, tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: TH.paper, borderColor: TH.line, textStyle: { color: TH.ink }, valueFormatter: v => nf(v, 2) },
+      xAxis: valAxis(TH, ''), yAxis: { type: 'category', data: bars.map(b => b[0]), axisLabel: { color: TH.ink2, fontSize: 11 }, axisLine: { lineStyle: { color: TH.line } }, axisTick: { show: false } },
+      series: [{ type: 'bar', data: bars.map(b => ({ value: b[1], itemStyle: { color: b[2] === iso ? TH.signal : TH.pal[0] } })), barMaxWidth: 16, label: { show: true, position: 'right', color: TH.ink2, fontSize: 10, formatter: p => nf(p.value, 2) } }] }) });
+}
+// ---------- 5–16. analysis to sources ----------
+function seriesY(k, iso) { return wser(k, iso); }
+function clAnalysis(body, c, keys, iso) {
+  let h = '<thead><tr><th scope="col">Indicator</th><th scope="col">Period</th><th scope="col" class="num">N</th><th scope="col" class="num">Mean</th><th scope="col" class="num">Median</th><th scope="col" class="num">SD</th><th scope="col" class="num">Min</th><th scope="col" class="num">Max</th><th scope="col" class="num">Trend a year</th><th scope="col" class="num">p-value</th><th scope="col" class="num">Last 5 years vs previous 5</th></tr></thead><tbody>';
+  keys.forEach(k => { const s = seriesY(k, iso), v = s.map(x => x[1]).slice().sort((a, b) => a - b), n = v.length, mean = v.reduce((a, b) => a + b, 0) / n, sd = Math.sqrt(v.reduce((a, b) => a + (b - mean) * (b - mean), 0) / Math.max(1, n - 1)), tr = trendOf(s);
+    const l5 = s.slice(-5).map(x => x[1]), p5 = s.slice(-10, -5).map(x => x[1]), avg = a => a.reduce((x, y) => x + y, 0) / a.length, mn = s.reduce((a, b) => (b[1] < a[1] ? b : a)), mx = s.reduce((a, b) => (b[1] > a[1] ? b : a));
+    h += '<tr><th scope="row">' + esc(indL(k)) + '</th><td>' + s[0][0] + '–' + s[n - 1][0] + '</td><td class="num">' + n + '</td><td class="num">' + nf(mean, 2) + '</td><td class="num">' + nf(n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2, 2) + '</td><td class="num">' + nf(sd, 2) + '</td><td class="num">' + nf(mn[1], 2) + '<sup>’' + String(mn[0]).slice(2) + '</sup></td><td class="num">' + nf(mx[1], 2) + '<sup>’' + String(mx[0]).slice(2) + '</sup></td><td class="num">' + (tr ? nf(tr.b, 2) + stars(tr.p) : '–') + '</td><td class="num">' + (tr ? fp(tr.p) : '–') + '</td><td class="num">' + (p5.length ? nf(avg(l5) - avg(p5), 2) : '–') + '</td></tr>'; });
+  tableWrap(body, h + '</tbody>', tcap('Descriptive statistics and trend'), 'Trend: slope of an ordinary least-squares line on the year, in the indicator’s units per year; *** p<0.01, ** p<0.05, * p<0.1. Min and max show their year.', { src: 'World Bank; author’s calculations.' });
+  if (keys.length > 1) {
+    let ch = '<thead><tr><th scope="col"></th>' + keys.map(k => '<th scope="col" class="num">' + esc(indL(k)) + '</th>').join('') + '</tr></thead><tbody>';
+    keys.forEach(a => { ch += '<tr><th scope="row">' + esc(indL(a)) + '</th>' + keys.map(b => { const A = new Map(seriesY(a, iso)), B = seriesY(b, iso).filter(x => A.has(x[0])); if (B.length < 6) return '<td class="num">–</td>'; const xs = B.map(x => A.get(x[0])), ys = B.map(x => x[1]), mx = xs.reduce((s, v) => s + v, 0) / xs.length, my = ys.reduce((s, v) => s + v, 0) / ys.length; let sxy = 0, sxx = 0, syy = 0; xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) * (x - mx); syy += (ys[i] - my) * (ys[i] - my); }); const r = sxx && syy ? sxy / Math.sqrt(sxx * syy) : null; return '<td class="num">' + (r == null ? '–' : nf(r, 2)) + '</td>'; }).join('') + '</tr>'; });
+    tableWrap(body, ch + '</tbody>', tcap('Correlations between the indicators'), 'Pearson correlation over the years both indicators are available.', { src: 'World Bank; author’s calculations.' });
+  }
+}
+function clForecast(body, c, keys, iso) {
+  if (!CL.fk || !keys.includes(CL.fk)) CL.fk = keys[0];
+  ctl2(body, '<label class="field"><span>Indicator</span><select id="cl-fk">' + keys.map(k => '<option value="' + k + '"' + (k === CL.fk ? ' selected' : '') + '>' + esc(indL(k)) + '</option>').join('') + '</select></label>', () => { CL.fk = $('#cl-fk').value; renderCL(); }, '#cl-fk');
+  const s = seriesY(CL.fk, iso), y = s.map(x => x[1]);
+  if (y.length < 8) { body.insertAdjacentHTML('beforeend', '<p class="note">Too few years of data to forecast.</p>'); return; }
+  const F = holtFc(y, 5), last = s[s.length - 1][0], labels = s.map(x => String(x[0])).concat(F.out.map(o => String(last + o.h)));
+  const pad = Array(s.length - 1).fill(null), lv = y[y.length - 1];
+  const g = grid(body);
+  figure(g, { prefix: 'C', wide: true, title: indL(CL.fk) + ': forecast to ' + (last + 5), sub: indU(CL.fk) + '; Holt linear trend model with 80% and 95% ranges', h: 360, source: 'World Bank; model estimates.',
+    render: TH => tsOption(TH, labels, [S('Actual', y.concat(F.out.map(() => null)), { color: TH.ink, w: 2.2 }), ...bandSeries('95% range', pad.concat([lv], F.out.map(o => o.lo95)), pad.concat([lv], F.out.map(o => o.hi95)), TH.pos, 0.14, 'b95'), ...bandSeries('80% range', pad.concat([lv], F.out.map(o => o.lo80)), pad.concat([lv], F.out.map(o => o.hi80)), TH.pos, 0.26, 'b80'), S('Forecast', pad.concat([lv], F.out.map(o => o.f)), { color: TH.pos, dash: true, w: 2.4, end: true, dec: 2 })], { y1: indU(CL.fk), dec: 2, events: false }) });
+  let h = '<thead><tr><th scope="col">Year</th><th scope="col" class="num">Forecast</th><th scope="col" class="num">80% range</th><th scope="col" class="num">95% range</th></tr></thead><tbody>';
+  F.out.forEach(o => { h += '<tr><th scope="row">' + (last + o.h) + '</th><td class="num big">' + nf(o.f, 2) + '</td><td class="num">' + nf(o.lo80, 2) + ' to ' + nf(o.hi80, 2) + '</td><td class="num">' + nf(o.lo95, 2) + ' to ' + nf(o.hi95, 2) + '</td></tr>'; });
+  tableWrap(body, h + '</tbody>', tcap('Forecast table'), 'Holt’s linear exponential smoothing, with smoothing weights chosen to minimise one-step errors (α = ' + nf(F.m.a, 2) + ', β = ' + nf(F.m.b, 2) + '). Ranges widen with the horizon. Statistical projections, not official forecasts.', { src: 'World Bank; model estimates.' });
+  if (iso === 'BGD' && c.id === 'inflation') { const e = BD.ensemble.path[BD.ensemble.path.length - 1]; body.insertAdjacentHTML('beforeend', '<p class="note">Monthly models for Bangladesh (ARIMA and SVAR ensemble) project <b>' + nf(e.mean, 2) + '%</b> inflation in 12 months (80% range ' + nf(e.lo80, 2) + '–' + nf(e.hi80, 2) + '%). <a href="#lab~overview">Open the Forecast lab →</a></p>'); }
+}
+function ctl2(host, html, onChange, sel) { const d = document.createElement('div'); d.className = 'controls'; d.innerHTML = html; host.append(d); const el = d.querySelector(sel); if (el) el.addEventListener('change', onChange); }
+function readOf(k, iso) { const s = seriesY(k, iso); if (s.length < 3) return null; const l = s[s.length - 1], p = s[s.length - 2], tr = trendOf(s.slice(-15)), F = s.length >= 8 ? holtFc(s.map(x => x[1]), 5) : null, st = stdOf(k), mean = s.reduce((a, b) => a + b[1], 0) / s.length;
+  return { k, l, p, tr, F, st, mean, out: st ? stdOut(st, l[1]) : false, big: !st && p && p[1] ? Math.abs(l[1] / p[1] - 1) >= 0.1 : false, first: s[0][0], n: s.length }; }
+function clResults(body, c, keys, iso) {
+  const items = keys.map(k => readOf(k, iso)).filter(Boolean).map(r => {
+    const dir = r.tr ? (r.tr.p < 0.1 ? (r.tr.b > 0 ? 'a significant upward trend' : 'a significant downward trend') : 'no significant trend') : 'too short a history for a trend';
+    const f = r.F ? ' The model projects ' + nf(r.F.out[4].f, 2) + ' by ' + (r.l[0] + 5) + ' (80% range ' + nf(r.F.out[4].lo80, 2) + ' to ' + nf(r.F.out[4].hi80, 2) + ').' : '';
+    return '<li><b>' + esc(indL(r.k)) + ':</b> ' + nf(r.l[1], 2) + ' in ' + r.l[0] + ' (' + esc(indU(r.k)) + '), against an average of ' + nf(r.mean, 2) + ' since ' + r.first + '. Over the last 15 years there is ' + dir + '.' + f + (r.out ? ' The latest value is outside its benchmark (' + esc(r.st.txt) + ').' : '') + (r.big ? ' It changed by 10% or more in a year.' : '') + '</li>';
+  });
+  body.insertAdjacentHTML('beforeend', '<section class="bd-sec"><ul class="cl-list">' + items.join('') + '</ul><p class="src-line"><b>Source:</b> World Bank; model estimates.</p></section>');
+}
+function clTests(body, c, keys, iso) {
+  let h = '<thead><tr><th scope="col" rowspan="2">Indicator</th><th scope="colgroup" colspan="3" class="cg">Unit root (ADF)</th><th scope="colgroup" colspan="2" class="cg">Normality (Jarque–Bera)</th><th scope="colgroup" colspan="2" class="cg">Autocorrelation (Ljung–Box)</th></tr><tr><th scope="col" class="num">τ</th><th scope="col" class="num">5% critical</th><th scope="col">Verdict</th><th scope="col" class="num">JB</th><th scope="col" class="num">p</th><th scope="col" class="num">Q</th><th scope="col" class="num">p</th></tr></thead><tbody>';
+  keys.forEach(k => { const s = seriesY(k, iso), y = s.map(x => x[1]), a = adf(y), tr = trendOf(s), j = tr ? jb(tr.res) : null, lb = tr ? lbox(tr.res, Math.min(5, Math.floor(tr.res.length / 4))) : null;
+    h += '<tr><th scope="row">' + esc(indL(k)) + '</th><td class="num">' + (a ? nf(a.tau, 2) : '–') + '</td><td class="num">' + (a ? nf(a.cv5, 2) : '–') + '</td><td>' + (a ? (a.tau < a.cv5 ? 'Stationary (unit root rejected at 5%)' : 'Unit root not rejected') : 'Too few years') + '</td><td class="num">' + (j ? nf(j.J, 2) : '–') + '</td><td class="num">' + (j ? fp(j.p) : '–') + '</td><td class="num">' + (lb ? nf(lb.Q, 2) : '–') + '</td><td class="num">' + (lb ? fp(lb.p) : '–') + '</td></tr>'; });
+  tableWrap(body, h + '</tbody>', tcap('Statistical tests'), 'ADF: Δy on a constant, lagged level and one lagged difference; critical values from MacKinnon (2010) for the sample size. Jarque–Bera and Ljung–Box are applied to the residuals from the trend line.', { src: 'World Bank; author’s calculations.' });
+}
+function clHetero(body, c, keys, iso) {
+  if (!CL.hk || !keys.includes(CL.hk)) CL.hk = keys[0];
+  ctl2(body, '<label class="field"><span>Indicator</span><select id="cl-hk">' + keys.map(k => '<option value="' + k + '"' + (k === CL.hk ? ' selected' : '') + '>' + esc(indL(k)) + '</option>').join('') + '</select></label>', () => { CL.hk = $('#cl-hk').value; renderCL(); }, '#cl-hk');
+  const k = CL.hk, me = lastOfS(k, iso);
+  if (!me) return;
+  const yr = me[0], E = clCountries(), REG = ['Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
+  const vals = E.map(e => [e, new Map(wser(k, e[0])).get(yr)]).filter(x => x[1] != null);
+  const groups = REG.map(rg => vals.filter(x => x[0][3] === rg).map(x => x[1]));
+  const kw = kwH(groups), all = vals.map(x => x[1]).sort((a, b) => a - b), sub = vals.filter(x => x[0][4] === (EMAPB()[iso] || [])[4]).map(x => x[1]).sort((a, b) => a - b);
+  const pct = arr => Math.round(arr.filter(v => v < me[1]).length / Math.max(1, arr.length - 1) * 100);
+  const box = a => { const q = p => a[Math.min(a.length - 1, Math.max(0, Math.round(p * (a.length - 1))))]; return [a[0], q(0.25), q(0.5), q(0.75), a[a.length - 1]]; };
+  const rows = REG.map((rg, i) => [rg, groups[i].slice().sort((a, b) => a - b)]).filter(r => r[1].length >= 3);
+  const g = grid(body);
+  figure(g, { prefix: 'C', wide: true, title: indL(k) + ' across regions, ' + yr, sub: indU(k) + '; one value per economy; dashed line = ' + isoName(iso), h: 320, source: 'World Bank.',
+    render: TH => ({ aria: { enabled: true }, animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 18, top: 16, bottom: 6, containLabel: true }, tooltip: { trigger: 'item', backgroundColor: TH.paper, borderColor: TH.line, textStyle: { color: TH.ink } },
+      xAxis: { type: 'category', data: rows.map(r => r[0] + ' (' + r[1].length + ')'), axisLabel: { color: TH.ink2, fontSize: 11 }, axisLine: { lineStyle: { color: TH.line } } }, yAxis: valAxis(TH, '', { scale: true }),
+      series: [{ type: 'boxplot', data: rows.map(r => box(r[1])), itemStyle: { color: TH.dark ? 'rgba(111,168,232,.22)' : 'rgba(31,95,168,.14)', borderColor: TH.pal[0], borderWidth: 1.6 }, markLine: { symbol: 'none', silent: true, lineStyle: { color: TH.signal, type: 'dashed', width: 2 }, label: { color: TH.ink, formatter: isoName(iso) + ' ' + nf(me[1], 2) }, data: [{ yAxis: me[1] }] } }] }) });
+  let h = '<thead><tr><th scope="col">Measure</th><th scope="col" class="num">Value</th><th scope="col">Reading</th></tr></thead><tbody>' +
+    '<tr><th scope="row">Kruskal–Wallis H (regions differ?)</th><td class="num">' + (kw ? nf(kw.H, 2) + stars(kw.p) : '–') + '</td><td>' + (kw ? 'p = ' + fp(kw.p) + (kw.p < 0.05 ? ': regions differ significantly' : ': no significant difference between regions') : '–') + '</td></tr>' +
+    '<tr><th scope="row">Percentile in the world</th><td class="num">' + pct(all) + '</td><td>' + esc(isoName(iso)) + ' is higher than ' + pct(all) + '% of ' + all.length + ' economies</td></tr>' +
+    '<tr><th scope="row">Percentile in its sub-continent</th><td class="num">' + (sub.length > 1 ? pct(sub) : '–') + '</td><td>Among ' + sub.length + ' economies in ' + esc((EMAPB()[iso] || [])[4] || '') + '</td></tr></tbody>';
+  tableWrap(body, h, tcap('Heterogeneity tests'), 'Kruskal and Wallis (1952): a rank-based test of whether regions share the same distribution.', { src: 'World Bank; author’s calculations.' });
+}
+function clRobust(body, c, keys, iso) {
+  let h = '<thead><tr><th scope="col">Indicator</th><th scope="col" class="num">Trend, last 10 years</th><th scope="col" class="num">Trend, last 20 years</th><th scope="col" class="num">Trend, all years</th><th scope="col" class="num">Next year: Holt</th><th scope="col" class="num">Linear trend</th><th scope="col" class="num">Naive</th><th scope="col">Reading</th></tr></thead><tbody>';
+  keys.forEach(k => { const s = seriesY(k, iso), y = s.map(x => x[1]); if (s.length < 8) return; const t = [10, 20, 999].map(w => trendOf(s.slice(-w))), f = ['holt', 'trend', 'naive'].map(m => fc1(y, m));
+    const signs = t.filter(Boolean).map(x => Math.sign(x.b)), same = signs.every(v => v === signs[0]), spread = Math.max(...f) - Math.min(...f), rel = Math.abs(spread / (Math.abs(y[y.length - 1]) || 1));
+    h += '<tr><th scope="row">' + esc(indL(k)) + '</th>' + t.map(x => '<td class="num">' + (x ? nf(x.b, 2) + stars(x.p) : '–') + '</td>').join('') + f.map(v => '<td class="num">' + nf(v, 2) + '</td>').join('') + '<td>' + (same ? 'Trend direction is robust' : 'Trend direction depends on the period') + (rel < 0.1 ? '; forecasts agree' : '; forecasts differ by model') + '</td></tr>'; });
+  tableWrap(body, h + '</tbody>', tcap('Robustness: periods and models'), 'Each column changes one assumption. A finding is robust when it holds across them.', { src: 'World Bank; model estimates.' });
+}
+function clValid(body, c, keys, iso) {
+  let h = '<thead><tr><th scope="col">Indicator</th><th scope="col" class="num">Years tested</th><th scope="col" class="num">RMSE, Holt</th><th scope="col" class="num">RMSE, trend</th><th scope="col" class="num">RMSE, naive</th><th scope="col" class="num">Theil’s U (Holt)</th><th scope="col">Best model</th></tr></thead><tbody>';
+  keys.forEach(k => { const y = seriesY(k, iso).map(x => x[1]); if (y.length < 12) return; const b = ['holt', 'trend', 'naive'].map(m => backtest(y, m, 8)); if (!b[0]) return; const best = ['Holt', 'Linear trend', 'Naive'][b.map(x => x.rmse).indexOf(Math.min(...b.map(x => x.rmse)))];
+    h += '<tr><th scope="row">' + esc(indL(k)) + '</th><td class="num">' + b[0].n + '</td>' + b.map(x => '<td class="num">' + nf(x.rmse, 2) + '</td>').join('') + '<td class="num' + (b[0].rmse / b[2].rmse < 1 ? ' up-good' : ' up-bad') + '">' + nf(b[0].rmse / b[2].rmse, 2) + '</td><td>' + best + '</td></tr>'; });
+  tableWrap(body, h + '</tbody>', tcap('Validation: rolling one-year-ahead backtest'), 'Each model is re-estimated every year on data up to that year and judged on the next year it had not seen. Theil’s U below 1 means Holt beats the naive “no change” forecast.', { src: 'World Bank; model estimates.' });
+}
+function clPlacebo(body, c, keys, iso) {
+  let h = '<thead><tr><th scope="col">Indicator</th><th scope="col" class="num">Trend a year</th><th scope="col" class="num">Usual p-value</th><th scope="col" class="num">Placebo p-value</th><th scope="col">Reading</th></tr></thead><tbody>';
+  keys.forEach(k => { const s = seriesY(k, iso); if (s.length < 8) return; const r = permTrend(s, 400); if (!r) return;
+    h += '<tr><th scope="row">' + esc(indL(k)) + '</th><td class="num">' + nf(r.b, 2) + '</td><td class="num">' + fp(r.pt) + '</td><td class="num">' + fp(r.p) + '</td><td>' + (r.p < 0.05 ? 'The trend is real: shuffled years rarely produce one this strong' : 'Shuffled years often produce a trend this strong, so it may be chance') + '</td></tr>'; });
+  tableWrap(body, h + '</tbody>', tcap('Placebo test: shuffled years'), 'The values are shuffled across years 400 times; the placebo p-value is the share of shuffles with a trend at least as steep as the real one (Fisher, 1935).', { src: 'World Bank; author’s calculations.' });
+}
+function clDecisions(body, c, keys, iso) {
+  const items = keys.map(k => readOf(k, iso)).filter(Boolean).map(r => {
+    const rising = r.F ? r.F.out[4].f > r.l[1] : r.tr && r.tr.b > 0;
+    const sig = r.out ? 'Act' : r.big ? 'Watch' : 'Stable', cls = r.out ? 'bad' : r.big ? 'mid' : 'ok';
+    const why = r.out ? 'outside its benchmark (' + r.st.txt + '; ' + r.st.src + ')' : r.big ? 'changed by 10% or more in a year' : r.st ? 'inside its benchmark (' + r.st.txt + ')' : 'no large change and no benchmark breach';
+    return '<tr><th scope="row">' + esc(indL(r.k)) + '</th><td><span class="sig ' + cls + '">' + sig + '</span></td><td>' + esc(why) + '</td><td>' + (r.F ? (rising ? 'Expected to rise' : 'Expected to fall') + ' over five years' : '–') + '</td></tr>';
+  });
+  tableWrap(body, '<thead><tr><th scope="col">Indicator</th><th scope="col">Signal</th><th scope="col">Why</th><th scope="col">Outlook</th></tr></thead><tbody>' + items.join('') + '</tbody>', tcap('Decision signals'), 'Signals summarise the evidence for attention: Act = outside an international benchmark; Watch = a change of 10% or more in a year; Stable = neither. They are for information, not policy or investment advice.', { src: 'World Bank; benchmarks as listed; model estimates.' });
+}
+function clDiscussion(body, c, keys, iso) {
+  const items = [];
+  keys.forEach(k => { const s = seriesY(k, iso); if (!s.length) return; const gaps = s[s.length - 1][0] - s[0][0] + 1 - s.length, stale = new Date().getFullYear() - s[s.length - 1][0];
+    let jump = null; for (let i = 1; i < s.length; i++) { const d = Math.abs(s[i][1] - s[i - 1][1]); if (!jump || d > jump[1]) jump = [s[i][0], d]; }
+    items.push('<li><b>' + esc(indL(k)) + ':</b> ' + s.length + ' years (' + s[0][0] + '–' + s[s.length - 1][0] + ')' + (gaps > 0 ? ', with ' + gaps + ' missing years' : '') + (stale >= 2 ? '; the latest figure is ' + stale + ' years old' : '') + (jump ? '; the largest one-year move was ' + nf(jump[1], 2) + ' in ' + jump[0] + ', which may reflect a shock or a statistical break' : '') + '.</li>'); });
+  items.push('<li>Figures are revised by national agencies and the World Bank, so recent years can change.</li>', '<li>Comparisons across economies depend on common definitions; check the notes in Learn for each indicator.</li>', '<li>Forecasts here are mechanical extrapolations of past patterns and cannot anticipate policy changes or new shocks.</li>');
+  body.insertAdjacentHTML('beforeend', '<section class="bd-sec"><ul class="cl-list">' + items.join('') + '</ul><p class="src-line"><b>Source:</b> World Bank.</p></section>');
+}
+function clConclusions(body, c, keys, iso) {
+  const R = keys.map(k => readOf(k, iso)).filter(Boolean), out = R.filter(r => r.out), big = R.filter(r => r.big), up = R.filter(r => r.F && r.F.out[4].f > r.l[1]);
+  const parts = ['For ' + isoName(iso) + ', ' + R.length + ' indicators of ' + c.t.toLowerCase() + ' were analysed.'];
+  parts.push(out.length ? out.map(r => indL(r.k)).join(', ') + (out.length > 1 ? ' are' : ' is') + ' outside the international benchmark and deserve' + (out.length > 1 ? '' : 's') + ' attention.' : 'No indicator is outside its international benchmark.');
+  if (big.length) parts.push(big.map(r => indL(r.k)).join(', ') + ' moved by 10% or more in the latest year.');
+  if (R.some(r => r.F)) parts.push(up.length + ' of ' + R.filter(r => r.F).length + ' forecasts point upward over the next five years.');
+  parts.push('Treat the projections as indicative: validation shows how far they beat a naive forecast for each series.');
+  body.insertAdjacentHTML('beforeend', '<div class="concl"><b>Conclusion.</b> ' + esc(parts.join(' ')) + '</div><p class="src-line"><b>Source:</b> World Bank; model estimates.</p>');
+}
+function clSources(body, c, keys, iso) {
+  let h = '<thead><tr><th scope="col">Indicator</th><th scope="col">What it measures</th><th scope="col">Source</th><th scope="col">Learn more</th></tr></thead><tbody>';
+  keys.forEach(k => { h += '<tr><th scope="row">' + esc(indL(k)) + '</th><td>' + esc((IND[k].desc || '') + ' ' + (IND[k].why || '')) + '</td><td>' + esc(shortSrc(IND[k].src)) + '</td><td>' + (FAQ_MAP[k] ? '<a href="#learn~' + FAQ_MAP[k] + '">Definition, formula and sources →</a>' : '–') + '</td></tr>'; });
+  tableWrap(body, h + '</tbody>', tcap('Sources and notes'), 'Maps: Natural Earth. Bangladesh monthly data: Bangladesh Bank and BBS. Methods: see Learn and the Forecast lab’s References.', { src: 'World Bank.' });
+}
+function routeCL(h) {
+  const m = /^cl(?:~([A-Z]{3}))?(?:~([a-z]+))?(?:~([a-z]+))?$/.exec(h);
+  if (!m) return false;
+  if (m[1] && EMAPB()[m[1]]) CL.iso = m[1];
+  if (m[2] && CL_CATS.some(c => c.id === m[2])) CL.cat = m[2];
+  if (m[3] && CL_SECS.some(s => s[0] === m[3])) CL.sec = m[3];
+  const was = inited.cl;
+  go('cl');
+  if (was) renderCL();
+  return true;
+}
+
+/* ================= Security monitor: warn, block and alert the owner ================= */
+function initSecurity() {
+  const ownerOn = () => document.documentElement.classList.contains('owner');
+  const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } return null; };
+  const MSG = { copy: 'Copying is not allowed.', print: 'Printing is not allowed.', save: 'Saving the page is not allowed.', source: 'Viewing the page code is not allowed.', inspect: 'Developer tools are not allowed.', menu: 'The right-click menu is turned off.', drag: 'Dragging content out is not allowed.' };
+  let lastWarn = 0, lastType = '', dtOpen = false;
+  function warnBar(msg) {
+    let b = document.getElementById('sec-warn');
+    if (!b) { b = document.createElement('div'); b.id = 'sec-warn'; b.setAttribute('role', 'alert'); document.body.append(b); }
+    b.textContent = msg; b.hidden = false; clearTimeout(warnBar.t); warnBar.t = setTimeout(() => { b.hidden = true; }, 6000);
+  }
+  function blockScreen() {
+    const until = +(store('mm.block') || 0);
+    if (until <= Date.now() || ownerOn()) { const o = document.getElementById('sec-block'); if (o) o.remove(); return false; }
+    let o = document.getElementById('sec-block');
+    if (!o) { o = document.createElement('div'); o.id = 'sec-block'; o.setAttribute('role', 'alertdialog'); o.setAttribute('aria-modal', 'true'); document.body.append(o); }
+    const left = Math.ceil((until - Date.now()) / 60000);
+    o.innerHTML = '<div class="sec-card"><b>Access paused</b><p>This page detected repeated attempts to copy, save, print or inspect protected content. Access is paused for ' + left + ' more minute' + (left === 1 ? '' : 's') + ', and the site owner has been notified.</p><p class="note">If this was a mistake, wait for the pause to end and browse normally.</p></div>';
+    clearTimeout(blockScreen.t); blockScreen.t = setTimeout(blockScreen, 30000);
+    return true;
+  }
+  function alertOwner(type, n, force) {
+    const url = window.MM_ALERT;
+    if (!url || ownerOn()) return;
+    const last = +(store('mm.alerted') || 0);
+    if (!force && Date.now() - last < 3600e3) return;
+    store('mm.alerted', String(Date.now()));
+    const body = JSON.stringify({ type: type, count: n, page: location.hash || '#overview', time: new Date().toISOString(), ua: navigator.userAgent, lang: navigator.language, screen: screen.width + 'x' + screen.height, user: (AUTH.user && AUTH.user.email) || '' });
+    try { fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: body, keepalive: true }).catch(() => {}); } catch (e) { /* offline */ }
+  }
+  function hit(type, soft) {
+    if (ownerOn()) return;
+    const now = Date.now();
+    let a = []; try { a = JSON.parse(store('mm.sec') || '[]'); } catch (e) { a = []; }
+    a = a.filter(t => now - t < 600e3);
+    if (!soft) { a.push(now); store('mm.sec', JSON.stringify(a)); }
+    if (a.length >= 5) { store('mm.block', String(now + 600e3)); store('mm.sec', '[]'); alertOwner('access blocked after repeated attempts (' + type + ')', a.length, true); blockScreen(); return; }
+    if (now - lastWarn > 4000 || type !== lastType) { lastWarn = now; lastType = type; warnBar('This content is protected. ' + MSG[type] + (soft ? '' : ' Repeated attempts block access for 10 minutes and notify the site owner.')); }
+    alertOwner(type, a.length, false);
+  }
+  const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+  const inForm = t => t && t.closest && t.closest('input, textarea, select');
+  document.addEventListener('copy', e => { if (!inForm(e.target)) hit('copy'); }, true);
+  document.addEventListener('cut', e => { if (!inForm(e.target)) hit('copy'); }, true);
+  document.addEventListener('contextmenu', e => { if (!inForm(e.target)) hit('menu', coarse); }, true);
+  document.addEventListener('dragstart', e => { if (e.target && e.target.closest && e.target.closest('img, svg, .chart, table')) hit('drag'); }, true);
+  document.addEventListener('keydown', e => {
+    if (ownerOn()) return;
+    const k = (e.key || '').toLowerCase(), c = e.ctrlKey || e.metaKey;
+    const t = k === 'f12' ? 'inspect' : c && e.shiftKey && (k === 'i' || k === 'j' || k === 'c') ? 'inspect' : c && k === 'u' ? 'source' : c && k === 's' ? 'save' : c && k === 'p' ? 'print' : '';
+    if (t) { e.preventDefault(); e.stopPropagation(); hit(t); }
+  }, true);
+  window.addEventListener('beforeprint', () => hit('print'));
+  if (!coarse) setInterval(() => {
+    if (ownerOn() || document.hidden) return;
+    const open = window.outerWidth - window.innerWidth > 320 || window.outerHeight - window.innerHeight > 360;
+    if (open && !dtOpen) hit('inspect', true);
+    dtOpen = open;
+  }, 3000);
+  blockScreen();
+}
+
+
+/* ================= Earning: plans, ads for free visitors, subscribers ================= */
+const EARN = window.MM_EARN || {};
+function initPlans() {
+  const host = $('#pl-cards');
+  if (!host) return;
+  const plans = EARN.plans || [];
+  host.innerHTML = plans.map((p, i) => '<article class="plan' + (i === 1 ? ' best' : '') + '"><h3>' + esc(p.name) + '</h3><p class="pl-price"><b>' + esc(p.price) + '</b>' + (p.period ? ' <span>' + esc(p.period) + '</span>' : '') + '</p><ul>' + (p.features || []).map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>' +
+    (p.link ? '<a class="btn' + (i === 1 ? ' primary' : '') + '" href="' + esc(p.link) + '" target="_blank" rel="noopener">' + (p.price === 'Free' ? 'Start reading' : 'Subscribe') + '</a>' : p.price === 'Free' ? '<button type="button" class="btn" data-go="overview">Start reading</button>' : '<span class="btn ghost" aria-disabled="true">Opening soon</span>') + '</article>').join('');
+  const more = [];
+  if (EARN.newsletter_form) more.push('<a class="btn" href="' + esc(EARN.newsletter_form) + '" target="_blank" rel="noopener">Get the free monthly update by email</a>');
+  if (EARN.donate_link) more.push('<a class="btn" href="' + esc(EARN.donate_link) + '" target="_blank" rel="noopener">Support this site with a one-off gift</a>');
+  $('#pl-more').innerHTML = more.length ? '<div class="controls">' + more.join('') + '</div>' : '';
+  $('#pl-adv').innerHTML = EARN.advertise_form ? '<a class="btn primary" href="' + esc(EARN.advertise_form) + '" target="_blank" rel="noopener">Ask about advertising</a>' : '<button type="button" class="btn primary" data-go="contact">Ask about advertising</button>';
+}
+let adsLoaded = false;
+function renderAds() {
+  const off = document.documentElement.classList.contains('owner') || document.documentElement.classList.contains('subscriber');
+  document.querySelectorAll('.ad-slot').forEach(slot => {
+    if (off) { slot.hidden = true; return; }
+    slot.hidden = false;
+    if (slot.getAttribute('data-done')) return;
+    const kind = slot.getAttribute('data-ad'), unit = kind === 'side' ? EARN.ad_slot_side : EARN.ad_slot_bottom;
+    if (/^ca-pub-\d+$/.test(EARN.adsense_client || '') && unit) {
+      slot.innerHTML = '<span class="ad-tag">Advertisement</span><ins class="adsbygoogle" style="display:block" data-ad-client="' + esc(EARN.adsense_client) + '" data-ad-slot="' + esc(unit) + '" data-ad-format="' + (kind === 'side' ? 'vertical' : 'auto') + '" data-full-width-responsive="true"></ins>';
+      if (!adsLoaded) { adsLoaded = true; const s = document.createElement('script'); s.async = true; s.crossOrigin = 'anonymous'; s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + encodeURIComponent(EARN.adsense_client); document.head.append(s); }
+      try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) { /* ad blocked */ }
+    } else {
+      slot.innerHTML = '<span class="ad-tag">Advertisement</span><div class="ad-house"><b>Your brand here</b><span>Reach readers who follow Bangladesh and the world economy.</span><button type="button" class="btn sm" data-go="plans">Advertise with us</button></div>';
+    }
+    slot.setAttribute('data-done', '1');
+  });
+}
+function checkSub(u) {
+  const root = document.documentElement;
+  if (!u || !window.firebase || !firebase.firestore) { root.classList.remove('subscriber'); renderAds(); return; }
+  firebase.firestore().collection('subscribers').doc(u.uid).get().then(d => {
+    const x = d.exists ? d.data() : null, today = new Date().toISOString().slice(0, 10);
+    root.classList.toggle('subscriber', !!(x && x.active && (!x.until || String(x.until) >= today)));
+    renderAds();
+  }).catch(() => { root.classList.remove('subscriber'); renderAds(); });
+}
+
+return { initCL, routeCL, initSecurity, initPlans, renderAds, initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo, initLearnX, initFAQ };
 })();
 function initBD() { return BDX.initBD(); }
 function initLab() { return BDX.initLab(); }
 function routeBD(h) { return BDX.routeBD(h); }
+function initCL() { return BDX.initCL(); }
+function initPlans() { return BDX.initPlans(); }
 function wmark(opt) {
   if (!opt || typeof opt !== 'object') return opt;
   try { beautify(opt); } catch (e) { /* styling optional */ }
   try { addLabels(opt); } catch (e) { /* labels optional */ }
   const T = theme();
-  const mark = { id: 'mm-wm', type: 'text', right: 10, top: 22, z: 100, silent: true, style: { text: 'macroarianalytics.com', fill: T.muted, opacity: 0.55, font: '600 10px ' + FONT } };
+  const mark = { id: 'mm-wm', type: 'text', left: 'center', top: 'middle', z: 0, silent: true, style: { text: 'macroarianalytics.com', fill: T.muted, opacity: 0.12, font: '700 15px ' + FONT } };
   if (opt.graphic && !Array.isArray(opt.graphic) && Array.isArray(opt.graphic.elements)) { if (!opt.graphic.elements.some(x => x && x.id === 'mm-wm')) opt.graphic.elements.push(mark); }
   else { const g = opt.graphic ? (Array.isArray(opt.graphic) ? opt.graphic : [opt.graphic]) : []; if (!g.some(x => x && x.id === 'mm-wm')) g.push(mark); opt.graphic = g; }
   return opt;
@@ -2446,7 +2955,8 @@ function lbl2(v) { return v == null || !isFinite(v) ? '' : Number(v).toLocaleStr
 function perLbl(c) { c = String(c); if (/^\d{4}-\d{2}-\d{2}$/.test(c)) return +c.slice(8) + ' ' + MONS[+c.slice(5, 7) - 1] + ' ' + c.slice(0, 4); if (/^\d{4}-\d{2}$/.test(c)) return MONS[+c.slice(5, 7) - 1] + ' ' + c.slice(0, 4); if (/^\d{4}-Q\d$/.test(c)) return c.slice(5) + ' ' + c.slice(0, 4); return c; }
 function vOfD(d) { if (d == null || d === '-') return null; if (typeof d === 'object') { const v = Array.isArray(d) ? d[d.length - 1] : (Array.isArray(d.value) ? d.value[d.value.length - 1] : d.value); return v == null || v === '-' || !isFinite(+v) ? null : +v; } return isFinite(+d) ? +d : null; }
 function tKey(d) { const t = Array.isArray(d) ? d[0] : d && Array.isArray(d.value) ? d.value[0] : null; if (t == null) return ''; const dt = typeof t === 'number' ? new Date(t) : new Date(String(t)); return isNaN(dt) ? '' : dt.toISOString().slice(0, 10); }
-function addLabels(opt) {
+function addLabels(...a) { const r = addLabels0(...a); const opt = r && r.series ? r : a[0]; if (opt && Array.isArray(opt.series)) { const xa = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis; declutter(opt, (xa && xa.data) || []); } return r; }
+function addLabels0(opt) {
   const T = theme();
   const xa = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
   const ya = Array.isArray(opt.yAxis) ? opt.yAxis[0] : opt.yAxis;
@@ -2579,3 +3089,46 @@ function shortSrc(t) {
 function renderGeo(code) { try { BDX.renderGeo(code); } catch (e) { /* map optional */ } }
 function initLearnX() { return BDX.initLearnX(); }
 function initFAQ() { return BDX.initFAQ(); }
+
+function textOn(hex) {
+  const h = String(hex || '').trim(); let r, g, b;
+  const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(h), n = /rgba?\(([^)]+)\)/i.exec(h);
+  if (m) { const x = m[1].length === 3 ? m[1].split('').map(c => c + c).join('') : m[1]; r = parseInt(x.slice(0, 2), 16); g = parseInt(x.slice(2, 4), 16); b = parseInt(x.slice(4, 6), 16); }
+  else if (n) { [r, g, b] = n[1].split(',').map(v => parseFloat(v)); } else return '#0E1C2B';
+  const L = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const lum = 0.2126 * L(r) + 0.7152 * L(g) + 0.0722 * L(b), dark = 0.0122;
+  return (1.05 / (lum + 0.05)) >= ((lum + 0.05) / (dark + 0.05)) ? '#FFFFFF' : '#0E1C2B';
+}
+function onPageNav(tries) {
+  const v = document.getElementById('v-overview');
+  if (!v || document.getElementById('onpage')) return;
+  const marks = [...v.querySelectorAll('.eyebrow')].filter(e => /^\s*\d+\s*·/.test(e.textContent));
+  if (marks.length < 3) { if ((tries || 0) < 8) setTimeout(() => onPageNav((tries || 0) + 1), 700); return; }
+  const nav = document.createElement('nav'); nav.id = 'onpage'; nav.className = 'onpage'; nav.setAttribute('aria-label', 'On this page');
+  nav.innerHTML = marks.map((e, i) => '<button type="button" data-j="' + i + '">' + e.textContent.trim().replace(/\s+/g, ' ') + '</button>').join('');
+  nav.addEventListener('click', ev => { const b = ev.target.closest('[data-j]'); if (b) marks[+b.getAttribute('data-j')].scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  const t = document.getElementById('ticker'); if (t) t.after(nav); else v.prepend(nav);
+}
+setTimeout(() => onPageNav(0), 600);
+
+document.addEventListener('click', e => { const j = e.target.closest('[data-jump]'); if (j) setTimeout(() => { const t = document.getElementById(j.getAttribute('data-jump')); if (t) t.scrollIntoView({ behavior: 'smooth' }); }, 350); });
+
+function declutterAll(opt) {
+  try {
+    if (!opt || !Array.isArray(opt.series)) return opt;
+    const xa = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis, n = xa && Array.isArray(xa.data) ? xa.data.length : 0;
+    const lines = opt.series.filter(s => s && s.type === 'line' && !s.stack).length, dense = n > 36 || (lines > 1 && n > 18);
+    opt.series.forEach(s => {
+      if (!s || s.type !== 'line') return;
+      s.labelLayout = Object.assign({ hideOverlap: true }, s.labelLayout || {});
+      if (!dense) return;
+      if (s.label && s.label.show) s.label = Object.assign({}, s.label, { show: false });
+      if (Array.isArray(s.data)) {
+        let last = -1;
+        s.data.forEach((d, i) => { const v = d && typeof d === 'object' && !Array.isArray(d) ? d.value : d; if (v != null && v !== '' && !(Array.isArray(v) && v[v.length - 1] == null)) last = i; });
+        s.data = s.data.map((d, i) => (i !== last && d && typeof d === 'object' && !Array.isArray(d) && d.label ? Object.assign({}, d, { label: Object.assign({}, d.label, { show: false }) }) : d));
+      }
+    });
+  } catch (e) { /* keep the chart as it is */ }
+  return opt;
+}

@@ -18,6 +18,8 @@ NAME = CFG.get('site_name', 'Macro-Economic Monitor')
 OWNER = CFG.get('owner', 'Arian Mondal')
 SHOW_OWNER = bool(CFG.get('show_owner', False))
 AUTH = CFG.get('auth') or {}
+EARN = CFG.get('earn') or {}
+ADS_ON = str(EARN.get('adsense_client', '')).strip().startswith('ca-pub-')
 _FB = AUTH.get('firebase') or {}
 AUTH_ON = all(str(_FB.get(k, '')).strip() for k in ('apiKey', 'authDomain', 'projectId', 'appId'))
 
@@ -47,8 +49,13 @@ def harden(page, main=False):
                      for m in re.finditer(r'<script(?![^>]*\bsrc=)(?![^>]*type="application/(?:ld\+)?json")[^>]*>(.*?)</script>', page, flags=re.S)})
     csp = ("default-src 'self'; script-src 'self' " + ' '.join(hashes) + " https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://translate.googleapis.com https://translate.google.com; "
            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com https://translate.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.googleusercontent.com https://www.gstatic.com https://translate.google.com https://www.google.com; "
-           "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://translate.googleapis.com; frame-src https://*.firebaseapp.com https://docs.google.com https://accounts.google.com; "
+           "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://translate.googleapis.com https://script.google.com https://script.googleusercontent.com; frame-src https://*.firebaseapp.com https://docs.google.com https://accounts.google.com; "
            "object-src 'none'; base-uri 'self'; form-action 'self' https://docs.google.com; upgrade-insecure-requests")
+    if ADS_ON:
+        csp = (csp.replace("script-src 'self'", "script-src 'self' https://pagead2.googlesyndication.com https://partner.googleadservices.com https://tpc.googlesyndication.com https://www.googletagservices.com https://adservice.google.com https://fundingchoicesmessages.google.com https://*.adtrafficquality.google", 1)
+               .replace("img-src 'self' data: blob:", "img-src 'self' data: blob: https:", 1)
+               .replace("connect-src 'self'", "connect-src 'self' https://pagead2.googlesyndication.com https://*.adtrafficquality.google https://*.doubleclick.net https://fundingchoicesmessages.google.com https://*.google.com", 1)
+               .replace("frame-src ", "frame-src https://*.googlesyndication.com https://*.doubleclick.net https://www.google.com https://fundingchoicesmessages.google.com ", 1))
     meta = '<meta http-equiv="Content-Security-Policy" content="' + csp + '">\n<meta name="referrer" content="strict-origin-when-cross-origin">\n'
     return page.replace(anchor, anchor + '\n' + meta, 1)
 
@@ -63,6 +70,9 @@ def extras_inject(page, artifact=False):
         tags.append('window.MM_OWNERH=' + json.dumps(str(AUTH['owner'])) + ';')
     if str(CFG.get('contact_form', '')).strip():
         tags.append('window.MM_FORM=' + json.dumps(str(CFG['contact_form']).strip()) + ';')
+    tags.append('window.MM_EARN=' + json.dumps(CFG.get('earn') or {}, ensure_ascii=False).replace('</', '<\\/') + ';')
+    if str(CFG.get('alert_endpoint', '')).strip().startswith('https://script.google.com/'):
+        tags.append('window.MM_ALERT=' + json.dumps(str(CFG['alert_endpoint']).strip()) + ';')
     mj = MAPS_DATA()
     if mj:
         tags.append('window.MM_BDMAP=' + json.dumps(mj.get('bd'), separators=(',', ':')) + ';')
@@ -278,6 +288,8 @@ def main():
     except Exception as _e:
         print('live.json not written:', _e)
     (pub / '404.html').write_text(harden((pub / '404.html').read_text(encoding='utf-8')), encoding='utf-8')
+    if ADS_ON:
+        (pub / 'ads.txt').write_text('google.com, ' + str(EARN['adsense_client']).strip().replace('ca-pub-', 'pub-') + ', DIRECT, f08c47fec0942fa0\n', encoding='utf-8')
     dg = (ROOT / 'diag.html') if (ROOT / 'diag.html').exists() else None
     (pub / 'diag.html').write_text(harden(dg.read_text(encoding='utf-8') if dg else DIAG_HTML), encoding='utf-8')
     print('Built public/ with', len(codes), 'country pages and', len(urls), 'sitemap entries')

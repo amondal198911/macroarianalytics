@@ -423,7 +423,7 @@ function applyChart(node, rec) {
     if (rec.onInit) rec.onInit(rec.inst);
     rec.reset = true;
   }
-  rec.inst.setOption(wmark(opt), rec.merge && !rec.reset ? { notMerge: false } : true);
+  rec.inst.setOption(declutterAll(wmark(opt)), rec.merge && !rec.reset ? { notMerge: false } : true);
   rec.reset = false;
 }
 function disposeIn(root) {
@@ -1434,10 +1434,10 @@ async function saveCSV(filename, rows) {
 }
 
 /* ================= navigation ================= */
-const VIEWS = ['overview', 'bangladesh', 'lab', 'faq', 'countries', 'compare', 'explore', 'map', 'rankings', 'markets', 'learn', 'methods', 'about', 'contact', 'privacy'];
-const TITLES = { overview: 'Macroeconomic Monitor and Forecasting', bangladesh: 'Bangladesh Monitor', lab: 'Forecast lab', faq: 'Frequently asked questions', compare: 'Compare economies', explore: 'Explore relationships', map: 'World map', rankings: 'Rankings', markets: 'Markets', learn: 'Learn the indicators', methods: 'Methods and notes', about: 'About', contact: 'Contact', privacy: 'Privacy' };
+const VIEWS = ['overview', 'bangladesh', 'lab', 'faq', 'countries', 'cl', 'plans', 'compare', 'explore', 'map', 'rankings', 'markets', 'learn', 'methods', 'about', 'contact', 'privacy'];
+const TITLES = { plans: 'Subscribe and support', cl: 'Country analysis', overview: 'Macroeconomic Monitor and Forecasting', bangladesh: 'Bangladesh Monitor', lab: 'Forecast lab', faq: 'Frequently asked questions', compare: 'Compare economies', explore: 'Explore relationships', map: 'World map', rankings: 'Rankings', markets: 'Markets', learn: 'Learn the indicators', methods: 'Methods and notes', about: 'About', contact: 'Contact', privacy: 'Privacy' };
 const inited = {};
-const INIT = { bangladesh: initBD, lab: initLab, compare: initCompare, explore: initExplore, map: initMap, rankings: initRank, markets: initMarkets, learn: initLearnX, faq: initFAQ, methods: initMethods, about: initAbout, contact: initContact, privacy: initPrivacy };
+const INIT = { plans: initPlans, cl: initCL, bangladesh: initBD, lab: initLab, compare: initCompare, explore: initExplore, map: initMap, rankings: initRank, markets: initMarkets, learn: initLearnX, faq: initFAQ, methods: initMethods, about: initAbout, contact: initContact, privacy: initPrivacy };
 function go(view, opts) {
   opts = opts || {};
   if (!VIEWS.includes(view)) view = 'overview';
