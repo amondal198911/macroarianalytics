@@ -1494,13 +1494,18 @@ function initContact() {
   const src = url + (url.includes('?') ? '&' : '?') + 'embedded=true';
   host.innerHTML = '<iframe class="ct-frame" src="' + esc(src) + '" title="Contact form" loading="lazy"></iframe><p class="note">If the form doesn’t appear, <a href="' + esc(url) + '" target="_blank" rel="noopener">open it in a new tab</a>.</p>';
 }
-function addWatermark() {
-  if (document.documentElement.classList.contains('owner') || $('.wm-layer')) return;
-  const d = document.createElement('div');
-  d.className = 'wm-layer';
-  d.setAttribute('aria-hidden', 'true');
-  document.body.append(d);
+function addWatermark() { /* watermark is drawn inside charts, tables and cards by CSS (no full-screen layer) */ }
+function showProblem(msg) {
+  if (document.getElementById('boot-bar')) return;
+  const b = document.createElement('div');
+  b.id = 'boot-bar';
+  b.setAttribute('role', 'alert');
+  b.innerHTML = '<span>Part of the page didn’t load. ' + (document.documentElement.classList.contains('owner') && msg ? esc(String(msg).slice(0, 160)) + ' ' : '') + '</span><button type="button" class="btn sm" id="boot-reload">Reload</button>';
+  document.body.append(b);
+  b.querySelector('#boot-reload').addEventListener('click', () => location.reload());
 }
+window.addEventListener('error', e => { if (e && e.message && !/ResizeObserver|Script error/.test(e.message)) showProblem(e.message); });
+setTimeout(() => { const v = $('#v-overview'); if (v && v.classList.contains('on') && !document.querySelector('#live-grid tr.lt')) showProblem('dashboard not rendered'); }, 12000);
 
 /* ---------- Learn: reference for every key term on the site ---------- */
 const LSRC = {

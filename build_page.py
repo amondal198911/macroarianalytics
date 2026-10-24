@@ -39,16 +39,17 @@ FRAMEBUST = "if(window.top!==window.self){document.documentElement.style.display
 def harden(page, main=False):
     """Content Security Policy with exact script fingerprints, frame protection and referrer policy (live site only)."""
     import hashlib, base64
+    anchor = '<meta charset="utf-8">' if '<meta charset="utf-8">' in page else '<head>'
     if main:
-        page = page.replace('<head>', '<head>\n<script>' + FRAMEBUST + '</script>', 1)
+        page = page.replace(anchor, anchor + '\n<script>' + FRAMEBUST + '</script>', 1)
     hashes = sorted({"'sha256-" + base64.b64encode(hashlib.sha256(m.group(1).encode('utf-8')).digest()).decode() + "'"
                      for m in re.finditer(r'<script(?![^>]*\bsrc=)(?![^>]*type="application/(?:ld\+)?json")[^>]*>(.*?)</script>', page, flags=re.S)})
-    csp = ("default-src 'self'; script-src 'self' " + ' '.join(hashes) + " https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com; "
-           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.googleusercontent.com; "
-           "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com; frame-src https://*.firebaseapp.com https://docs.google.com https://accounts.google.com; "
+    csp = ("default-src 'self'; script-src 'self' " + ' '.join(hashes) + " https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://www.gstatic.com https://apis.google.com https://translate.googleapis.com https://translate.google.com; "
+           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com https://translate.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.googleusercontent.com https://www.gstatic.com https://translate.google.com https://www.google.com; "
+           "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://translate.googleapis.com; frame-src https://*.firebaseapp.com https://docs.google.com https://accounts.google.com; "
            "object-src 'none'; base-uri 'self'; form-action 'self' https://docs.google.com; upgrade-insecure-requests")
     meta = '<meta http-equiv="Content-Security-Policy" content="' + csp + '">\n<meta name="referrer" content="strict-origin-when-cross-origin">\n'
-    return page.replace('<head>', '<head>\n' + meta, 1)
+    return page.replace(anchor, anchor + '\n' + meta, 1)
 
 
 def extras_inject(page, artifact=False):
