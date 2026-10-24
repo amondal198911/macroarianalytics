@@ -4,59 +4,15 @@
   "owner": "Arian Mondal",
   "owner_title": "Owner and editor",
   "show_owner": false,
-  "auth": {
-    "firebase": {
-      "apiKey": "",
-      "authDomain": "",
-      "projectId": "",
-      "appId": ""
-    },
-    "apple": false,
-    "owner": "ed7f244d868fafe01f34800b4db3ec3d7482a91d54161182c8c802b47d1971ae"
+  "official_hosts": [
+    "www.macroarianalytics.com",
+    "macroarianalytics.com"
+  ],
+  "alerts": {
+    "endpoint": "",
+    "min_interval_s": 600,
+    "note": "Paste here the Web app URL of docs/alert-relay.gs (a Google Apps Script that e-mails the Google account that deploys it, so no address is written into the site), or any form-to-email endpoint, to receive an e-mail when the page detects an injection attempt, framing, machine-speed scraping or an unofficial copy. Network attacks are reported by Cloudflare's own e-mail notifications. See SECURITY.md, Layer 3."
   },
   "contact_form": "",
-  "alert_endpoint": "",
-  "earn": {
-    "adsense_client": "",
-    "ad_slot_side": "",
-    "ad_slot_bottom": "",
-    "plans": [
-      {
-        "name": "Free",
-        "price": "Free",
-        "period": "",
-        "features": [
-          "Every chart, map, table and analysis",
-          "Ads shown at the side and bottom"
-        ],
-        "link": ""
-      },
-      {
-        "name": "Supporter",
-        "price": "US$ 3",
-        "period": "a month",
-        "features": [
-          "No ads",
-          "Monthly email brief from the editor",
-          "Early access to new pages"
-        ],
-        "link": ""
-      },
-      {
-        "name": "Professional",
-        "price": "US$ 30",
-        "period": "a year",
-        "features": [
-          "No ads",
-          "Monthly email brief from the editor",
-          "Data tables on request (CSV) within two working days",
-          "Priority answers to your questions"
-        ],
-        "link": ""
-      }
-    ],
-    "donate_link": "",
-    "newsletter_form": "",
-    "advertise_form": ""
-  }
+  "security_contact": "https://www.macroarianalytics.com/#contact"
 }
