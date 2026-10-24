@@ -259,10 +259,11 @@ const PROFILE = [
 const NF = {};
 const nf = d => NF[d] || (NF[d] = new Intl.NumberFormat('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
 function num(v, d) {
+  if (!(d === 0 && Number.isInteger(+v))) d = 2;
   if (Number(v.toFixed(d)) === 0) v = 0;
   return nf(d).format(v).replace('-', MINUS);
 }
-function trimNum(v) { return num(v, Math.abs(v) >= 100 || Number.isInteger(v) ? 0 : 1).replace(/\.0$/, ''); }
+function trimNum(v) { return nf(Math.abs(v) >= 100 || Number.isInteger(v) ? 0 : 1).format(v).replace('-', MINUS).replace(/\.0$/, ''); }
 const CNF = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 const compact = v => CNF.format(v).replace('-', MINUS);
 function sig(v) {
@@ -276,7 +277,7 @@ function fmt(key, v) {
   if (f === 'usdbn') return a >= 1000 ? '$' + num(v / 1000, a >= 10000 ? 1 : 2) + ' tn' : a >= 1 ? '$' + num(v, a >= 100 ? 0 : 1) + ' bn' : '$' + num(v * 1000, 0) + ' m';
   if (f === 'usd') return '$' + num(v, 0);
   if (f === 'mn') return a >= 1000 ? num(v / 1000, 2) + ' bn' : a >= 1 ? num(v, a >= 100 ? 0 : 1) + ' m' : num(v * 1000, 0) + 'k';
-  if (f === 'fx') return sig(v);
+  if (f === 'fx') return num(v, 2);
   if (f === 'idx') return num(v, 1);
   return String(v);
 }
@@ -391,6 +392,7 @@ const ro = 'ResizeObserver' in window ? new ResizeObserver(entries => {
   for (const en of entries) { const rec = charts.get(en.target); if (rec && rec.inst) rec.inst.resize(); }
 }) : null;
 function chartOn(node, render, opts) {
+  ensureSrc(node);
   let rec = charts.get(node);
   if (!rec) {
     rec = { render, inst: null, dirty: true, visible: !io };
@@ -421,7 +423,7 @@ function applyChart(node, rec) {
     if (rec.onInit) rec.onInit(rec.inst);
     rec.reset = true;
   }
-  rec.inst.setOption(opt, rec.merge && !rec.reset ? { notMerge: false } : true);
+  rec.inst.setOption(declutterAll(wmark(opt)), rec.merge && !rec.reset ? { notMerge: false } : true);
   rec.reset = false;
 }
 function disposeIn(root) {
@@ -821,7 +823,7 @@ const FXD = {};
 for (const c in RAW.mk.fx) FXD[c] = mkData(RAW.mk.fx[c]);
 function mkFmt(k, v) {
   const m = MK[k];
-  if (m.kind === 'fx') return sig(v);
+  if (m.kind === 'fx') return num(v, 2);
   return (m.pre || '') + num(v, m.dec) + (m.suf || '');
 }
 function mkChange(k, cur, old) {
@@ -870,7 +872,7 @@ function renderMarkets() {
   $('#mk-title').textContent = mkSel === 'fx' ? 'US dollar in ' + CUR[fxCur] + ' (' + fxCur + ')' : m.name;
   $('#mk-desc').textContent = m.desc;
   $('#mk-cur-wrap').hidden = mkSel !== 'fx';
-  $('#mk-src').textContent = 'Source: ' + m.src + '. Latest: ' + mkFmt(mkSel, D.last.v) + ', ' + (D.last.daily ? fmtDay(D.last.d) : fmtMonth(D.last.d)) + '.';
+  $('#mk-src').textContent = 'Source: ' + shortSrc(m.src) + '.';
   $$('#mk-range button').forEach(b => b.setAttribute('aria-pressed', b.getAttribute('data-r') === mkRange ? 'true' : 'false'));
   chartOn($('#mk-chart'), TH => mkOption(TH));
 }
@@ -943,7 +945,7 @@ function initCountries() {
   });
   $('#c-range').addEventListener('click', e => {
     const b = e.target.closest('button[data-r]'); if (!b) return;
-    cRange = b.getAttribute('data-r'); store.set('mm.range', cRange); syncRange();
+    cRange = b.getAttribute('data-r'); store.set('mm.range', cRange); syncRange(); resetCardRanges();
     for (const [node, rec] of charts) if ($('#c-sections').contains(node)) { rec.dirty = true; if (rec.visible) applyChart(node, rec); }
   });
   $('#c-dl').addEventListener('click', () => downloadCountry(curCountry));
@@ -996,6 +998,7 @@ function showCountry(code) {
   if (!ECON[code]) code = 'USA';
   if (!inited.countries) { initCountries(); inited.countries = true; }
   curCountry = code; store.set('mm.country', code);
+  try { renderGeo(code); } catch (e) { /* map optional */ }
   const e = ECON[code];
   $('#c-flag').textContent = flag(e);
   $('#c-name').textContent = e.name;
@@ -1019,13 +1022,14 @@ function showCountry(code) {
   buildSections(code);
   resetAI();
   try { history.replaceState(null, '', '#country-' + code); } catch (err) { /* framed */ }
-  document.title = e.name + ' economy | Macro-Economic Monitor';
+  document.title = e.name + ' economy | Macroeconomic Monitor and Forecasting';
 }
 function yearSpan(code, keys) {
   let first = 9999, last = 0;
   for (const k of keys) { const s = S[k] && S[k][code]; if (!s) continue; first = Math.min(first, s.y0); last = Math.max(last, s.y0 + s.v.length - 1); }
   if (!last) return [];
-  const n = cRange === 'all' ? 999 : Number(cRange);
+  const rr = arguments[2] || cRange;
+  const n = rr === 'all' ? 999 : Number(rr);
   let end = LAST, start = Math.max(first, end - n + 1);
   if (last < start) { end = last; start = Math.max(first, end - n + 1); }
   return range(start, end);
@@ -1054,17 +1058,18 @@ function latestLine(code, sp) {
 function chartCard(code, sp) {
   const k0 = sp.k[0];
   const box = el('div', { class: 'chart' });
+  const st = { r: null };
   const card = el('article', { class: 'chart-card' },
-    el('h3', { text: sp.title }), el('div', { class: 'unit', text: sp.unit || IND[k0].unit }),
+    el('h3', { text: sp.title }), el('div', { class: 'unit', text: sp.unit || IND[k0].unit }), cardCtl(st, box),
     el('div', { class: 'latest', text: latestLine(code, sp) }), box,
-    el('p', { class: 'chart-src', text: 'Source: ' + (sp.k.length > 1 ? WB : IND[k0].src) + '.' }));
-  chartOn(box, TH => profileOption(code, sp, TH));
+    el('p', { class: 'chart-src', text: 'Source: ' + shortSrc(sp.k.length > 1 ? WB : IND[k0].src) + '.' }));
+  chartOn(box, TH => profileOption(code, Object.assign({}, sp, { _r: st.r }), TH));
   cardTools(card, box, { table: () => profileTable(code, sp), title: sp.title + ', ' + ECON[code].name, sub: () => sp.unit || IND[k0].unit,
     file: 'macro-monitor-' + code + '-' + sp.k[0] + '.png', src: sp.k.length > 1 ? WB : IND[k0].src });
   return card;
 }
 function profileOption(code, sp, TH) {
-  const years = yearSpan(code, sp.k);
+  const years = yearSpan(code, sp.k, sp._r);
   if (!years.length) return null;
   const series = [];
   sp.k.forEach((k, i) => {
@@ -1106,7 +1111,7 @@ function downloadCountry(code) {
   const rows = [['Year'].concat(keys.map(k => IND[k].label + ' (' + unitOf(k) + ')'))];
   for (let y = y0; y <= LAST; y++) rows.push([y].concat(keys.map(k => { const v = val(k, code, y); return v == null ? '' : v; })));
   rows.push([]);
-  rows.push(['Source: World Bank World Development Indicators (CC BY 4.0), via Macro-Economic Monitor. Economy: ' + e.name + ' (' + code + ')']);
+  rows.push(['Source: World Bank World Development Indicators (CC BY 4.0), via Macroeconomic Monitor and Forecasting. Economy: ' + e.name + ' (' + code + ')']);
   saveCSV('macro-monitor-' + code + '.csv', rows);
 }
 
@@ -1429,13 +1434,14 @@ async function saveCSV(filename, rows) {
 }
 
 /* ================= navigation ================= */
-const VIEWS = ['overview', 'bangladesh', 'lab', 'countries', 'compare', 'explore', 'map', 'rankings', 'markets', 'learn', 'methods', 'about', 'contact', 'privacy'];
-const TITLES = { overview: 'Macro-Economic Monitor | by Arian Mondal', bangladesh: 'Bangladesh Monitor', lab: 'Forecast lab', compare: 'Compare economies', explore: 'Explore relationships', map: 'World map', rankings: 'Rankings', markets: 'Markets', learn: 'Learn the indicators', methods: 'Methods and notes', about: 'About', contact: 'Contact', privacy: 'Privacy' };
+const VIEWS = ['overview', 'bangladesh', 'lab', 'faq', 'countries', 'cl', 'plans', 'compare', 'explore', 'map', 'rankings', 'markets', 'learn', 'methods', 'about', 'contact', 'privacy'];
+const TITLES = { plans: 'Subscribe and support', cl: 'Country analysis', overview: 'Macroeconomic Monitor and Forecasting', bangladesh: 'Bangladesh Monitor', lab: 'Forecast lab', faq: 'Frequently asked questions', compare: 'Compare economies', explore: 'Explore relationships', map: 'World map', rankings: 'Rankings', markets: 'Markets', learn: 'Learn the indicators', methods: 'Methods and notes', about: 'About', contact: 'Contact', privacy: 'Privacy' };
 const inited = {};
-const INIT = { bangladesh: initBD, lab: initLab, compare: initCompare, explore: initExplore, map: initMap, rankings: initRank, markets: initMarkets, learn: initLearn, methods: initMethods, about: initAbout, contact: initContact, privacy: initPrivacy };
+const INIT = { plans: initPlans, cl: initCL, bangladesh: initBD, lab: initLab, compare: initCompare, explore: initExplore, map: initMap, rankings: initRank, markets: initMarkets, learn: initLearnX, faq: initFAQ, methods: initMethods, about: initAbout, contact: initContact, privacy: initPrivacy };
 function go(view, opts) {
   opts = opts || {};
   if (!VIEWS.includes(view)) view = 'overview';
+  if (gateBlocks(view, opts)) return;
   if (view !== 'map') stopPlay();
   if (view !== 'explore') exStop();
   $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + view));
@@ -1447,7 +1453,7 @@ function go(view, opts) {
     if (view === 'rankings') renderRank();
     if (view === 'markets') renderMarkets();
     if (view === 'explore') renderExplore();
-    document.title = view === 'overview' ? TITLES.overview : TITLES[view] + ' | Macro-Economic Monitor';
+    document.title = view === 'overview' ? TITLES.overview : TITLES[view] + ' | Macroeconomic Monitor and Forecasting';
     try { history.replaceState(null, '', '#' + view); } catch (err) { /* framed */ }
   }
   if (!opts.keep) window.scrollTo(0, 0);
@@ -1490,7 +1496,7 @@ initOverviewExt();
 route(location.hash);
 
 function loadScript(src) {
-  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.async = true; s.crossOrigin = 'anonymous'; s.onload = res; s.onerror = rej; document.head.append(s); });
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.async = true; s.crossOrigin = 'anonymous'; if (src.indexOf('echarts') > -1) s.integrity = 'sha384-pPi0zxBAoDu6+JXW/C68UZLvBUUtU+7zonhif43rqj7pxsGyqyqzcian2Rj37Rss'; s.onload = res; s.onerror = rej; document.head.append(s); });
 }
 function startECharts() {
   echartsState = 'loading';
