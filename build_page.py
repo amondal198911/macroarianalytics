@@ -42,6 +42,67 @@ SAFEMODE = "try{var q=location.search;if(/[?&]safe=1/.test(q))localStorage.setIt
 BUILD_STAMP = __import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime('%d %b %Y, %H:%M UTC')
 
 
+# ---------------- Bangladesh Macroeconomic Monitor and Bangladesh Inflation Monitor (hosted at /monitor/ and /inflation/) ----------------
+MON_SRC = [('monitor.html', 'monitor'), ('inflation.html', 'inflation')]
+MON_CSS = """<style id="mm-host">
+/* hosted on macroarianalytics.com: keep phones fast and link back to the main site */
+#hxRose{animation:none!important}
+nav.subnav,.hc{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+#bdBar{width:100%!important;transform-origin:left center}
+.gal-prog i{width:100%!important;transform:scaleX(0);transform-origin:left center}
+.tick{contain:paint}
+@media (max-width:899px),(pointer:coarse){#hxRose{display:none!important}.hx .kick .live i{animation:none!important}}
+.mm-back{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;justify-content:space-between;padding:8px 16px;background:#0F3B2E;color:#F3EBD3;font:600 13.5px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;border-bottom:1px solid rgba(217,180,90,.5)}
+.mm-back a{color:#F2CF7A;text-decoration:none}.mm-back a:hover{text-decoration:underline}
+</style>"""
+MON_BAR = '<div class="mm-back"><a href="/">← Macroeconomic Monitor and Forecasting</a><span><a href="/monitor/">Macroeconomic Monitor</a> · <a href="/inflation/">Inflation Monitor</a> · <a href="/#bangladesh">Bangladesh pages</a></span></div>'
+MON_SUBS = [
+    (r'"data/catalog\.json"', '"/bd_catalog.json"'),
+    (r'"data/"\+(\w+)\+"\.json"', r'"/bd_"+\1+".json"'),
+    (r'"data/world\.json"', '"/bd_world.json"'),
+    (r'"data/refresh\.json"', '"/bd_refresh.json"'),
+    (r'"https://claude\.ai/artifact/H1exG2cpRtNSmNPYV6t45H"', '"/monitor/"'),
+    (r'"https://claude\.ai/artifact/K3gQn3nkNbnN8s1L85STY3"', '"/inflation/"'),
+    (r'"The world data file did not load \("\+\w+\.status\+"\)\."', '"World comparisons for 217 economies are on the main website: open Compare, Rankings or Country analysis at www.macroarianalytics.com."'),
+    (r'function (\w+)\(\)\{const (\w+)=Date\.now\(\),(\w+)=\2-(\w+)\.last;\4\.last=\2,\4\.playing&&"board"===(\w+)&&', r'function \1(){if("board"!==\5||document.hidden){\4.last=Date.now();return}const \2=Date.now(),\3=\2-\4.last;\4.last=\2,\4.playing&&"board"===\5&&'),
+    (r'(\w+)\("bdBar"\)\.style\.width=Math\.min\(100,(\w+)\.acc/\2\.ms\*100\)\.toFixed\(1\)\+"%"', r'\1("bdBar").style.transform="scaleX("+Math.min(1,\2.acc/\2.ms).toFixed(3)+")"'),
+]
+
+
+def build_monitors(pub):
+    built = []
+    for src, slug in MON_SRC:
+        p = ROOT / src
+        if not p.exists():
+            continue
+        t = p.read_text(encoding='utf-8')
+        counts = []
+        for pat, sub in MON_SUBS:
+            t, k = re.subn(pat, sub, t)
+            counts.append(k)
+        g = t.find('.querySelector(".gal-prog i")')
+        if g > 0:
+            seg = t[g:g + 900]
+            seg2 = seg.replace('.style.width="0"', '.style.transform="scaleX(0)"').replace('transition=`width ', 'transition=`transform ').replace('.style.width="100%"', '.style.transform="scaleX(1)"')
+            counts.append(int(seg2 != seg))
+            t = t[:g] + seg2 + t[g + 900:]
+        spans = [(m.start(), m.end()) for m in re.finditer(r'<script\b.*?</script>', t, flags=re.S | re.I)]
+        outside = lambda i: not any(a <= i < z for a, z in spans)
+        h = next((m for m in re.finditer(r'<head[^>]*>', t, flags=re.I) if outside(m.start())), None)
+        if h:
+            t = t[:h.end()] + '<meta charset="utf-8">' + MON_CSS + t[h.end():]
+        spans = [(m.start(), m.end()) for m in re.finditer(r'<script\b.*?</script>', t, flags=re.S | re.I)]
+        bt = next((m for m in re.finditer(r'<body[^>]*>', t, flags=re.I) if outside(m.start())), None)
+        if bt:
+            t = t[:bt.end()] + MON_BAR + t[bt.end():]
+        out = pub / slug
+        out.mkdir(parents=True, exist_ok=True)
+        (out / 'index.html').write_text(harden(t, main=True), encoding='utf-8')
+        built.append(slug)
+        print(f'  {slug}/ built; changes applied per rule: {counts}')
+    return built
+
+
 def harden(page, main=False):
     page = page.replace('%%BUILD%%', BUILD_STAMP)
     """Content Security Policy with exact script fingerprints, frame protection and referrer policy (live site only)."""
@@ -64,7 +125,7 @@ def harden(page, main=False):
     return page.replace(anchor, anchor + '\n' + meta, 1)
 
 
-DIAG_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Phone check | Macroeconomic Monitor</title>\n<style>\nbody{margin:0;padding:16px;font:16px/1.5 Arial,Helvetica,sans-serif;background:#ffffff;color:#000000}\nh1{font-size:21px;margin:0 0 6px}\ntable{border-collapse:collapse;width:100%;font-size:14px;margin-top:10px}\ntd{border:1px solid #888;padding:6px;vertical-align:top;word-break:break-word}\n.t{padding:12px;margin:8px 0;border:2px solid #666;font-weight:700;font-size:17px}\n#ta{background:rgba(240,240,240,.7);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#000}\n#tb{background:#ffffff;color:#000000}\n#tc{background:#000000;color:#ffffff}\n#td{background:#123a66;color:#ffd000}\n.btn{display:inline-block;border:0;font:inherit;cursor:pointer;margin:8px 8px 0 0;padding:11px 15px;background:#0a7d4f;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px}\n</style></head><body>\n<h1>Macroeconomic Monitor: phone check</h1><p style="background:#fff7d6;border:1px solid #c9a24b;padding:8px 10px;border-radius:8px"><b>Site version 3.3, built %%BUILD%%</b></p>\n<p>Please take a screenshot of this page (scroll down for a second one if needed) and send it to Claude.</p>\n<div class="t" id="ta">Test A: text inside a blurred box</div>\n<div class="t" id="tb">Test B: black text on white</div>\n<div class="t" id="tc">Test C: white text on black</div>\n<div class="t" id="td">Test D: yellow text on blue</div>\n<table id="info"><tr><td>Checking…</td></tr></table>\n<p><a class="btn" href="/?safe=1">Open the site in safe mode</a><a class="btn" href="/?safe=0&amp;fresh=32">Open the site normally</a></p><p><button type="button" class="btn" id="rs">Reset this site’s saved settings and reload</button><button type="button" class="btn" id="ra" style="background:#8a2a1f">Reset everything, including the owner pass</button></p>\n<script>(function(){var r=[];function add(k,v){r.push(\'<tr><td>\'+k+\'</td><td>\'+String(v).replace(/&/g,\'&amp;\').replace(/</g,\'&lt;\')+\'</td></tr>\')}\nfunction mm(q){try{return matchMedia(q).matches?\'yes\':\'no\'}catch(e){return \'unknown\'}}\nadd(\'Browser\',navigator.userAgent);\nadd(\'Screen\',screen.width+\' x \'+screen.height+\', pixel ratio \'+window.devicePixelRatio);\nadd(\'Page area\',window.innerWidth+\' x \'+window.innerHeight);\nadd(\'Phone prefers dark\',mm(\'(prefers-color-scheme: dark)\'));\nadd(\'Reduce motion\',mm(\'(prefers-reduced-motion: reduce)\'));\nadd(\'Inside a frame\',window.top!==window.self?\'yes\':\'no\');\nvar s;try{s=\'theme=\'+localStorage.getItem(\'mm.theme\')+\', safe mode=\'+(localStorage.getItem(\'mm.safe\')||\'off\')+\', owner pass=\'+(localStorage.getItem(\'mm.owner\')?\'yes\':\'no\')}catch(e){s=\'storage blocked\'}\nadd(\'Saved settings\',s);\nvar el=document.createElement(\'div\');el.style.cssText=\'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px)\';document.body.appendChild(el);add(\'Top safe area\',Math.round(el.getBoundingClientRect().height)+\' px\');el.parentNode.removeChild(el);\nvar bf=window.CSS&&CSS.supports&&(CSS.supports(\'backdrop-filter\',\'blur(2px)\')||CSS.supports(\'-webkit-backdrop-filter\',\'blur(2px)\'));add(\'Blur supported\',bf?\'yes\':\'no\');\nadd(\'Language\',navigator.language);add(\'Checked at\',new Date().toString());\ndocument.getElementById(\'info\').innerHTML=r.join(\'\');\nfunction clr(all){try{var ks=[];for(var i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));ks.forEach(function(k){if(k&&k.indexOf(\'mm.\')===0&&(all||k!==\'mm.owner\'))localStorage.removeItem(k);});}catch(e){}try{sessionStorage.clear();}catch(e){}location.href=\'/?safe=0&fresh=\'+Date.now();}\ndocument.getElementById(\'rs\').addEventListener(\'click\',function(){clr(false);});document.getElementById(\'ra\').addEventListener(\'click\',function(){clr(true);});})();</script>\n</body></html>\n'
+DIAG_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Phone check | Macroeconomic Monitor</title>\n<style>\nbody{margin:0;padding:16px;font:16px/1.5 Arial,Helvetica,sans-serif;background:#ffffff;color:#000000}\nh1{font-size:21px;margin:0 0 6px}\ntable{border-collapse:collapse;width:100%;font-size:14px;margin-top:10px}\ntd{border:1px solid #888;padding:6px;vertical-align:top;word-break:break-word}\n.t{padding:12px;margin:8px 0;border:2px solid #666;font-weight:700;font-size:17px}\n#ta{background:rgba(240,240,240,.7);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#000}\n#tb{background:#ffffff;color:#000000}\n#tc{background:#000000;color:#ffffff}\n#td{background:#123a66;color:#ffd000}\n.btn{display:inline-block;border:0;font:inherit;cursor:pointer;margin:8px 8px 0 0;padding:11px 15px;background:#0a7d4f;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px}\n</style></head><body>\n<h1>Macroeconomic Monitor: phone check</h1><p style="background:#fff7d6;border:1px solid #c9a24b;padding:8px 10px;border-radius:8px"><b>Site version 3.4, built %%BUILD%%</b></p>\n<p>Please take a screenshot of this page (scroll down for a second one if needed) and send it to Claude.</p>\n<div class="t" id="ta">Test A: text inside a blurred box</div>\n<div class="t" id="tb">Test B: black text on white</div>\n<div class="t" id="tc">Test C: white text on black</div>\n<div class="t" id="td">Test D: yellow text on blue</div>\n<table id="info"><tr><td>Checking…</td></tr></table>\n<p><a class="btn" href="/?safe=1">Open the site in safe mode</a><a class="btn" href="/?safe=0&amp;fresh=32">Open the site normally</a></p><p><button type="button" class="btn" id="rs">Reset this site’s saved settings and reload</button><button type="button" class="btn" id="ra" style="background:#8a2a1f">Reset everything, including the owner pass</button></p>\n<script>(function(){var r=[];function add(k,v){r.push(\'<tr><td>\'+k+\'</td><td>\'+String(v).replace(/&/g,\'&amp;\').replace(/</g,\'&lt;\')+\'</td></tr>\')}\nfunction mm(q){try{return matchMedia(q).matches?\'yes\':\'no\'}catch(e){return \'unknown\'}}\nadd(\'Browser\',navigator.userAgent);\nadd(\'Screen\',screen.width+\' x \'+screen.height+\', pixel ratio \'+window.devicePixelRatio);\nadd(\'Page area\',window.innerWidth+\' x \'+window.innerHeight);\nadd(\'Phone prefers dark\',mm(\'(prefers-color-scheme: dark)\'));\nadd(\'Reduce motion\',mm(\'(prefers-reduced-motion: reduce)\'));\nadd(\'Inside a frame\',window.top!==window.self?\'yes\':\'no\');\nvar s;try{s=\'theme=\'+localStorage.getItem(\'mm.theme\')+\', safe mode=\'+(localStorage.getItem(\'mm.safe\')||\'off\')+\', owner pass=\'+(localStorage.getItem(\'mm.owner\')?\'yes\':\'no\')}catch(e){s=\'storage blocked\'}\nadd(\'Saved settings\',s);\nvar el=document.createElement(\'div\');el.style.cssText=\'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px)\';document.body.appendChild(el);add(\'Top safe area\',Math.round(el.getBoundingClientRect().height)+\' px\');el.parentNode.removeChild(el);\nvar bf=window.CSS&&CSS.supports&&(CSS.supports(\'backdrop-filter\',\'blur(2px)\')||CSS.supports(\'-webkit-backdrop-filter\',\'blur(2px)\'));add(\'Blur supported\',bf?\'yes\':\'no\');\nadd(\'Language\',navigator.language);add(\'Checked at\',new Date().toString());\ndocument.getElementById(\'info\').innerHTML=r.join(\'\');\nfunction clr(all){try{var ks=[];for(var i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));ks.forEach(function(k){if(k&&k.indexOf(\'mm.\')===0&&(all||k!==\'mm.owner\'))localStorage.removeItem(k);});}catch(e){}try{sessionStorage.clear();}catch(e){}location.href=\'/?safe=0&fresh=\'+Date.now();}\ndocument.getElementById(\'rs\').addEventListener(\'click\',function(){clr(false);});document.getElementById(\'ra\').addEventListener(\'click\',function(){clr(true);});})();</script>\n</body></html>\n'
 
 
 def extras_inject(page, artifact=False):
@@ -270,6 +331,7 @@ def main():
         (d / 'index.html').write_text(harden(stub(code, name, sub or region, summary(S, code, name), rows, built)), encoding='utf-8')
         codes.append(code)
     urls = [SITE] + [f'{SITE}country/{c.lower()}/' for c in codes]
+    urls += [f'{SITE}{s}/' for s in build_monitors(pub)]
     (pub / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
                                      + ''.join(f'  <url><loc>{u}</loc><lastmod>{built}</lastmod></url>\n' for u in urls) + '</urlset>\n', encoding='utf-8')
     (pub / 'robots.txt').write_text(f'User-agent: *\nAllow: /\n\nSitemap: {SITE}sitemap.xml\n', encoding='utf-8')

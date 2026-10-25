@@ -2217,7 +2217,7 @@ function initBlink() {
 }
 
 /* ---------- Front page: live dashboard ---------- */
-const LIVE = { int: 10, paused: false, i: 0, next: 0, tiles: [], timer: null, checked: null, offline: false, newData: false, st: { freq: 'M', span: 'all' } };
+const LIVE = { int: 60, paused: false, i: 0, next: 0, tiles: [], timer: null, checked: null, offline: false, newData: false, st: { freq: 'M', span: 'all' } };
 const MKSRC = { brent: 'EIA.', wti: 'EIA.', gas: 'EIA.', gold: 'World Bank.', us10y: 'Federal Reserve.', uscpi: 'BLS.' };
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 function fmtPeriod(p, f) {
@@ -2329,7 +2329,7 @@ function liveSchedule() {
   const prog = $('#live-prog');
   if (prog) { prog.style.transition = 'none'; prog.style.transform = 'scaleX(0)'; }
   if (LIVE.paused || !LIVE.int) { liveStatus(); return; }
-  LIVE.next = Date.now() + LIVE.int * 1000;
+  LIVE.next = Date.now() + LIVE.int * 1000 + (LIVE.int >= 30 ? Math.random() * 5000 : 0);
   if (prog && !RM) { void prog.offsetWidth; prog.style.transition = 'transform ' + LIVE.int + 's linear'; prog.style.transform = 'scaleX(1)'; }
   LIVE.timer = setTimeout(liveTick, LIVE.int * 1000);
   liveStatus();
@@ -2355,7 +2355,7 @@ function initLive() {
   LIVE.tiles = liveTiles();
   try { const st = JSON.parse(localStorage.getItem('mm.live')); if (st && typeof st.int === 'number' && st.int >= 0 && st.int <= 3600) LIVE.int = st.int; } catch (e) { /* none saved */ }
   if (document.documentElement.classList.contains('safe')) LIVE.int = 0;
-  const PRE = [[0, 'Off'], [5, '5 s'], [10, '10 s'], [20, '20 s'], [30, '30 s']];
+  const PRE = [[0, 'Off'], [30, '30 s'], [60, '1 min'], [120, '2 min'], [300, '5 min']];
   $('#live-int').innerHTML = PRE.map(o => '<button type="button" data-int="' + o[0] + '" aria-pressed="' + (LIVE.int === o[0]) + '">' + o[1] + '</button>').join('');
   const inp = $('#live-sec');
   if (!PRE.some(o => o[0] === LIVE.int)) inp.value = LIVE.int;
@@ -2724,7 +2724,7 @@ function clForecast(body, c, keys, iso) {
   let h = '<thead><tr><th scope="col">Year</th><th scope="col" class="num">Forecast</th><th scope="col" class="num">80% range</th><th scope="col" class="num">95% range</th></tr></thead><tbody>';
   F.out.forEach(o => { h += '<tr><th scope="row">' + (last + o.h) + '</th><td class="num big">' + nf(o.f, 2) + '</td><td class="num">' + nf(o.lo80, 2) + ' to ' + nf(o.hi80, 2) + '</td><td class="num">' + nf(o.lo95, 2) + ' to ' + nf(o.hi95, 2) + '</td></tr>'; });
   tableWrap(body, h + '</tbody>', tcap('Forecast table'), 'Holt’s linear exponential smoothing, with smoothing weights chosen to minimise one-step errors (α = ' + nf(F.m.a, 2) + ', β = ' + nf(F.m.b, 2) + '). Ranges widen with the horizon. Statistical projections, not official forecasts.', { src: 'World Bank; model estimates.' });
-  if (iso === 'BGD' && c.id === 'inflation') { const e = BD.ensemble.path[BD.ensemble.path.length - 1]; body.insertAdjacentHTML('beforeend', '<p class="note">Monthly models for Bangladesh (ARIMA and SVAR ensemble) project <b>' + nf(e.mean, 2) + '%</b> inflation in 12 months (80% range ' + nf(e.lo80, 2) + '–' + nf(e.hi80, 2) + '%). <a href="#lab~overview">Open the Forecast lab →</a></p>'); }
+  if (iso === 'BGD' && c.id === 'inflation') { const e = BD.ensemble.path[BD.ensemble.path.length - 1]; body.insertAdjacentHTML('beforeend', '<p class="note">Monthly models for Bangladesh (ARIMA and SVAR ensemble) project <b>' + nf(e.mean, 2) + '%</b> inflation in 12 months (80% range ' + nf(e.lo80, 2) + '–' + nf(e.hi80, 2) + '%). <a href="#lab~overview">Open the Forecast lab →</a> · <a href="/inflation/">Bangladesh Inflation Monitor →</a></p>'); }
 }
 function ctl2(host, html, onChange, sel) { const d = document.createElement('div'); d.className = 'controls'; d.innerHTML = html; host.append(d); const el = d.querySelector(sel); if (el) el.addEventListener('change', onChange); }
 function readOf(k, iso) { const s = seriesY(k, iso); if (s.length < 3) return null; const l = s[s.length - 1], p = s[s.length - 2], tr = trendOf(s.slice(-15)), F = s.length >= 8 ? holtFc(s.map(x => x[1]), 5) : null, st = stdOf(k), mean = s.reduce((a, b) => a + b[1], 0) / s.length;
