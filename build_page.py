@@ -103,6 +103,160 @@ def build_monitors(pub):
     return built
 
 
+# ---------------- Owner data workbook (Excel), owner page and public Join page ----------------
+import zipfile as _zip
+from xml.sax.saxutils import escape as _xe
+
+
+def _col(n):
+    s = ''; n += 1
+    while n:
+        n, r = divmod(n - 1, 26); s = chr(65 + r) + s
+    return s
+
+
+def write_xlsx(path, sheets):
+    """Minimal Excel writer with no extra packages. sheets = [(name, rows)]; the first row is bold."""
+    with _zip.ZipFile(path, 'w', _zip.ZIP_DEFLATED) as z:
+        n = len(sheets)
+        z.writestr('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + ''.join(f'<Override PartName="/xl/worksheets/sheet{i}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for i in range(1, n + 1)) + '</Types>')
+        z.writestr('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')
+        z.writestr('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' + ''.join(f'<sheet name="{_xe(nm[:31])}" sheetId="{i}" r:id="rId{i}"/>' for i, (nm, _) in enumerate(sheets, 1)) + '</sheets></workbook>')
+        z.writestr('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + ''.join(f'<Relationship Id="rId{i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{i}.xml"/>' for i in range(1, n + 1)) + f'<Relationship Id="rId{n + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>')
+        z.writestr('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>')
+        for i, (nm, rows) in enumerate(sheets, 1):
+            out = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>']
+            for ri, row in enumerate(rows, 1):
+                cells = []
+                for ci, v in enumerate(row):
+                    if v is None or v == '':
+                        continue
+                    ref = _col(ci) + str(ri); st = ' s="1"' if ri == 1 else ''
+                    if isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) != float('inf'):
+                        cells.append(f'<c r="{ref}"{st}><v>{v}</v></c>')
+                    else:
+                        cells.append(f'<c r="{ref}" t="inlineStr"{st}><is><t>{_xe(str(v))}</t></is></c>')
+                out.append(f'<row r="{ri}">' + ''.join(cells) + '</row>')
+            out.append('</sheetData></worksheet>')
+            z.writestr(f'xl/worksheets/sheet{i}.xml', ''.join(out))
+
+
+SOURCES = [
+    ('World Development Indicators', 'World Bank', 'Annual indicators for 217 economies and regional aggregates (licence CC BY 4.0)', 'https://databank.worldbank.org/source/world-development-indicators'),
+    ('Machine-readable WDI mirror used by this site', 'DataHub', 'The same World Bank data in CSV form', 'https://github.com/datasets'),
+    ('Monthly Economic Trends', 'Bangladesh Bank', 'Bangladesh monthly, quarterly and fiscal-year series', 'https://www.bb.org.bd'),
+    ('Consumer price index and inflation', 'Bangladesh Bureau of Statistics', 'CPI, food and non-food inflation, CPI groups', 'https://bbs.gov.bd'),
+    ('Crude oil and natural gas prices', 'U.S. Energy Information Administration', 'Brent, WTI and Henry Hub prices', 'https://www.eia.gov'),
+    ('Treasury yields and exchange rates', 'Federal Reserve', 'US 10-year yield and dollar exchange rates', 'https://www.federalreserve.gov'),
+    ('US consumer prices', 'U.S. Bureau of Labor Statistics', 'US CPI', 'https://www.bls.gov'),
+    ('Commodity prices (Pink Sheet)', 'World Bank', 'Gold price', 'https://www.worldbank.org/en/research/commodity-markets'),
+    ('Maps', 'Natural Earth', 'Country outlines, divisions, rivers and cities (public domain)', 'https://www.naturalearthdata.com'),
+]
+
+
+def _ind_meta():
+    meta = {}
+    try:
+        src = (SRC / 'app.js').read_text(encoding='utf-8'); i = src.index('const IND = {'); j = src.index('\n};', i)
+        for m in re.finditer(r"\n  (\w+): \{ label: '([^']*)'[^\n]*?unit: '([^']*)'", src[i:j]):
+            meta[m.group(1)] = (m.group(2), m.group(3))
+    except Exception:
+        pass
+    return meta
+
+
+def build_owner(pub, built):
+    try:
+        W = json.loads((ROOT / 'build' / 'data.json').read_text(encoding='utf-8'))
+        M = json.loads((ROOT / 'bd_models.json').read_text(encoding='utf-8'))
+    except Exception as e:
+        print('  owner workbook skipped:', e); return
+    names = {e[0]: e[1] for e in W.get('econ', [])}; meta = _ind_meta()
+    readme = [['Macroeconomic Monitor and Forecasting: data workbook'], ['Built', built], [''], ['Sheet', 'Contents'],
+              ['Sources', 'Every data source with its publisher and link'], ['World Bank (long)', 'All World Bank indicators: one row per indicator, economy and year'],
+              ['Bangladesh monthly / quarterly / fiscal years', 'Bangladesh Bank and BBS series used on the site, one column per series'], ['Markets (monthly)', 'Oil, gas, gold, US yield and US prices, monthly'],
+              ['DSGE (Bayesian)', 'Prior and posterior statistics and convergence diagnostics'], ['DSGE (least squares)', 'Estimated policy rule, Phillips curve and IS curve'], ['Inflation projection', 'Ensemble projection with 80% and 95% bands']]
+    sheets = [('Read me', readme), ('Sources', [['Source', 'Publisher', 'What it covers', 'Link']] + [list(s) for s in SOURCES])]
+    rows = [['Indicator code', 'Indicator', 'Unit', 'ISO3', 'Economy', 'Year', 'Value']]
+    for k, by in sorted(W.get('s', {}).items()):
+        lab, unit = meta.get(k, (k, ''))
+        for iso, pk in sorted(by.items()):
+            y0 = int(pk[0])
+            for j, v in enumerate(str(pk[1]).split(',')):
+                if v != '':
+                    rows.append([k, lab, unit, iso, names.get(iso, iso), y0 + j, float(v)])
+    sheets.append(('World Bank (long)', rows))
+    S = M.get('series', {}); by_f = {}
+    for key, s in S.items():
+        p = s.get('series') or {}
+        if p.get('v'):
+            by_f.setdefault(p['f'], []).append((s.get('label', key) + (' (' + s['sub'] + ')' if s.get('sub') else '') + (' [' + s['unit'] + ']' if s.get('unit') else ''), p))
+    lab_of = {'M': lambda k: f'{k // 12}-{k % 12 + 1:02d}', 'Q': lambda k: f'{k // 4}-Q{k % 4 + 1}', 'FY': lambda k: f'FY{k}'}
+    for f, title in (('M', 'Bangladesh monthly'), ('Q', 'Bangladesh quarterly'), ('FY', 'Bangladesh fiscal years'), ('CY', 'Bangladesh calendar years'), ('A', 'Bangladesh annual')):
+        cols = by_f.get(f)
+        if not cols:
+            continue
+        k0 = min(p['k0'] for _, p in cols); k1 = max(p['k0'] + len(p['v']) - 1 for _, p in cols)
+        out = [['Period'] + [c[0] for c in cols]]
+        for k in range(k0, k1 + 1):
+            out.append([lab_of.get(f, str)(k)] + [(p['v'][k - p['k0']] if 0 <= k - p['k0'] < len(p['v']) else None) for _, p in cols])
+        sheets.append((title, out))
+    mk = W.get('mk', {}); mcols = [(k, v['m']) for k, v in mk.items() if isinstance(v, dict) and v.get('m')]
+    if mcols:
+        def mk_k(s): return int(s[:4]) * 12 + int(s[5:7]) - 1
+        parsed = [(k, mk_k(m[0]), str(m[1]).split(',')) for k, m in mcols]
+        k0 = min(p[1] for p in parsed); k1 = max(p[1] + len(p[2]) - 1 for p in parsed)
+        out = [['Month'] + [p[0] for p in parsed]]
+        for k in range(k0, k1 + 1):
+            out.append([f'{k // 12}-{k % 12 + 1:02d}'] + [(float(p[2][k - p[1]]) if 0 <= k - p[1] < len(p[2]) and p[2][k - p[1]] != '' else None) for p in parsed])
+        sheets.append(('Markets (monthly)', out))
+    D = M.get('dsge', {})
+    if D.get('bayes'):
+        out = [['Symbol', 'Parameter', 'Prior', 'Prior mean', 'Prior SD', 'Posterior mean', 'Median', 'SD', '95% low', '95% high', '99% low', '99% high', 'R-hat', 'ESS', 'Geweke p']]
+        for q in D['bayes']['params']:
+            o = q['post']; out.append([q['sym'], q['name'], q['prior']['dist'], q['prior']['mean'], q['prior']['sd'], o['mean'], o['median'], o['sd'], o['ci95'][0], o['ci95'][1], o['ci99'][0], o['ci99'][1], q['rhat'], q['ess'], q['geweke_p']])
+        sheets.append(('DSGE (Bayesian)', out))
+    if D.get('est'):
+        out = [['Equation', 'Coefficient', 'Estimate', 'Std. error', 't', 'p-value', '95% low', '95% high', '99% low', '99% high', 'N', 'Sample']]
+        for e in D['est']:
+            for r in e['rows']:
+                out.append([e['eq'], r['name'], r['coef'], r['se'], r['t'], r['p'], r['ci95'][0], r['ci95'][1], r['ci99'][0], r['ci99'][1], e['n'], e['sample']])
+        sheets.append(('DSGE (least squares)', out))
+    ens = M.get('ensemble', {})
+    if ens.get('path') and ens.get('start'):
+        s0 = int(ens['start'][:4]) * 12 + int(ens['start'][5:7]) - 1; out = [['Month', 'Mean', '80% low', '80% high', '95% low', '95% high']]
+        for i, x in enumerate(ens['path']):
+            k = s0 + i; out.append([f'{k // 12}-{k % 12 + 1:02d}', x.get('mean'), x.get('lo80'), x.get('hi80'), x.get('lo95'), x.get('hi95')])
+        sheets.append(('Inflation projection', out))
+    d = pub / 'owner'; d.mkdir(parents=True, exist_ok=True)
+    write_xlsx(d / 'macro-data.xlsx', sheets)
+    size = (d / 'macro-data.xlsx').stat().st_size
+    page = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Owner downloads</title>'
+            '<style>body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#F4F6F8;color:#0E1C2B}.w{max-width:860px;margin:0 auto;padding:28px 20px}h1{font-size:28px;margin:0 0 6px}.card{background:#fff;border:1px solid #D8DEE4;border-radius:14px;padding:18px 20px;margin:16px 0}'
+            'a.b{display:inline-block;background:#0F3B2E;color:#F3EBD3;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700}table{border-collapse:collapse;width:100%;font-size:14px}td,th{border-bottom:1px solid #E3E8EC;padding:7px 8px;text-align:left;vertical-align:top}</style></head><body><div class="w">'
+            '<p><a href="/">← Macroeconomic Monitor and Forecasting</a></p><h1>Owner downloads</h1><p>All data used on the website, in one Excel workbook. Built ' + built + '.</p>'
+            '<div class="card"><a class="b" href="/owner/macro-data.xlsx" download>Download all data (Excel, ' + f'{size / 1e6:.1f}' + ' MB)</a><p>Sheets: ' + ', '.join(_xe(s[0]) for s in sheets) + '.</p></div>'
+            '<div class="card"><h2>Sources and links</h2><table><tr><th>Source</th><th>Publisher</th><th>What it covers</th></tr>' + ''.join(f'<tr><td><a href="{s[3]}" rel="noopener">{_xe(s[0])}</a></td><td>{_xe(s[1])}</td><td>{_xe(s[2])}</td></tr>' for s in SOURCES) + '</table></div>'
+            '<p style="font-size:13px;color:#4A5866">This page is for the owner. Protect the /owner/ path with an owner-only Cloudflare Access rule.</p></div></body></html>')
+    (d / 'index.html').write_text(harden(page, main=True), encoding='utf-8')
+    print(f'  owner workbook: {len(sheets)} sheets, {size / 1e6:.1f} MB')
+
+
+def build_join(pub):
+    earn = CFG.get('earn') or {}; plans = earn.get('plans') or []
+    form = str(CFG.get('join_form') or CFG.get('contact_form') or '').strip()
+    cards = ''.join('<div class="p"><h3>' + _xe(p.get('name', '')) + '</h3><p class="pr"><b>' + _xe(p.get('price', '')) + '</b> ' + _xe(p.get('period', '')) + '</p><ul>' + ''.join('<li>' + _xe(f) + '</li>' for f in p.get('features', [])) + '</ul>' + ('<a class="b" href="' + _xe(p['link']) + '" rel="noopener">Subscribe</a>' if p.get('link') else '') + '</div>' for p in plans if p.get('name') != 'Free')
+    page = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Join | ' + _xe(SITE_NAME if 'SITE_NAME' in globals() else 'Macroeconomic Monitor and Forecasting') + '</title>'
+            '<style>body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#F4F6F8;color:#0E1C2B}.hd{background:#0F3B2E;color:#F3EBD3;text-align:center;padding:44px 20px 36px}.hd h1{margin:0;font-size:clamp(26px,4vw,40px)}.hd p{max-width:680px;margin:10px auto 0;color:#E7DDC2}'
+            '.w{max-width:980px;margin:0 auto;padding:24px 20px}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}.p{background:#fff;border:1px solid #D8DEE4;border-radius:16px;padding:18px 20px}.p h3{margin:0}.pr b{font-size:24px}'
+            'a.b{display:inline-block;background:#C9A24B;color:#1A1300;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:800;margin-top:6px}ol li{margin:6px 0}.n{font-size:13px;color:#4A5866}</style></head><body>'
+            '<div class="hd"><h1>Macroeconomic Monitor and Forecasting</h1><p>Data, models and forecasts for Bangladesh and more than 200 economies. Access is by subscription and approved by the editor.</p></div><div class="w">'
+            '<h2>How to join</h2><ol><li>Choose a plan and subscribe.</li><li>' + ('<a href="' + _xe(form) + '" rel="noopener">Send the access request form</a>' if form else 'Send the editor the email address you will sign in with') + ', using the same email address as your payment.</li><li>Once approved, open <a href="/">www.macroarianalytics.com</a> and sign in with that email address: you receive a one-time code by email.</li></ol>'
+            '<div class="g">' + cards + '</div><p class="n">Already approved? <a href="/">Sign in</a>. Access is checked on every visit; it ends if the subscription lapses.</p></div></body></html>')
+    d = pub / 'join'; d.mkdir(parents=True, exist_ok=True)
+    (d / 'index.html').write_text(harden(page, main=True), encoding='utf-8')
+
+
 def harden(page, main=False):
     page = page.replace('%%BUILD%%', BUILD_STAMP)
     """Content Security Policy with exact script fingerprints, frame protection and referrer policy (live site only)."""
@@ -125,7 +279,7 @@ def harden(page, main=False):
     return page.replace(anchor, anchor + '\n' + meta, 1)
 
 
-DIAG_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Phone check | Macroeconomic Monitor</title>\n<style>\nbody{margin:0;padding:16px;font:16px/1.5 Arial,Helvetica,sans-serif;background:#ffffff;color:#000000}\nh1{font-size:21px;margin:0 0 6px}\ntable{border-collapse:collapse;width:100%;font-size:14px;margin-top:10px}\ntd{border:1px solid #888;padding:6px;vertical-align:top;word-break:break-word}\n.t{padding:12px;margin:8px 0;border:2px solid #666;font-weight:700;font-size:17px}\n#ta{background:rgba(240,240,240,.7);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#000}\n#tb{background:#ffffff;color:#000000}\n#tc{background:#000000;color:#ffffff}\n#td{background:#123a66;color:#ffd000}\n.btn{display:inline-block;border:0;font:inherit;cursor:pointer;margin:8px 8px 0 0;padding:11px 15px;background:#0a7d4f;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px}\n</style></head><body>\n<h1>Macroeconomic Monitor: phone check</h1><p style="background:#fff7d6;border:1px solid #c9a24b;padding:8px 10px;border-radius:8px"><b>Site version 3.5, built %%BUILD%%</b></p>\n<p>Please take a screenshot of this page (scroll down for a second one if needed) and send it to Claude.</p>\n<div class="t" id="ta">Test A: text inside a blurred box</div>\n<div class="t" id="tb">Test B: black text on white</div>\n<div class="t" id="tc">Test C: white text on black</div>\n<div class="t" id="td">Test D: yellow text on blue</div>\n<table id="info"><tr><td>Checking…</td></tr></table>\n<p><a class="btn" href="/?safe=1">Open the site in safe mode</a><a class="btn" href="/?safe=0&amp;fresh=32">Open the site normally</a></p><p><button type="button" class="btn" id="rs">Reset this site’s saved settings and reload</button><button type="button" class="btn" id="ra" style="background:#8a2a1f">Reset everything, including the owner pass</button></p>\n<script>(function(){var r=[];function add(k,v){r.push(\'<tr><td>\'+k+\'</td><td>\'+String(v).replace(/&/g,\'&amp;\').replace(/</g,\'&lt;\')+\'</td></tr>\')}\nfunction mm(q){try{return matchMedia(q).matches?\'yes\':\'no\'}catch(e){return \'unknown\'}}\nadd(\'Browser\',navigator.userAgent);\nadd(\'Screen\',screen.width+\' x \'+screen.height+\', pixel ratio \'+window.devicePixelRatio);\nadd(\'Page area\',window.innerWidth+\' x \'+window.innerHeight);\nadd(\'Phone prefers dark\',mm(\'(prefers-color-scheme: dark)\'));\nadd(\'Reduce motion\',mm(\'(prefers-reduced-motion: reduce)\'));\nadd(\'Inside a frame\',window.top!==window.self?\'yes\':\'no\');\nvar s;try{s=\'theme=\'+localStorage.getItem(\'mm.theme\')+\', safe mode=\'+(localStorage.getItem(\'mm.safe\')||\'off\')+\', owner pass=\'+(localStorage.getItem(\'mm.owner\')?\'yes\':\'no\')}catch(e){s=\'storage blocked\'}\nadd(\'Saved settings\',s);\nvar el=document.createElement(\'div\');el.style.cssText=\'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px)\';document.body.appendChild(el);add(\'Top safe area\',Math.round(el.getBoundingClientRect().height)+\' px\');el.parentNode.removeChild(el);\nvar bf=window.CSS&&CSS.supports&&(CSS.supports(\'backdrop-filter\',\'blur(2px)\')||CSS.supports(\'-webkit-backdrop-filter\',\'blur(2px)\'));add(\'Blur supported\',bf?\'yes\':\'no\');\nadd(\'Language\',navigator.language);add(\'Checked at\',new Date().toString());\ndocument.getElementById(\'info\').innerHTML=r.join(\'\');\nfunction clr(all){try{var ks=[];for(var i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));ks.forEach(function(k){if(k&&k.indexOf(\'mm.\')===0&&(all||k!==\'mm.owner\'))localStorage.removeItem(k);});}catch(e){}try{sessionStorage.clear();}catch(e){}location.href=\'/?safe=0&fresh=\'+Date.now();}\ndocument.getElementById(\'rs\').addEventListener(\'click\',function(){clr(false);});document.getElementById(\'ra\').addEventListener(\'click\',function(){clr(true);});})();</script>\n</body></html>\n'
+DIAG_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Phone check | Macroeconomic Monitor</title>\n<style>\nbody{margin:0;padding:16px;font:16px/1.5 Arial,Helvetica,sans-serif;background:#ffffff;color:#000000}\nh1{font-size:21px;margin:0 0 6px}\ntable{border-collapse:collapse;width:100%;font-size:14px;margin-top:10px}\ntd{border:1px solid #888;padding:6px;vertical-align:top;word-break:break-word}\n.t{padding:12px;margin:8px 0;border:2px solid #666;font-weight:700;font-size:17px}\n#ta{background:rgba(240,240,240,.7);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#000}\n#tb{background:#ffffff;color:#000000}\n#tc{background:#000000;color:#ffffff}\n#td{background:#123a66;color:#ffd000}\n.btn{display:inline-block;border:0;font:inherit;cursor:pointer;margin:8px 8px 0 0;padding:11px 15px;background:#0a7d4f;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px}\n</style></head><body>\n<h1>Macroeconomic Monitor: phone check</h1><p style="background:#fff7d6;border:1px solid #c9a24b;padding:8px 10px;border-radius:8px"><b>Site version 3.6, built %%BUILD%%</b></p>\n<p>Please take a screenshot of this page (scroll down for a second one if needed) and send it to Claude.</p>\n<div class="t" id="ta">Test A: text inside a blurred box</div>\n<div class="t" id="tb">Test B: black text on white</div>\n<div class="t" id="tc">Test C: white text on black</div>\n<div class="t" id="td">Test D: yellow text on blue</div>\n<table id="info"><tr><td>Checking…</td></tr></table>\n<p><a class="btn" href="/?safe=1">Open the site in safe mode</a><a class="btn" href="/?safe=0&amp;fresh=32">Open the site normally</a></p><p><button type="button" class="btn" id="rs">Reset this site’s saved settings and reload</button><button type="button" class="btn" id="ra" style="background:#8a2a1f">Reset everything, including the owner pass</button></p>\n<script>(function(){var r=[];function add(k,v){r.push(\'<tr><td>\'+k+\'</td><td>\'+String(v).replace(/&/g,\'&amp;\').replace(/</g,\'&lt;\')+\'</td></tr>\')}\nfunction mm(q){try{return matchMedia(q).matches?\'yes\':\'no\'}catch(e){return \'unknown\'}}\nadd(\'Browser\',navigator.userAgent);\nadd(\'Screen\',screen.width+\' x \'+screen.height+\', pixel ratio \'+window.devicePixelRatio);\nadd(\'Page area\',window.innerWidth+\' x \'+window.innerHeight);\nadd(\'Phone prefers dark\',mm(\'(prefers-color-scheme: dark)\'));\nadd(\'Reduce motion\',mm(\'(prefers-reduced-motion: reduce)\'));\nadd(\'Inside a frame\',window.top!==window.self?\'yes\':\'no\');\nvar s;try{s=\'theme=\'+localStorage.getItem(\'mm.theme\')+\', safe mode=\'+(localStorage.getItem(\'mm.safe\')||\'off\')+\', owner pass=\'+(localStorage.getItem(\'mm.owner\')?\'yes\':\'no\')}catch(e){s=\'storage blocked\'}\nadd(\'Saved settings\',s);\nvar el=document.createElement(\'div\');el.style.cssText=\'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px)\';document.body.appendChild(el);add(\'Top safe area\',Math.round(el.getBoundingClientRect().height)+\' px\');el.parentNode.removeChild(el);\nvar bf=window.CSS&&CSS.supports&&(CSS.supports(\'backdrop-filter\',\'blur(2px)\')||CSS.supports(\'-webkit-backdrop-filter\',\'blur(2px)\'));add(\'Blur supported\',bf?\'yes\':\'no\');\nadd(\'Language\',navigator.language);add(\'Checked at\',new Date().toString());\ndocument.getElementById(\'info\').innerHTML=r.join(\'\');\nfunction clr(all){try{var ks=[];for(var i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));ks.forEach(function(k){if(k&&k.indexOf(\'mm.\')===0&&(all||k!==\'mm.owner\'))localStorage.removeItem(k);});}catch(e){}try{sessionStorage.clear();}catch(e){}location.href=\'/?safe=0&fresh=\'+Date.now();}\ndocument.getElementById(\'rs\').addEventListener(\'click\',function(){clr(false);});document.getElementById(\'ra\').addEventListener(\'click\',function(){clr(true);});})();</script>\n</body></html>\n'
 
 
 def extras_inject(page, artifact=False):
@@ -332,6 +486,9 @@ def main():
         codes.append(code)
     urls = [SITE] + [f'{SITE}country/{c.lower()}/' for c in codes]
     urls += [f'{SITE}{s}/' for s in build_monitors(pub)]
+    build_owner(pub, built)
+    build_join(pub)
+    urls.append(f'{SITE}join/')
     (pub / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
                                      + ''.join(f'  <url><loc>{u}</loc><lastmod>{built}</lastmod></url>\n' for u in urls) + '</urlset>\n', encoding='utf-8')
     (pub / 'robots.txt').write_text(f'User-agent: *\nAllow: /\n\nSitemap: {SITE}sitemap.xml\n', encoding='utf-8')

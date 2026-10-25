@@ -201,7 +201,7 @@ function tsTransform(labels, series, st) {
   const groups = [], idx = new Map();
   labels.forEach((l, i) => { const k = keyOf(l); if (!idx.has(k)) { idx.set(k, groups.length); groups.push({ k, is: [] }); } groups[idx.get(k)].is.push(i); });
   let keep = groups;
-  if (st.span !== 'all' && groups.length) { const ly = yearOf(groups[groups.length - 1].k), n = +st.span; keep = groups.filter(g => yearOf(g.k) > ly - n); }
+  if (st.span !== 'all' && groups.length) { const ly = yearOf(groups[groups.length - 1].k), n = +st.span; keep = groups.filter(g => yearOf(g.k) > ly - n); if (keep.length < 3) keep = groups; }
   const vOf = d => d == null ? null : typeof d === 'object' ? (Array.isArray(d) ? d[1] : d.value) : d;
   const out = series.map(se => {
     if (!Array.isArray(se.data) || se.data.length !== labels.length) return se;
@@ -222,7 +222,8 @@ function tsTransform(labels, series, st) {
 function ctlHTML(nat, st) {
   const fs = nat === 'D' ? ['D', 'M', 'Q', 'Y'] : ['M', 'Q', 'Y'], av = availF(nat);
   return '<div class="seg2" data-k="freq" role="group" aria-label="Frequency">' + fs.map(f => '<button type="button" data-v="' + f + '"' + (av.includes(f) ? '' : ' disabled title="Not available for this series"') + ' aria-pressed="' + (st.freq === f) + '">' + FL[f] + '</button>').join('') + '</div>' +
-    '<div class="seg2" data-k="span" role="group" aria-label="Time span">' + [['10', '10 years'], ['25', '25 years'], ['all', 'All']].map(([v, t]) => '<button type="button" data-v="' + v + '" aria-pressed="' + (st.span === v) + '">' + t + '</button>').join('') + '</div>';
+    '<div class="seg2" data-k="span" role="group" aria-label="Time span">' + [['5', '5y'], ['10', '10y'], ['15', '15y'], ['20', '20y'], ['25', '25y'], ['all', 'All']].concat(['5', '10', '15', '20', '25', 'all'].includes(st.span) ? [] : [[st.span, st.span + 'y']]).map(([v, t]) => '<button type="button" data-v="' + v + '" title="' + (v === 'all' ? 'All years' : v + ' years') + '" aria-pressed="' + (st.span === v) + '">' + t + '</button>').join('') + '</div>' +
+    '<div class="span-x"><label class="span-c"><span class="sr-only">Custom number of years</span><input type="number" min="1" max="80" step="1" inputmode="numeric" placeholder="yrs" title="Custom number of years" data-x="custom"></label><button type="button" class="btn sm" data-x="auto" aria-pressed="false" title="Cycle through the time spans automatically">▶ Auto</button><label class="span-c"><span class="sr-only">Seconds between changes</span><input type="number" min="2" max="120" step="1" value="6" title="Seconds between automatic changes" data-x="secs"></label><button type="button" class="btn sm" data-x="blink" aria-pressed="' + !document.documentElement.classList.contains('no-blink') + '" title="Blinking warnings on or off">Blink</button></div>';
 }
 function syncCtl(box, st) { box.querySelectorAll('.seg2 button').forEach(b => b.setAttribute('aria-pressed', String(st[b.parentElement.getAttribute('data-k')] === b.getAttribute('data-v')))); }
 function rerender(node) { const rc = charts.get(node); if (rc) { rc.dirty = true; rc.reset = true; applyChart(node, rc); } }
@@ -406,7 +407,7 @@ function bdGlance(body) {
   s1.append(top);
   const gl = document.createElement('div');
   top.append(gl);
-  infFan(gl, true);
+  inflExplorer(gl, s1);
   const mb = document.createElement('div');
   mb.className = 'mapbox';
   top.append(mb);
@@ -2993,6 +2994,7 @@ const DSGE_DERIV = `
 <li><b>Solution</b> by undetermined coefficients: guess x<sub>t</sub> = ψ<sub>x</sub>z<sub>t</sub> and π<sub>t</sub> = ψ<sub>π</sub>z<sub>t</sub>, substitute, and solve the two linear equations [σ(1 − ρ) + φ<sub>y</sub>]ψ<sub>x</sub> + (φ<sub>π</sub> − ρ)ψ<sub>π</sub> = −v + r + σd and −κψ<sub>x</sub> + (1 − βρ)ψ<sub>π</sub> = u. For a policy shock: ψ<sub>x</sub> = −(1 − βρ)Λ and ψ<sub>π</sub> = −κΛ, with Λ = 1/[(1 − βρ)(σ(1 − ρ) + φ<sub>y</sub>) + κ(φ<sub>π</sub> − ρ)]. With this calibration κ = 0.1717 and, for ρ = 0.5, Λ = 2.052: a 25 basis-point shock lowers the output gap by 0.26% and annualised inflation by 0.35 percentage point on impact, as in the chart. A productivity shock moves potential output by ψ<sub>ya</sub> = (1 + φ)/(σ(1 − α) + φ + α) = 1 and the natural rate by −σψ<sub>ya</sub>(1 − ρ<sub>a</sub>)a<sub>t</sub>.</li>
 </ol>`;
 function dsgeExtras(body, D) {
+  bayesBlock(body, D);
   if (D.est && D.est.length) {
     const s = sec(body, 'Estimated equations for Bangladesh', 'The calibration above comes from a textbook. Here the three equations are estimated on Bangladesh data, giving each coefficient a standard error, p-value and 95% and 99% confidence intervals.');
     D.est.forEach(eq => {
@@ -3072,7 +3074,157 @@ function band312(vals) {
 }
 const bandMsg = (b, unit) => 'Outside the band between its 3-period average (' + nf(b.a3, 2) + ') and 12-period average (' + nf(b.a12, 2) + ')' + (unit ? ' ' + unit : '') + '; values blink when they leave this band and no official benchmark applies';
 
-return { initCL, routeCL, initSecurity, initPlans, renderAds, initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo, initLearnX, initFAQ };
+/* ================= Inflation explorer (Bangladesh, at a glance) ================= */
+const ymK = s => (+String(s).slice(0, 4)) * 12 + (+String(s).slice(5, 7)) - 1;
+const EXPL = { sel: null, proj: true };
+function inflExplorer(host, below) {
+  const P0 = PK('infl'); if (!P0 || !BD.ensemble) { infFan(host, true); return; }
+  const pool = [];
+  [['infl', 'Headline inflation, point-to-point'], ['infl_avg', 'Headline inflation, 12-month average'], ['food', 'Food inflation'], ['nonfood', 'Non-food inflation']].forEach(([k, l]) => { if (PK(k)) pool.push({ k, label: l, pk: PK(k), grp: 'Inflation measures' }); });
+  (BD.cpi_components || []).forEach((c, i) => { const s = c.series; if (s && s.v && s.v.length) pool.push({ k: 'cpi' + i, label: 'CPI: ' + c.name, pk: { f: 'M', k0: s.k0 != null ? s.k0 : ymK(s.s), v: s.v }, grp: 'CPI groups (published from ' + (s.s || '') + ', new 2021–22 base)' }); });
+  [['call', 'Call money rate'], ['lend', 'Lending rate'], ['m2', 'Broad money (M2) growth'], ['pcredit', 'Private-sector credit growth'], ['xr_dep', 'Taka depreciation'], ['remit_g', 'Remittance growth'], ['exp_g', 'Export growth'], ['iip', 'Industrial production growth']].forEach(([k, l]) => { const p = PK(k); if (p && p.f === 'M') pool.push({ k, label: l, pk: p, grp: 'Related real and financial variables' }); });
+  if (!EXPL.sel) EXPL.sel = new Set(['infl', 'infl_avg', 'food', 'nonfood']);
+  const kS = ymK(BD.ensemble.start), e = BD.ensemble.path;
+  let node = null;
+  const draw = () => { if (node) rerender(node); };
+  const fig = figure(host, { prefix: labState.prefix, wide: true, title: 'Inflation in Bangladesh: every measure, with projections', sub: '% year on year (rates in %); tick series below; dashed lines are 12-month projections', h: 400,
+    notes: 'Headline projection: ensemble of ARIMA and SVAR (Forecast lab). Other projections: Holt’s linear exponential smoothing fitted to the last five years of each series. CPI groups exist only from April 2024 under the new 2021–22 base; BBS did not publish these groups earlier.',
+    source: 'BBS and Bangladesh Bank; model estimates.',
+    render: TH => {
+      const chosen = pool.filter(p => EXPL.sel.has(p.k));
+      if (!chosen.length) return { title: { text: 'Tick at least one series below', left: 'center', top: 'middle', textStyle: { color: TH.muted, fontSize: 13 } } };
+      let k0 = Math.min(...chosen.map(p => p.pk.k0)); const k1 = kS + e.length - 1;
+      const labels = []; for (let k = k0; k <= k1; k++) labels.push(bdLab('M', k));
+      const series = [];
+      chosen.forEach((p, j) => {
+        const col = TH.pal[j % TH.pal.length], vals = labels.map((_, i) => { const kk = k0 + i, idx = kk - p.pk.k0; return kk < kS && idx >= 0 && idx < p.pk.v.length ? p.pk.v[idx] : null; });
+        series.push(S(p.label, vals, { color: col, w: 2.2, end: true, dec: 2 }));
+        if (!EXPL.proj) return;
+        let lastI = -1; vals.forEach((v, i) => { if (v != null) lastI = i; }); if (lastI < 0) return;
+        let fc;
+        if (p.k === 'infl') fc = e.map(x => x.mean);
+        else { const hist = p.pk.v.filter(v => v != null).slice(-60); if (hist.length < 12) return; const F = holtFc(hist, 12); fc = F.out.map(o => o.f); }
+        const pv = labels.map(() => null); pv[lastI] = vals[lastI];
+        fc.forEach((v, h) => { const i = lastI + 1 + h; if (i < pv.length) pv[i] = v; });
+        series.push(S(p.label + ' (projection)', pv, { color: col, dash: true, w: 2, dec: 2 }));
+      });
+      return tsOption(TH, labels, series, { y1: '%', dec: 2, zoom: labels.length > 60, events: false });
+    } });
+  node = fig.querySelector('.chart');
+  const box = document.createElement('div'); box.className = 'picker';
+  const groups = {}; pool.forEach(p => { (groups[p.grp] = groups[p.grp] || []).push(p); });
+  box.innerHTML = Object.entries(groups).map(([g, ps]) => '<div class="pk-g"><b>' + esc(g) + '</b><div class="pk-row">' + ps.map(p => '<label class="pk"><input type="checkbox" data-k="' + p.k + '"' + (EXPL.sel.has(p.k) ? ' checked' : '') + '><span>' + esc(p.label) + '</span></label>').join('') + '</div></div>').join('') +
+    '<div class="pk-act"><button type="button" class="btn sm" data-pk="infl">All inflation measures</button><button type="button" class="btn sm" data-pk="all">Everything</button><button type="button" class="btn sm" data-pk="none">Clear</button><label class="pk"><input type="checkbox" data-pk="proj"' + (EXPL.proj ? ' checked' : '') + '><span>Show projections</span></label></div>';
+  (below || host).append(box);
+  box.addEventListener('change', ev => { const t = ev.target; if (t.getAttribute('data-pk') === 'proj') { EXPL.proj = t.checked; draw(); return; } const k = t.getAttribute('data-k'); if (!k) return; if (t.checked) EXPL.sel.add(k); else EXPL.sel.delete(k); draw(); });
+  box.addEventListener('click', ev => { const b = ev.target.closest('button[data-pk]'); if (!b) return; const m = b.getAttribute('data-pk'); EXPL.sel = new Set(m === 'none' ? [] : pool.filter(p => m === 'all' || p.grp !== 'Related real and financial variables').map(p => p.k)); box.querySelectorAll('input[data-k]').forEach(x => { x.checked = EXPL.sel.has(x.getAttribute('data-k')); }); draw(); });
+  const H = P0, rows = [];
+  pool.filter(p => p.grp === 'Related real and financial variables').forEach(p => {
+    let best = null;
+    for (let L = 0; L <= 12; L++) {
+      const xs = [], ys = [];
+      for (let k = Math.max(H.k0, p.pk.k0 + L); k < H.k0 + H.v.length; k++) { const hv = H.v[k - H.k0], xv = p.pk.v[k - L - p.pk.k0]; if (hv != null && xv != null && isFinite(hv) && isFinite(xv)) { xs.push(xv); ys.push(hv); } }
+      if (xs.length < 24) continue;
+      const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length; let sxy = 0, sxx = 0, syy = 0;
+      xs.forEach((x, i) => { sxy += (x - mx) * (ys[i] - my); sxx += (x - mx) ** 2; syy += (ys[i] - my) ** 2; });
+      const r = sxx && syy ? sxy / Math.sqrt(sxx * syy) : 0;
+      if (!best || Math.abs(r) > Math.abs(best.r)) best = { L, r, n: xs.length };
+    }
+    if (!best) return;
+    const t = best.r * Math.sqrt((best.n - 2) / Math.max(1e-9, 1 - best.r * best.r)), pval = tp2(t, best.n - 2);
+    const hist = p.pk.v.filter(v => v != null), last = hist[hist.length - 1], F = hist.length >= 12 ? holtFc(hist.slice(-60), 12) : null;
+    rows.push('<tr><th scope="row">' + esc(p.label) + '</th><td class="num">' + best.L + '</td><td class="num">' + nf(best.r, 2) + stars(pval) + '</td><td class="num">' + fp(pval) + '</td><td>' + (pval < 0.05 ? (best.r > 0 ? 'Moves with inflation' : 'Moves against inflation') : 'No clear link') + '</td><td class="num">' + nf(last, 2) + '</td><td class="num">' + (F ? nf(F.out[11].f, 2) : '–') + '</td></tr>');
+  });
+  if (rows.length) tableWrap(below || host, '<thead><tr><th scope="col">Variable</th><th scope="col" class="num">Leads inflation by (months)</th><th scope="col" class="num">Correlation</th><th scope="col" class="num">p-value</th><th scope="col">Reading</th><th scope="col" class="num">Latest</th><th scope="col" class="num">Projection in 12 months</th></tr></thead><tbody>' + rows.join('') + '</tbody>', tcap('How related variables move with inflation'), 'For each variable, the lead of 0–12 months with the strongest correlation with headline inflation. Correlation is not causation; the SVAR in the Forecast lab tests causal links. Projections: Holt’s linear exponential smoothing.', { src: 'BBS and Bangladesh Bank; author’s calculations.' });
+}
+/* ================= World growth in two boxes ================= */
+function worldGrowth2() {
+  const fig = document.getElementById('pulse');
+  if (!fig || document.getElementById('wg2')) return;
+  const W = wser('gdp_growth', 'WLD'); if (!W.length) return;
+  const wrap = document.createElement('div'); wrap.id = 'wg2'; fig.parentNode.insertBefore(wrap, fig); fig.style.display = 'none';
+  const g = grid(wrap);
+  const labels = W.map(x => String(x[0])), vals = W.map(x => x[1]), neg = W.filter(x => x[1] < 0).map(x => String(x[0]));
+  figure(g, { prefix: 'W', title: 'World GDP growth since ' + W[0][0], sub: '% a year; red bands mark years when world output fell', h: 360, source: 'World Bank.',
+    render: TH => { const o = tsOption(TH, labels, [S('World real GDP growth', vals, { w: 2.4, end: true, dec: 2 })], { y1: '% a year', dec: 2, events: false, zoom: labels.length > 40 }); o.series[0].markArea = { silent: true, itemStyle: { color: 'rgba(229,72,77,.14)' }, data: neg.map(y => [{ xAxis: y }, { xAxis: y }]) }; o.series[0].markLine = { symbol: 'none', silent: true, lineStyle: { color: TH.muted, type: 'dashed' }, data: [{ yAxis: 0 }] }; return o; } });
+  const C = [['USA', 'United States'], ['CHN', 'China'], ['EMU', 'Euro area'], ['JPN', 'Japan'], ['IND', 'India']];
+  const gm = k => new Map(wser('gdp_growth', k)), ym = k => new Map(wser('gdp_usd', k));
+  const GW = gm('WLD'), YW = ym('WLD'), Gs = C.map(c => gm(c[0])), Ys = C.map(c => ym(c[0]));
+  const yrs = W.map(x => x[0]).filter(y => YW.has(y - 1) && Ys.every(m => m.has(y - 1))).slice(-25);
+  const contrib = C.map((c, j) => yrs.map(y => { const gv = Gs[j].get(y), sh = Ys[j].get(y - 1) / YW.get(y - 1); return gv == null ? null : +(gv * sh).toFixed(3); }));
+  const rest = yrs.map((y, i) => { const tot = GW.get(y); if (tot == null) return null; return +(tot - contrib.reduce((a, s) => a + (s[i] || 0), 0)).toFixed(3); });
+  figure(g, { prefix: 'W', title: 'What drove world growth', sub: 'percentage-point contributions: growth × share of world GDP a year earlier (market exchange rates); last ' + yrs.length + ' years', h: 360, source: 'World Bank; author’s calculations.',
+    notes: 'Shares use GDP at market exchange rates, as in the World Bank’s world total; the IMF weights by purchasing power, which gives emerging economies larger shares.',
+    render: TH => { const L = yrs.map(String); const o = tsOption(TH, L, [S('World growth (total)', yrs.map(y => GW.get(y)), { w: 2.6, color: TH.ink, end: true, dec: 2 })], { y1: 'pp', dec: 2, events: false });
+      const bars = C.map((c, j) => ({ name: c[1], type: 'bar', stack: 'c', data: contrib[j], itemStyle: { color: TH.pal[j % TH.pal.length] }, barMaxWidth: 22, emphasis: { focus: 'series' } }));
+      bars.push({ name: 'Rest of the world', type: 'bar', stack: 'c', data: rest, itemStyle: { color: TH.muted }, barMaxWidth: 22, emphasis: { focus: 'series' } });
+      o.series = bars.concat(o.series); if (o.legend) { delete o.legend.data; o.legend.type = 'scroll'; } return o; } });
+}
+/* ================= Bayesian DSGE: equations, priors, posteriors and diagnostics ================= */
+const MX = { i: s => '<mi>' + s + '</mi>', n: s => '<mn>' + s + '</mn>', o: s => '<mo>' + s + '</mo>', sub: (b, s) => '<msub>' + b + s + '</msub>', sup: (b, s) => '<msup>' + b + s + '</msup>', ss: (b, s, p) => '<msubsup>' + b + s + p + '</msubsup>', fr: (a, b) => '<mfrac>' + a + b + '</mfrac>', r: (...a) => '<mrow>' + a.join('') + '</mrow>', bar: b => '<mover>' + b + '<mo>‾</mo></mover>' };
+const EQN = (body, tag) => '<div class="eqn"><math display="block">' + body + '</math>' + (tag ? '<span class="tag">' + tag + '</span>' : '') + '</div>';
+function dsgeEquations() {
+  const { i, n, o, sub, sup, ss, fr, r, bar } = MX, t = i('t'), t1 = r(i('t'), o('+'), n('1')), tm1 = r(i('t'), o('−'), n('1')), Et = sub(i('E'), t);
+  const X = sub(i('x'), t), P = sub(i('π'), t), I = sub(i('i'), t);
+  return [
+    EQN(r(X, o('='), Et, sub(i('x'), t1), o('−'), fr(n('1'), i('σ')), o('('), I, o('−'), Et, sub(i('π'), t1), o(')'), o('+'), sub(i('d'), t)), '(1) IS curve: demand'),
+    EQN(r(P, o('='), i('β'), Et, sub(i('π'), t1), o('+'), i('κ'), X, o('+'), sub(i('u'), t)), '(2) New Keynesian Phillips curve'),
+    EQN(r(I, o('='), sub(i('φ'), i('π')), P, o('+'), sub(i('φ'), i('y')), X, o('+'), sub(i('v'), t)), '(3) Monetary-policy (Taylor) rule'),
+    EQN(r(sub(i('s'), t), o('='), sub(i('ρ'), i('s')), sub(i('s'), tm1), o('+'), sub(i('σ'), i('s')), ss(i('ε'), t, i('s')), o(','), o('&#8195;'), i('s'), o('∈'), o('{'), i('d'), o(','), i('u'), o(','), i('v'), o('}')), '(4) Shocks: first-order autoregressive'),
+    EQN(r(ss(i('x'), t, r(i('o'), i('b'), i('s'))), o('='), X, o(';'), o('&#8195;'), ss(i('π'), t, r(i('o'), i('b'), i('s'))), o('='), bar(i('π')), o('+'), n('4'), P, o(';'), o('&#8195;'), ss(i('i'), t, r(i('o'), i('b'), i('s'))), o('='), bar(i('i')), o('+'), n('4'), I), '(5) Observation equations (annualised data)'),
+    EQN(r(i('κ'), o('='), fr(r(o('('), n('1'), o('−'), i('θ'), o(')'), o('('), n('1'), o('−'), i('β'), i('θ'), o(')')), i('θ')), o('·'), fr(r(n('1'), o('−'), i('α')), r(n('1'), o('−'), i('α'), o('+'), i('α'), i('ε'))), o('·'), o('('), i('σ'), o('+'), fr(r(i('φ'), o('+'), i('α')), r(n('1'), o('−'), i('α'))), o(')')), '(6) Slope of the Phillips curve'),
+    EQN(r(i('κ'), o('('), sub(i('φ'), i('π')), o('−'), n('1'), o(')'), o('+'), o('('), n('1'), o('−'), i('β'), o(')'), sub(i('φ'), i('y')), o('&gt;'), n('0')), '(7) Determinacy (Taylor principle)'),
+    EQN(r(i('p'), o('('), i('θ'), o('|'), i('Y'), o(')'), o('∝'), i('L'), o('('), i('Y'), o('|'), i('θ'), o(')'), o('·'), i('p'), o('('), i('θ'), o(')')), '(8) Bayes’ rule: posterior ∝ likelihood × prior'),
+    EQN(r(sub(i('z'), t), o('='), sup(r(i('Z'), o('('), i('θ'), o(')')), r(o('−'), n('1'))), o('('), sub(i('y'), t), o('−'), bar(i('y')), o(')'), o(';'), o('&#8195;'), i('ln'), i('L'), o('='), i('T'), i('ln'), o('|'), i('det'), sup(i('Z'), r(o('−'), n('1'))), o('|'), o('+'), r(sub(o('∑'), t)), i('ln'), i('N'), o('('), sub(i('z'), t), o('|'), i('R'), sub(i('z'), tm1), o(','), i('Σ'), o(')')), '(9) Exact likelihood: shocks recovered from the data'),
+    EQN(r(i('α'), o('='), i('min'), o('{'), n('1'), o(','), fr(r(i('p'), o('('), sup(i('θ'), o('*')), o('|'), i('Y'), o(')')), r(i('p'), o('('), sup(i('θ'), r(o('('), i('s'), o('−'), n('1'), o(')'))), o('|'), i('Y'), o(')'))), o('}'), o(','), o('&#8195;'), sup(i('θ'), o('*')), o('='), sup(i('θ'), r(o('('), i('s'), o('−'), n('1'), o(')'))), o('+'), i('c'), i('L'), i('η')), '(10) Metropolis–Hastings acceptance')
+  ].join('');
+}
+let BAYES_K = 2;
+function bayesBlock(body, D) {
+  const B = D.bayes; if (!B) return;
+  const s = sec(body, 'Bayesian estimation for Bangladesh', 'All ten parameters estimated on ' + B.meta.T + ' quarters (' + B.meta.sample + ') by Markov chain Monte Carlo: ' + B.meta.chains + ' chains of ' + B.meta.draws.toLocaleString('en') + ' draws, the first ' + B.meta.burn.toLocaleString('en') + ' discarded as burn-in.');
+  s.insertAdjacentHTML('beforeend', '<h3>Model, observation and estimation equations</h3><div class="formula math-box">' + dsgeEquations() + '</div><p class="note">Variables: x = output gap, π = inflation, i = policy (call-money) rate, all as quarterly deviations from steady state; d, u, v = demand, cost-push and policy shocks; ε = independent standard-normal innovations; E<sub>t</sub> = expectation at time t. The data are annualised, hence the factor 4 in the observation equations; π̄ and ī are sample means (' + nf(B.meta.means.inflation, 2) + '% and ' + nf(B.meta.means.call_rate, 2) + '%).</p>');
+  let h = '<thead><tr><th scope="col">Parameter</th><th scope="col">Prior</th><th scope="col" class="num">Posterior mean</th><th scope="col" class="num">Median</th><th scope="col" class="num">SD</th><th scope="col" class="num">90% interval</th><th scope="col" class="num">95% interval</th><th scope="col" class="num">99% interval</th><th scope="col" class="num">R-hat</th><th scope="col" class="num">ESS</th><th scope="col" class="num">Geweke p</th></tr></thead><tbody>';
+  B.params.forEach(p => { const q = p.post, ci = a => nf(a[0], 3) + ' to ' + nf(a[1], 3); h += '<tr><th scope="row">' + esc(p.sym) + ' <span class="mx-u">' + esc(p.name) + '</span></th><td>' + esc(p.prior.dist) + '(' + p.prior.mean + ', ' + p.prior.sd + ')</td><td class="num big">' + nf(q.mean, 3) + '</td><td class="num">' + nf(q.median, 3) + '</td><td class="num">' + nf(q.sd, 3) + '</td><td class="num">' + ci(q.ci90) + '</td><td class="num">' + ci(q.ci95) + '</td><td class="num">' + ci(q.ci99) + '</td><td class="num' + (p.rhat < 1.05 ? '' : ' warn-std') + '">' + nf(p.rhat, 3) + '</td><td class="num">' + p.ess + '</td><td class="num' + (p.geweke_p < 0.05 ? ' warn-std' : '') + '">' + nf(p.geweke_p, 3) + '</td></tr>'; });
+  tableWrap(s, h + '</tbody>', tcap('Prior and posterior distributions'), 'Credible intervals are posterior percentiles. Convergence: R-hat below 1.05 and an effective sample size (ESS) in the hundreds indicate reliable estimates; a Geweke p-value below 0.05 (highlighted) flags drift within a chain. Acceptance rates: ' + B.meta.acceptance.map(a => nf(a * 100, 1) + '%').join(' and ') + '. Laplace approximation to the log marginal likelihood: ' + nf(B.meta.laplace_log_ml, 2) + '.', { src: 'BBS and Bangladesh Bank; author’s estimates.' });
+  let pr = '<thead><tr><th scope="col">Statement</th><th scope="col" class="num">Posterior probability</th><th scope="col">Reading</th></tr></thead><tbody>';
+  Object.entries(B.probs).forEach(([k, v]) => { pr += '<tr><th scope="row">' + esc(k) + '</th><td class="num big">' + nf(v * 100, 1) + '%</td><td>' + (v >= 0.95 ? 'Strong evidence for' : v >= 0.75 ? 'Moderate evidence for' : v <= 0.05 ? 'Strong evidence against' : v <= 0.25 ? 'Moderate evidence against' : 'Inconclusive') + '</td></tr>'; });
+  tableWrap(s, pr + '</tbody>', tcap('What the posterior says'), 'Bayesian counterparts of hypothesis tests: the share of posterior draws for which each statement holds.', { src: 'Author’s estimates.' });
+  ctl2(s, '<label class="field"><span>Parameter for the plots</span><select id="by-k">' + B.params.map((p, i) => '<option value="' + i + '"' + (i === BAYES_K ? ' selected' : '') + '>' + esc(p.sym + ' — ' + p.name) + '</option>').join('') + '</select></label>', () => { BAYES_K = +$('#by-k').value; plots(); }, '#by-k');
+  const g = grid(s);
+  function plots() {
+    disposeIn(g); g.innerHTML = ''; const p = B.params[BAYES_K];
+    figure(g, { prefix: 'L', title: 'Prior and posterior: ' + p.sym, sub: p.name + '; density', h: 280, source: 'Author’s estimates.', notes: 'Dashed: prior. Shaded: posterior (kernel density of the MCMC draws). A posterior narrower than, or shifted from, the prior shows the data are informative.',
+      render: TH => ({ aria: { enabled: true }, animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 8, right: 16, top: 34, bottom: 8, containLabel: true }, legend: { top: 0, textStyle: { color: TH.ink2 } }, tooltip: { trigger: 'axis', backgroundColor: TH.paper, borderColor: TH.line, textStyle: { color: TH.ink }, valueFormatter: v => nf(v, 3) },
+        xAxis: { type: 'value', scale: true, axisLabel: { color: TH.ink2 }, axisLine: { lineStyle: { color: TH.line } }, splitLine: { show: false } }, yAxis: valAxis(TH, ''),
+        series: [{ name: 'Prior', type: 'line', showSymbol: false, data: p.grid.map((x, j) => [x, p.prior_pdf[j]]), lineStyle: { type: 'dashed', width: 2, color: TH.muted } },
+          { name: 'Posterior', type: 'line', showSymbol: false, smooth: true, data: p.grid.map((x, j) => [x, p.post_pdf[j]]), lineStyle: { width: 2.6, color: TH.pal[0] }, areaStyle: { color: TH.pal[0], opacity: 0.22 },
+            markLine: { symbol: 'none', silent: true, lineStyle: { color: TH.signal || '#C9A24B', type: 'solid', width: 1.6 }, label: { formatter: 'mean ' + nf(p.post.mean, 3), color: TH.ink }, data: [{ xAxis: p.post.mean }] } }] }) });
+    figure(g, { prefix: 'L', title: 'MCMC trace: ' + p.sym, sub: 'two chains after burn-in (thinned); they should overlap and look like noise', h: 280, source: 'Author’s estimates.',
+      render: TH => ({ aria: { enabled: true }, animation: false, textStyle: { fontFamily: FONT }, grid: { left: 8, right: 16, top: 34, bottom: 8, containLabel: true }, legend: { top: 0, textStyle: { color: TH.ink2 } }, tooltip: { trigger: 'axis', backgroundColor: TH.paper, borderColor: TH.line, textStyle: { color: TH.ink }, valueFormatter: v => nf(v, 3) },
+        xAxis: { type: 'value', name: 'draw', axisLabel: { color: TH.ink2 }, axisLine: { lineStyle: { color: TH.line } }, splitLine: { show: false } }, yAxis: valAxis(TH, '', { scale: true }),
+        series: p.trace.map((c, j) => ({ name: 'Chain ' + (j + 1), type: 'line', showSymbol: false, data: c.map((v, k) => [k, v]), lineStyle: { width: 1.1, color: TH.pal[j] }, emphasis: { disabled: true } })) }) });
+    figure(g, { prefix: 'L', title: 'Autocorrelation of the draws: ' + p.sym, sub: 'chain 1, lags 1 to 30; fast decay means efficient sampling', h: 280, source: 'Author’s estimates.',
+      render: TH => ({ aria: { enabled: true }, animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 8, right: 16, top: 16, bottom: 8, containLabel: true }, tooltip: { trigger: 'axis', backgroundColor: TH.paper, borderColor: TH.line, textStyle: { color: TH.ink }, valueFormatter: v => nf(v, 3) },
+        xAxis: { type: 'category', data: p.acf.map((_, k) => String(k + 1)), axisLabel: { color: TH.ink2 }, axisLine: { lineStyle: { color: TH.line } } }, yAxis: valAxis(TH, ''),
+        series: [{ name: 'Autocorrelation', type: 'bar', data: p.acf, itemStyle: { color: TH.pal[2] }, barMaxWidth: 14 }] }) });
+    figure(g, { prefix: 'L', title: 'Posterior means and 95% intervals', sub: 'all parameters, scaled by their prior mean (1 = prior mean)', h: 280, source: 'Author’s estimates.',
+      render: TH => ({ aria: { enabled: true }, animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 8, right: 16, top: 16, bottom: 8, containLabel: true }, tooltip: { trigger: 'item', backgroundColor: TH.paper, borderColor: TH.line, textStyle: { color: TH.ink } },
+        xAxis: { type: 'category', data: B.params.map(q => q.sym), axisLabel: { color: TH.ink2 }, axisLine: { lineStyle: { color: TH.line } } }, yAxis: valAxis(TH, 'posterior ÷ prior mean'),
+        series: [{ name: '95% interval', type: 'boxplot', data: B.params.map(q => { const m = q.prior.mean; return [q.post.ci95[0] / m, q.post.ci95[0] / m, q.post.mean / m, q.post.ci95[1] / m, q.post.ci95[1] / m]; }), itemStyle: { color: 'rgba(31,95,168,.18)', borderColor: TH.pal[0] }, boxWidth: [6, 14] },
+          { name: 'Prior mean', type: 'line', data: B.params.map(() => 1), symbol: 'none', lineStyle: { type: 'dashed', color: TH.muted } }] }) });
+  }
+  plots();
+  const q = k => B.params.find(p => p.sym === k), fpi = q('φπ'), kap = q('κ'), ru = q('ρu'), rd = q('ρd');
+  const it = [];
+  if (fpi) it.push('<b>Policy fights inflation.</b> φπ has a posterior mean of ' + nf(fpi.post.mean, 2) + ' (95% interval ' + nf(fpi.post.ci95[0], 2) + ' to ' + nf(fpi.post.ci95[1], 2) + '); the probability that it exceeds 1 is ' + nf(B.probs['P(φπ > 1): Taylor principle'] * 100, 1) + '%, so the Taylor principle holds.');
+  if (kap) it.push('<b>Inflation responds weakly to slack.</b> κ is ' + nf(kap.post.mean, 3) + ', below its prior mean of ' + kap.prior.mean + ': the data pull the Phillips curve flatter.' + (kap.geweke_p < 0.05 ? ' Its Geweke test flags some drift, so treat κ with extra caution.' : ''));
+  if (ru && rd) it.push('<b>Cost shocks linger.</b> Cost-push persistence is ' + nf(ru.post.mean, 2) + ' against ' + nf(rd.post.mean, 2) + ' for demand shocks (probability ' + nf(B.probs['P(ρu > ρd): cost shocks more persistent than demand shocks'] * 100, 1) + '% that cost shocks last longer): supply-side inflation in Bangladesh fades slowly.');
+  it.push('<b>Caveats.</b> 38 quarters is a short sample; the output gap is a proxy from GDP growth; the model is closed-economy and omits the exchange rate. ' + esc(B.meta.method) + '.');
+  s.insertAdjacentHTML('beforeend', '<h3>Interpretation</h3><ul class="cl-list">' + it.map(x => '<li>' + x + '</li>').join('') + '</ul>');
+}
+
+return { initCL, routeCL, initSecurity, worldGrowth2, initPlans, renderAds, initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo, initLearnX, initFAQ };
 })();
 function initBD() { return BDX.initBD(); }
 function initLab() { return BDX.initLab(); }
@@ -3349,3 +3501,44 @@ function labelPlan(opt, inst, fromZoom) {
   } catch (e) { /* labels are optional */ }
   return opt;
 }
+
+/* ================= Time-span extras: custom years, automatic cycling, blink switch ================= */
+(function spanExtras() {
+  const segOf = el => { const box = el.closest('.controls, .fig-ctl, .ctl, figure, .bd-glob') || el.parentElement; return box ? box.querySelector('.seg2[data-k="span"]') : null; };
+  function pick(seg, v) { let b = seg.querySelector('button[data-v="' + v + '"]'); if (!b) { b = document.createElement('button'); b.type = 'button'; b.setAttribute('data-v', v); b.textContent = v + 'y'; b.title = v + ' years'; seg.append(b); } b.click(); }
+  document.addEventListener('change', e => {
+    const inp = e.target.closest && e.target.closest('input[data-x="custom"]'); if (!inp) return;
+    const n = Math.round(+inp.value || 0); if (n < 1 || n > 80) return; const seg = segOf(inp); if (seg) pick(seg, String(n));
+  });
+  document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('button[data-x]'); if (!b) return;
+    const kind = b.getAttribute('data-x');
+    if (kind === 'blink') { const off = document.documentElement.classList.toggle('no-blink'); document.querySelectorAll('button[data-x="blink"]').forEach(x => x.setAttribute('aria-pressed', String(!off))); return; }
+    if (kind !== 'auto') return;
+    const seg = segOf(b); if (!seg) return;
+    if (b.__t) { clearInterval(b.__t); b.__t = null; b.setAttribute('aria-pressed', 'false'); b.textContent = '▶ Auto'; return; }
+    const secsIn = b.parentElement.querySelector('input[data-x="secs"]'), secs = Math.max(2, Math.min(120, +((secsIn || {}).value) || 6));
+    const order = ['5', '10', '15', '20', '25', 'all'];
+    b.setAttribute('aria-pressed', 'true'); b.textContent = '❚❚ Stop';
+    b.__t = setInterval(() => { if (!document.body.contains(b)) { clearInterval(b.__t); return; } if (document.hidden) return; const cur = (seg.querySelector('button[aria-pressed="true"]') || {}).getAttribute ? seg.querySelector('button[aria-pressed="true"]').getAttribute('data-v') : 'all'; const nx = order[(order.indexOf(cur) + 1) % order.length]; pick(seg, nx); }, secs * 1000);
+  });
+})();
+/* ================= Every table carries its source ================= */
+(function srcGuard() {
+  const MAP = { overview: 'World Bank (World Development Indicators); EIA; Federal Reserve; BLS; World Bank Pink Sheet.', countries: 'World Bank (World Development Indicators).', compare: 'World Bank (World Development Indicators).', explore: 'World Bank (World Development Indicators).', rankings: 'World Bank (World Development Indicators).', map: 'World Bank (World Development Indicators).', markets: 'EIA; Federal Reserve; BLS; World Bank Pink Sheet.', bangladesh: 'Bangladesh Bank; BBS.', lab: 'BBS; Bangladesh Bank; World Bank; model estimates.', cl: 'World Bank (World Development Indicators).' };
+  const root = document.querySelector('main') || document.body; let busy = false;
+  function run() {
+    const v = document.querySelector('.view.on'); if (!v) return; const txt = MAP[(v.id || '').replace('v-', '')]; if (!txt) return;
+    v.querySelectorAll('table').forEach(t => {
+      const box = t.closest('.table-wrap, .mx-wrap, .pe-wrap') || t; if (box.getAttribute('data-src') === '1') return;
+      const nx = box.nextElementSibling, par = box.parentElement;
+      const has = (nx && (nx.classList.contains('src-line') || (nx.classList.contains('tnote') && nx.querySelector('.src-line')))) || box.querySelector('.src-line') || (par && [...par.children].some(c => c.classList && c.classList.contains('src-line')));
+      box.setAttribute('data-src', '1'); if (has) return;
+      const p = document.createElement('p'); p.className = 'src-line'; p.innerHTML = '<b>Source:</b> ' + txt; box.after(p);
+    });
+  }
+  const mo = new MutationObserver(() => { if (busy) return; busy = true; setTimeout(() => { mo.disconnect(); try { run(); } finally { busy = false; mo.observe(root, { childList: true, subtree: true }); } }, 800); });
+  mo.observe(root, { childList: true, subtree: true });
+  setTimeout(run, 1800);
+})();
+setTimeout(() => { try { BDX.worldGrowth2(); } catch (e) { /* optional */ } }, 900);
