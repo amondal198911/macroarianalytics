@@ -48,8 +48,9 @@ const STD = {
 const STDK = { infl: 'infl', infl_avg: 'infl', food: 'infl', nonfood: 'infl', gdp_q: 'gdp', gdp_fy: 'gdp', cover: 'cover', crar: 'crar', npl: 'npl', pcredit: 'credit', real_lend: 'real', xr_dep: 'dep', inflation: 'infl', gdp_growth: 'gdp', current_account: 'ca' };
 const stdOf = k => STD[STDK[k]] || null;
 function stdOut(rule, v) { return !!rule && v != null && isFinite(v) && ((rule.lo != null && v < rule.lo) || (rule.hi != null && v > rule.hi)); }
-const flagOn = (k, r) => stdOut(stdOf(k), r.v) || (!stdOf(k) && r.ya != null && r.ya !== 0 && r.v != null && Math.abs(r.v / r.ya - 1) >= 0.1);
-const flagMsg = (k, r) => stdOf(k) ? stdMsg(stdOf(k), r.v) + ': ' + stdOf(k).src : 'Changed by ' + nf((r.v / r.ya - 1) * 100, 2) + '% on a year earlier (values blink at a 10% change, up or down, when no benchmark band exists)';
+const bandK = k => { const p = PK(k); return p ? band312(p.v) : null; };
+const flagOn = (k, r) => stdOut(stdOf(k), r.v) || (!stdOf(k) && !!(bandK(k) || {}).out);
+const flagMsg = (k, r) => stdOf(k) ? stdMsg(stdOf(k), r.v) + ': ' + stdOf(k).src : bandMsg(bandK(k) || { a3: NaN, a12: NaN });
 function stdMsg(rule, v) { return (rule.lo != null && v < rule.lo ? 'Below' : 'Above') + ' benchmark (' + rule.txt + ')'; }
 const bdState = { tab: 'glance' }, labState = { tab: 'overview', arima: 'infl', shock: 3, fevd: 0, ci: '95', het: 0, desc_ci: '95' };
 let FIGN = 0;
@@ -170,7 +171,7 @@ function S(name, data, o) {
 function blinkOn() { const c = document.documentElement.classList; return !RM && !c.contains('no-blink') && !c.contains('safe'); }
 function warnPoint(x, y, label, ax) {
   return { name: 'Warning', type: blinkOn() && !(window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 'effectScatter' : 'scatter', data: [[x, y]], yAxisIndex: ax, symbolSize: 10, z: 6, silent: true, tooltip: { show: false },
-    rippleEffect: { brushType: 'stroke', scale: 3.4, period: 2.2 }, itemStyle: { color: BADC }, label: { show: true, position: 'top', distance: 8, formatter: '⚠ ' + label, color: BADC, fontSize: 10.5, fontWeight: 800 } };
+    rippleEffect: { brushType: 'stroke', scale: 3.4, period: 2.2 }, itemStyle: { color: BADC }, label: { show: false } };
 }
 function signBars(vals, TH) { return vals.map(v => v == null ? null : { value: v, itemStyle: { color: v >= 0 ? TH.pos : TH.neg } }); }
 function bandSeries(name, lo, hi, color, op, stack) {
@@ -420,13 +421,15 @@ function bdGlance(body) {
   const s6 = sec(body, 'Benchmarks', 'The international ranges behind the blinking warnings.');
   benchTable(s6);
 }
-function infFan(host, compact) {
+function infFan(host, compact) { infFan0(host, compact); if (!compact) longInfl(host); }
+function infFan0(host, compact) {
   const a = BD.arima.infl, e = BD.ensemble.path;
-  const histN = compact ? 36 : 60;
+  const histN = compact ? 36 : Infinity;
   const hl = [], hv = [];
-  const h0 = a.hist.s;
-  a.hist.v.forEach((v, i) => { hl.push(mLabAdd(h0, i)); hv.push(v); });
-  const hL = hl.slice(-histN), hV = hv.slice(-histN);
+  const h0 = a.hist.s, FP = !compact && PK('infl'), kS = (+BD.ensemble.start.slice(0, 4)) * 12 + (+BD.ensemble.start.slice(5, 7)) - 1;
+  if (FP && FP.k0 < kS) { for (let k = FP.k0; k < kS; k++) { hl.push(bdLab('M', k)); hv.push(FP.v[k - FP.k0] == null ? null : FP.v[k - FP.k0]); } }
+  else a.hist.v.forEach((v, i) => { hl.push(mLabAdd(h0, i)); hv.push(v); });
+  const hL = histN === Infinity ? hl : hl.slice(-histN), hV = histN === Infinity ? hv : hv.slice(-histN);
   const fl = e.map((x, i) => mLabAdd(BD.ensemble.start, i));
   const labels = [...hL, ...fl];
   const pad = Array(hL.length).fill(null);
@@ -895,11 +898,12 @@ function labDsge(body) {
   const g = grid(s);
   const hs = Array.from({ length: 17 }, (_, i) => String(i));
   Object.entries(D.irf).forEach(([name, r]) => {
-    figure(g, { prefix: 'L', title: name + ' shock', sub: 'responses over 16 quarters; output gap in %, inflation and policy rate in annualised pp', h: 260,
-      notes: 'Shock persistence ρ = ' + r.rho + '.', source: 'Model simulation.',
+    figure(g, { prefix: 'L', title: name + (r.rho === 'combined' ? ' (combined scenario)' : ' shock'), sub: 'responses over 16 quarters; output gap in %, inflation and policy rate in annualised pp', h: 260,
+      notes: (r.note ? r.note + ' ' : '') + (r.rho === 'combined' ? '' : 'Shock persistence ρ = ' + r.rho + '.'), source: 'Model simulation.',
       csv: () => [['quarter', 'output gap', 'inflation', 'policy rate'], ...hs.map((h, i) => [h, r.x[i], r.pi[i], r.i[i]])],
       render: TH => tsOption(TH, hs, [S('Output gap', r.x, { w: 2.2 }), S('Inflation', r.pi, { w: 2.2 }), S('Policy rate', r.i, { dash: true, w: 2 })].map((x, i) => i === 0 ? Object.assign(x, { markLine: { symbol: 'none', silent: true, label: { show: false }, lineStyle: { color: TH.ink2, width: 1 }, data: [{ yAxis: 0 }] } }) : x), { y1: '%/pp', events: false, dec: 3 }) });
   });
+  dsgeExtras(body, D);
 }
 function labWorld(body) {
   const W = BD.world;
@@ -1400,7 +1404,7 @@ function renderGeo(iso) {
   const host = $('#c-geo');
   if (!host || !RAW.econ) return;
   host.innerHTML = '<div class="block-head"><h2>Geography and people</h2><p class="note">Where the economy is, who lives there and how they live. Tap a neighbour to open its profile.</p><p><a class="btn sm" href="#cl~' + iso + '~inflation~charts">Analyse this economy topic by topic →</a></p></div><div class="geo-grid"><div class="geo-map" id="c-geo-map"><p class="note">Loading map…</p></div><div class="geo-prof" id="c-geo-prof"></div></div>';
-  const done = M => { const mp = $('#c-geo-map'); if (!mp) return; const svg = M ? countrySVG(iso, M) : ''; mp.innerHTML = svg ? svg + '<p class="src-line"><b>Source:</b> Natural Earth.</p>' : '<p class="note">' + (M ? 'No map outline is available for this economy.' : 'The map opens on macroarianalytics.com.') + '</p>'; $('#c-geo-prof').innerHTML = ''; profileTable($('#c-geo-prof'), iso, M); };
+  const done = M => { const mp = $('#c-geo-map'); if (!mp) return; const svg = M ? countrySVG(iso, M) : ''; mp.innerHTML = svg ? svg + '<p class="src-line"><b>Source:</b> Natural Earth.</p>' : '<p class="note">' + (M ? 'No map outline is available for this economy.' : 'The map opens on macroarianalytics.com.') + '</p>'; worldLocator(mp, iso); $('#c-geo-prof').innerHTML = ''; profileTable($('#c-geo-prof'), iso, M); };
   profileTable($('#c-geo-prof'), iso, null);
   loadMaps().then(done).catch(() => done(null));
 }
@@ -2276,10 +2280,11 @@ function tileHTML(t, i) {
   const lagN = { M: 12, Q: 4, A: 1, FY: 1 }[t.freq];
   let ya = lagN && n > lagN ? t.pts[n - 1 - lagN][1] : null;
   if (t.freq === 'D') { const cut = new Date(new Date(last[0]).getTime() - 365 * 864e5).toISOString().slice(0, 10); const q = t.pts.filter(x => x[0] <= cut).pop(); ya = q ? q[1] : null; }
-  const so = t.std ? stdOut(t.std, v) : (ya != null && ya !== 0 && Math.abs(v / ya - 1) >= 0.1);
+  const bd312 = band312(t.pts.map(x => x[1]));
+  const so = t.std ? stdOut(t.std, v) : !!(bd312 && bd312.out);
   const ct = c == null ? '–' : (c > 0 ? '▲ +' : c < 0 ? '▼ ' : '') + nf(c, 2) + (lvl ? '%' : ' pp');
   const since = { D: 'on the day', M: 'on the month', Q: 'on the quarter', A: 'on the year', FY: 'on the year' }[t.freq] || '';
-  return '<tr class="lt' + (i === LIVE.i ? ' on' : '') + (so ? ' lt-warn' : '') + '" data-lt="' + i + '" tabindex="0" title="' + esc(so ? (t.std ? stdMsg(t.std, v) + ': ' + t.std.src : 'Changed by ' + nf((v / ya - 1) * 100, 2) + '% on a year earlier (blinks at a 10% change, up or down, when no benchmark band exists)') : t.label + ', ' + fmtPeriod(last[0])) + '">' +
+  return '<tr class="lt' + (i === LIVE.i ? ' on' : '') + (so ? ' lt-warn' : '') + '" data-lt="' + i + '" tabindex="0" title="' + esc(so ? (t.std ? stdMsg(t.std, v) + ': ' + t.std.src : bandMsg(bd312)) : t.label + ', ' + fmtPeriod(last[0])) + '">' +
     '<th scope="row">' + esc(t.label) + '</th><td class="sv"><span class="cell' + (so ? ' warn' : '') + '">' + nf(v, 2) + '</span><small>' + esc(t.unit) + '</small></td>' +
     '<td class="sc ' + cls + '" title="Change ' + since + '">' + ct + '</td><td class="sp">' + esc(shortPer(last[0])) + '</td></tr>';
 }
@@ -2449,7 +2454,7 @@ setTimeout(() => { try { BDX.initSecurity(); } catch (e) { /* optional */ } try 
 
 /* ================= Country analysis: economy → topic → section pages ================= */
 const CL_CATS = [
-  { id: 'inflation', t: 'Inflation', w: ['inflation', 'real_rate'], bd: ['infl', 'infl_avg', 'food', 'nonfood'], cpi: true },
+  { id: 'inflation', t: 'Inflation', w: ['inflation', 'real_rate', 'lending_rate', 'money_growth', 'fx_change'], bd: ['infl', 'infl_avg', 'food', 'nonfood'], cpi: true },
   { id: 'growth', t: 'Growth and output', w: ['gdp_growth', 'gdp_pc', 'gdp_pc_ppp', 'gdp_usd', 'investment', 'savings'], bd: ['gdp_q', 'gdp_fy', 'iip', 'inv_gdp', 'sav_gdp', 'cons_gdp'] },
   { id: 'exchange', t: 'Exchange rate', w: ['fx', 'fx_change'], bd: ['xr', 'xr_dep'] },
   { id: 'remittances', t: 'Remittances', w: ['remittances'], bd: ['remit', 'remit_g'] },
@@ -2592,7 +2597,7 @@ function clCharts(body, c, keys, iso) {
   mapBox.className = 'geo-map';
   mapBox.innerHTML = '<p class="note">Loading map…</p>';
   top.append(mapBox);
-  loadMaps().then(M => { mapBox.innerHTML = (countrySVG(iso, M) || '<p class="note">No map outline for this economy.</p>') + '<p class="src-line"><b>Source:</b> Natural Earth.</p>'; }).catch(() => { mapBox.innerHTML = '<p class="note">The map opens on macroarianalytics.com.</p>'; });
+  loadMaps().then(M => { mapBox.innerHTML = (countrySVG(iso, M) || '<p class="note">No map outline for this economy.</p>') + '<p class="src-line"><b>Source:</b> Natural Earth.</p>'; worldLocator(mapBox, iso); }).catch(() => { mapBox.innerHTML = '<p class="note">The map opens on macroarianalytics.com.</p>'; });
   const side = document.createElement('div');
   top.append(side);
   const facts = keys.slice(0, 4).map(k => { const l = lastOfS(k, iso); return l ? '<div class="bdf"><span>' + esc(indL(k)) + '</span><b>' + nf(l[1], 2) + '</b><small>' + l[0] + '</small></div>' : ''; }).join('');
@@ -2645,10 +2650,10 @@ function clSummary(body, c, keys, iso) {
     let h = '<thead><tr><th scope="col">Indicator</th><th scope="col">Year</th><th scope="col" class="num">Latest</th><th scope="col" class="num">Previous</th><th scope="col" class="num">Change</th><th scope="col" class="num">5-year average</th><th scope="col" class="num">Sub-continent average</th><th scope="col" class="num">World rank</th><th scope="col">Benchmark</th></tr></thead><tbody>';
     keys.forEach(k => {
       const s = wser(k, iso), l = s[s.length - 1], p = s[s.length - 2], last5 = s.slice(-5).map(x => x[1]), rm = regionMean(k, iso, l[0]), wr = worldRank(k, iso), st = stdOf(k);
-      const out = st && stdOut(st, l[1]), big = !st && p && p[1] && Math.abs(l[1] / p[1] - 1) >= 0.1;
-      h += '<tr><th scope="row"><span class="mx-l">' + esc(indL(k)) + '</span><span class="mx-u">' + esc(indU(k)) + '</span></th><td>' + l[0] + '</td><td class="num big' + (out || big ? ' warn-std' : '') + '">' + nf(l[1], 2) + '</td><td class="num">' + (p ? nf(p[1], 2) : '–') + '</td><td class="num">' + (p ? nf(l[1] - p[1], 2) : '–') + '</td><td class="num">' + nf(last5.reduce((a, b) => a + b, 0) / last5.length, 2) + '</td><td class="num">' + (rm == null ? '–' : nf(rm, 2)) + '</td><td class="num">' + (wr ? wr[0] + ' of ' + wr[1] : '–') + '</td><td>' + (st ? esc(st.txt) + (out ? ' · outside' : ' · inside') : big ? 'changed ≥10% on the year' : '–') + '</td></tr>';
+      const out = st && stdOut(st, l[1]), b312 = band312(s.map(z => z[1])), big = !st && !!(b312 && b312.out);
+      h += '<tr><th scope="row"><span class="mx-l">' + esc(indL(k)) + '</span><span class="mx-u">' + esc(indU(k)) + '</span></th><td>' + l[0] + '</td><td class="num big' + (out || big ? ' warn-std' : '') + '">' + nf(l[1], 2) + '</td><td class="num">' + (p ? nf(p[1], 2) : '–') + '</td><td class="num">' + (p ? nf(l[1] - p[1], 2) : '–') + '</td><td class="num">' + nf(last5.reduce((a, b) => a + b, 0) / last5.length, 2) + '</td><td class="num">' + (rm == null ? '–' : nf(rm, 2)) + '</td><td class="num">' + (wr ? wr[0] + ' of ' + wr[1] : '–') + '</td><td>' + (st ? esc(st.txt) + (out ? ' · outside' : ' · inside') : big ? 'outside its 3- and 12-year average band' : (b312 ? 'inside its 3- and 12-year average band' : '–')) + '</td></tr>';
     });
-    tableWrap(body, h + '</tbody>', tcap('Summary: ' + c.t.toLowerCase()), 'Highest value ranks 1. Blinking values are outside their benchmark, or (where no benchmark exists) changed by 10% or more in a year.', { src: 'World Bank.' });
+    tableWrap(body, h + '</tbody>', tcap('Summary: ' + c.t.toLowerCase()), 'Highest value ranks 1. Blinking values are outside their international benchmark or, where none exists, outside the band between their 3-year and 12-year averages.', { src: 'World Bank.' });
   }
   if (iso === 'BGD' && c.bd) { TSRC = 'Bangladesh Bank, BBS.'; matrix(body, c.bd.filter(k => SER(k)), tcap('Bangladesh Bank and BBS: latest readings')); }
 }
@@ -2728,12 +2733,12 @@ function clForecast(body, c, keys, iso) {
 }
 function ctl2(host, html, onChange, sel) { const d = document.createElement('div'); d.className = 'controls'; d.innerHTML = html; host.append(d); const el = d.querySelector(sel); if (el) el.addEventListener('change', onChange); }
 function readOf(k, iso) { const s = seriesY(k, iso); if (s.length < 3) return null; const l = s[s.length - 1], p = s[s.length - 2], tr = trendOf(s.slice(-15)), F = s.length >= 8 ? holtFc(s.map(x => x[1]), 5) : null, st = stdOf(k), mean = s.reduce((a, b) => a + b[1], 0) / s.length;
-  return { k, l, p, tr, F, st, mean, out: st ? stdOut(st, l[1]) : false, big: !st && p && p[1] ? Math.abs(l[1] / p[1] - 1) >= 0.1 : false, first: s[0][0], n: s.length }; }
+  return { k, l, p, tr, F, st, mean, out: st ? stdOut(st, l[1]) : false, big: !st && !!(band312(s.map(z => z[1])) || {}).out, first: s[0][0], n: s.length }; }
 function clResults(body, c, keys, iso) {
   const items = keys.map(k => readOf(k, iso)).filter(Boolean).map(r => {
     const dir = r.tr ? (r.tr.p < 0.1 ? (r.tr.b > 0 ? 'a significant upward trend' : 'a significant downward trend') : 'no significant trend') : 'too short a history for a trend';
     const f = r.F ? ' The model projects ' + nf(r.F.out[4].f, 2) + ' by ' + (r.l[0] + 5) + ' (80% range ' + nf(r.F.out[4].lo80, 2) + ' to ' + nf(r.F.out[4].hi80, 2) + ').' : '';
-    return '<li><b>' + esc(indL(r.k)) + ':</b> ' + nf(r.l[1], 2) + ' in ' + r.l[0] + ' (' + esc(indU(r.k)) + '), against an average of ' + nf(r.mean, 2) + ' since ' + r.first + '. Over the last 15 years there is ' + dir + '.' + f + (r.out ? ' The latest value is outside its benchmark (' + esc(r.st.txt) + ').' : '') + (r.big ? ' It changed by 10% or more in a year.' : '') + '</li>';
+    return '<li><b>' + esc(indL(r.k)) + ':</b> ' + nf(r.l[1], 2) + ' in ' + r.l[0] + ' (' + esc(indU(r.k)) + '), against an average of ' + nf(r.mean, 2) + ' since ' + r.first + '. Over the last 15 years there is ' + dir + '.' + f + (r.out ? ' The latest value is outside its benchmark (' + esc(r.st.txt) + ').' : '') + (r.big ? ' It has moved outside the band between its 3-year and 12-year averages.' : '') + '</li>';
   });
   body.insertAdjacentHTML('beforeend', '<section class="bd-sec"><ul class="cl-list">' + items.join('') + '</ul><p class="src-line"><b>Source:</b> World Bank; model estimates.</p></section>');
 }
@@ -2789,10 +2794,10 @@ function clDecisions(body, c, keys, iso) {
   const items = keys.map(k => readOf(k, iso)).filter(Boolean).map(r => {
     const rising = r.F ? r.F.out[4].f > r.l[1] : r.tr && r.tr.b > 0;
     const sig = r.out ? 'Act' : r.big ? 'Watch' : 'Stable', cls = r.out ? 'bad' : r.big ? 'mid' : 'ok';
-    const why = r.out ? 'outside its benchmark (' + r.st.txt + '; ' + r.st.src + ')' : r.big ? 'changed by 10% or more in a year' : r.st ? 'inside its benchmark (' + r.st.txt + ')' : 'no large change and no benchmark breach';
+    const why = r.out ? 'outside its benchmark (' + r.st.txt + '; ' + r.st.src + ')' : r.big ? 'moved outside its 3- and 12-year average band' : r.st ? 'inside its benchmark (' + r.st.txt + ')' : 'no large change and no benchmark breach';
     return '<tr><th scope="row">' + esc(indL(r.k)) + '</th><td><span class="sig ' + cls + '">' + sig + '</span></td><td>' + esc(why) + '</td><td>' + (r.F ? (rising ? 'Expected to rise' : 'Expected to fall') + ' over five years' : '–') + '</td></tr>';
   });
-  tableWrap(body, '<thead><tr><th scope="col">Indicator</th><th scope="col">Signal</th><th scope="col">Why</th><th scope="col">Outlook</th></tr></thead><tbody>' + items.join('') + '</tbody>', tcap('Decision signals'), 'Signals summarise the evidence for attention: Act = outside an international benchmark; Watch = a change of 10% or more in a year; Stable = neither. They are for information, not policy or investment advice.', { src: 'World Bank; benchmarks as listed; model estimates.' });
+  tableWrap(body, '<thead><tr><th scope="col">Indicator</th><th scope="col">Signal</th><th scope="col">Why</th><th scope="col">Outlook</th></tr></thead><tbody>' + items.join('') + '</tbody>', tcap('Decision signals'), 'Signals summarise the evidence for attention: Act = outside an international benchmark; Watch = outside the band between the 3-year and 12-year averages; Stable = neither. They are for information, not policy or investment advice.', { src: 'World Bank; benchmarks as listed; model estimates.' });
 }
 function clDiscussion(body, c, keys, iso) {
   const items = [];
@@ -2806,7 +2811,7 @@ function clConclusions(body, c, keys, iso) {
   const R = keys.map(k => readOf(k, iso)).filter(Boolean), out = R.filter(r => r.out), big = R.filter(r => r.big), up = R.filter(r => r.F && r.F.out[4].f > r.l[1]);
   const parts = ['For ' + isoName(iso) + ', ' + R.length + ' indicators of ' + c.t.toLowerCase() + ' were analysed.'];
   parts.push(out.length ? out.map(r => indL(r.k)).join(', ') + (out.length > 1 ? ' are' : ' is') + ' outside the international benchmark and deserve' + (out.length > 1 ? '' : 's') + ' attention.' : 'No indicator is outside its international benchmark.');
-  if (big.length) parts.push(big.map(r => indL(r.k)).join(', ') + ' moved by 10% or more in the latest year.');
+  if (big.length) parts.push(big.map(r => indL(r.k)).join(', ') + ' moved outside the band between their 3-year and 12-year averages.');
   if (R.some(r => r.F)) parts.push(up.length + ' of ' + R.filter(r => r.F).length + ' forecasts point upward over the next five years.');
   parts.push('Treat the projections as indicative: validation shows how far they beat a naive forecast for each series.');
   body.insertAdjacentHTML('beforeend', '<div class="concl"><b>Conclusion.</b> ' + esc(parts.join(' ')) + '</div><p class="src-line"><b>Source:</b> World Bank; model estimates.</p>');
@@ -2935,6 +2940,137 @@ function checkSub(u) {
     renderAds();
   }).catch(() => { root.classList.remove('subscriber'); renderAds(); });
 }
+
+/* ================= DSGE guide, estimates, shocks and derivation ================= */
+const DSGE_GUIDE = `
+<h3>What a DSGE model is</h3>
+<p>A <b>dynamic stochastic general equilibrium</b> (DSGE) model describes the whole economy as the result of decisions by households, firms and the central bank, each pursuing its own goals and forming expectations about the future. <b>Dynamic</b>: today’s choices depend on expected future conditions. <b>Stochastic</b>: the economy is hit by random shocks. <b>General equilibrium</b>: the markets for goods, labour and money clear together, so every variable responds to every other.</p>
+<h3>Background</h3>
+<p>Real business cycle models (Kydland and Prescott, 1982) first built the cycle from optimising households and firms. The Lucas critique (Lucas, 1976) had argued that policy analysis needs relationships that stay stable when policy changes, which pushed economists towards models built on preferences and technology. The New Keynesian synthesis added sticky prices (Calvo, 1983) and interest-rate rules (Taylor, 1993); Clarida, Galí and Gertler (1999) set out the three-equation version used here. Medium-scale models (Christiano, Eichenbaum and Evans, 2005; Smets and Wouters, 2007) added wage stickiness, habits and investment costs and were estimated with Bayesian methods. After 2008, models added financial frictions (Bernanke, Gertler and Gilchrist, 1999; Gertler and Karadi, 2011), and more recently heterogeneous households (Kaplan, Moll and Violante, 2018).</p>
+<h3>How it works, step by step</h3>
+<ol class="cl-list"><li>Write each agent’s problem: households choose spending and work, firms set prices that adjust only occasionally, and the central bank follows a rule.</li><li>Derive the optimality conditions (the Euler equation for spending and the pricing equation for firms).</li><li>Find the steady state, where nothing changes over time.</li><li>Approximate the model around the steady state (log-linearisation), turning it into a few linear equations.</li><li>Solve for a unique stable path under rational expectations (Blanchard and Kahn, 1980); this needs the determinacy condition shown in the calibration table.</li><li>Choose the parameters: calibrate them from studies and averages, or estimate them from data (often by Bayesian methods with the Kalman filter).</li><li>Use the solved model: impulse responses, variance and historical decompositions, forecasts and policy scenarios.</li></ol>
+<h3>Compatibility: what the model needs</h3>
+<p>Quarterly macroeconomic series (output, inflation, the policy rate and, for larger models, wages, investment and the exchange rate), made stationary by removing trends; a reasonably stable policy regime; and, for a small open economy such as Bangladesh, open-economy blocks for the exchange rate, imports and remittances. The model complements statistical tools: ARIMA and SVAR models forecast well over short horizons, while the DSGE explains why variables move. The two are combined in DSGE-VAR models (Del Negro and Schorfheide, 2004) and in forecast pooling.</p>
+<div class="grid2"><div><h3>Merits</h3><ul class="cl-list"><li>Built on behaviour, so it is less exposed to the Lucas critique when policy changes.</li><li>Tells a complete, internally consistent story: every forecast has an explanation.</li><li>Separates structural shocks (demand, supply, policy) that statistical models mix together.</li><li>Allows counterfactuals: what if the policy rate had been higher?</li><li>Makes expectations explicit and can measure welfare.</li></ul></div><div><h3>Drawbacks</h3><ul class="cl-list"><li>Strong assumptions: rational expectations and a representative household.</li><li>Linear approximations miss crises, the zero lower bound and other non-linear events.</li><li>Small DSGE models often forecast worse than simple statistical models at short horizons.</li><li>Results depend on calibration or priors.</li><li>Omits the informal sector, administered prices and supply bottlenecks unless they are added.</li><li>Structural breaks such as pandemics weaken its fit.</li></ul></div></div>
+<div class="grid2"><div><h3>Where it works well</h3><ul class="cl-list"><li>Analysing monetary policy under an interest-rate or inflation-targeting framework.</li><li>Tracing how demand, supply and policy shocks spread through output, inflation and interest rates.</li><li>Scenario planning and medium-term projections with a story.</li><li>Teaching and policy communication.</li></ul></div><div><h3>Where it works poorly</h3><ul class="cl-list"><li>Financial crises, bank runs and debt defaults, unless financial frictions are modelled.</li><li>Large breaks such as lockdowns, or hyperinflation.</li><li>Fixed exchange rates or capital controls without open-economy blocks.</li><li>Economies with large informal sectors or administered prices, without extensions.</li><li>Very short or unreliable data, and short-horizon point forecasts.</li></ul></div></div>
+<h3>Practical examples</h3>
+<ul class="cl-list"><li><b>Policy-rate rise:</b> Bangladesh Bank raises the policy rate by 0.25 percentage point: the output gap and inflation fall gradually (the Monetary policy chart).</li><li><b>Import-price surge:</b> a Taka depreciation or an oil-price spike raises costs: inflation rises while output falls, creating a trade-off for policy (Imported inflation chart).</li><li><b>Election-year spending:</b> higher public spending lifts demand: output and inflation rise and rates follow (Government spending chart).</li><li><b>Remittance boom:</b> higher household income works like a demand shock, raising consumption and imports.</li><li><b>Banking stress:</b> wider lending spreads act like a risk-premium shock, lowering output and inflation.</li><li><b>Credible target change:</b> announcing a different inflation target moves inflation and rates together (Inflation target chart).</li></ul>`;
+const DSGE_APPS = [
+  ['Monetary policy (interest-rate surprise)', 'Policy rule', 'Gap ↓, inflation ↓, rate ↑', 'Three-equation model', 'Computed'],
+  ['Demand (preference, confidence)', 'IS curve', 'Gap ↑, inflation ↑, rate ↑', 'Three-equation model', 'Computed'],
+  ['Cost-push (mark-up, wages)', 'Phillips curve', 'Gap ↓, inflation ↑, rate ↑', 'Three-equation model', 'Computed'],
+  ['Productivity (technology)', 'Natural rate and potential output', 'Output ↑, gap ↓, inflation ↓', 'Three-equation model', 'Computed'],
+  ['Inflation-target change', 'Policy rule', 'Inflation ↑, gap ↑', 'Three-equation model', 'Computed'],
+  ['Government spending', 'IS curve (persistent)', 'Gap ↑, inflation ↑, rate ↑', 'Three-equation model; fiscal DSGE for multipliers and debt', 'Computed'],
+  ['Risk premium (financial conditions)', 'IS curve via the natural rate', 'Gap ↓, inflation ↓, rate ↓', 'Three-equation model; financial-friction DSGE for credit', 'Computed'],
+  ['Imported inflation (exchange rate, oil)', 'Phillips curve (persistent)', 'Inflation ↑, gap ↓, rate ↑', 'Small open-economy DSGE (Galí and Monacelli, 2005)', 'Computed (closed-economy approximation)'],
+  ['Foreign demand, export shocks', 'IS curve via net exports', 'Gap ↑, inflation ↑', 'Small open-economy DSGE', 'Model extension'],
+  ['Terms of trade', 'Prices and income', 'Depends on import share', 'Small open-economy DSGE', 'Model extension'],
+  ['Remittance inflows', 'Household income and demand', 'Gap ↑, imports ↑', 'Open-economy DSGE with remittances', 'Model extension'],
+  ['Credit supply, bank capital', 'Lending spreads', 'Investment ↓, gap ↓', 'Financial-friction DSGE (Gertler and Karadi, 2011)', 'Model extension'],
+  ['Tax changes', 'Labour supply and demand', 'Depends on the tax', 'Fiscal DSGE', 'Model extension'],
+  ['Wage mark-up, labour supply', 'Wage Phillips curve', 'Inflation ↑, employment ↓', 'Medium-scale DSGE (Smets and Wouters, 2007)', 'Model extension'],
+  ['Investment-specific technology', 'Capital accumulation', 'Investment ↑, output ↑', 'Medium-scale DSGE', 'Model extension'],
+  ['Housing demand', 'Collateral and property prices', 'Consumption ↑, credit ↑', 'Housing DSGE (Iacoviello, 2005)', 'Model extension'],
+  ['News about future productivity', 'Expectations', 'Spending ↑ today', 'Any DSGE with news shocks', 'Model extension'],
+  ['Inequality and transfers', 'Household heterogeneity', 'Distribution of spending', 'Heterogeneous-agent DSGE (HANK)', 'Model extension'],
+  ['Any combination', 'Sum of single responses (linear model)', 'Add the charts', 'Any linearised DSGE', '3 combinations computed'],
+];
+const DSGE_DERIV = `
+<ol class="deriv">
+<li><b>Households.</b> Maximise E<sub>0</sub> Σ<sub>t</sub> β<sup>t</sup> [ C<sub>t</sub><sup>1−σ</sup>/(1−σ) − N<sub>t</sub><sup>1+φ</sup>/(1+φ) ] subject to P<sub>t</sub>C<sub>t</sub> + Q<sub>t</sub>B<sub>t</sub> ≤ B<sub>t−1</sub> + W<sub>t</sub>N<sub>t</sub> + D<sub>t</sub>: utility from consumption C, disutility from work N, bonds B at price Q<sub>t</sub> = 1/(1 + i<sub>t</sub>).</li>
+<li><b>Optimality conditions.</b> Labour supply W<sub>t</sub>/P<sub>t</sub> = C<sub>t</sub><sup>σ</sup>N<sub>t</sub><sup>φ</sup>; Euler equation 1 = β(1 + i<sub>t</sub>) E<sub>t</sub>[(C<sub>t+1</sub>/C<sub>t</sub>)<sup>−σ</sup> P<sub>t</sub>/P<sub>t+1</sub>].</li>
+<li><b>Log-linearise the Euler equation</b> (lower-case letters are logs; ρ = −ln β): c<sub>t</sub> = E<sub>t</sub>c<sub>t+1</sub> − (1/σ)(i<sub>t</sub> − E<sub>t</sub>π<sub>t+1</sub> − ρ).</li>
+<li><b>Goods market clears</b> (y<sub>t</sub> = c<sub>t</sub>), and subtracting the same equation under flexible prices gives the <b>IS curve</b> in the output gap x<sub>t</sub> = y<sub>t</sub> − y<sup>n</sup><sub>t</sub>: x<sub>t</sub> = E<sub>t</sub>x<sub>t+1</sub> − (1/σ)(i<sub>t</sub> − E<sub>t</sub>π<sub>t+1</sub> − r<sup>n</sup><sub>t</sub>), with natural rate r<sup>n</sup><sub>t</sub> = ρ + σE<sub>t</sub>Δy<sup>n</sup><sub>t+1</sub>. A demand shock d<sub>t</sub> is added to the right-hand side.</li>
+<li><b>Firms.</b> Each firm produces Y<sub>t</sub>(j) = A<sub>t</sub>N<sub>t</sub>(j)<sup>1−α</sup> and faces demand with elasticity ε. Under Calvo pricing, each period a share 1 − θ of firms may reset prices.</li>
+<li><b>Optimal reset price</b>: p*<sub>t</sub> = μ + (1 − βθ) Σ<sub>k</sub> (βθ)<sup>k</sup> E<sub>t</sub>[mc<sub>t+k|t</sub> + p<sub>t+k</sub>], with mark-up μ = ln(ε/(ε − 1)): firms set prices on expected future costs, discounted by the chance the price is still in force.</li>
+<li><b>Price index</b>: π<sub>t</sub> = (1 − θ)(p*<sub>t</sub> − p<sub>t−1</sub>).</li>
+<li><b>Combine steps 6 and 7</b>: π<sub>t</sub> = βE<sub>t</sub>π<sub>t+1</sub> + λ m̂c<sub>t</sub>, with λ = [(1 − θ)(1 − βθ)/θ] · Θ and Θ = (1 − α)/(1 − α + αε).</li>
+<li><b>Marginal cost and the output gap</b>: m̂c<sub>t</sub> = (σ + (φ + α)/(1 − α)) x<sub>t</sub>, giving the <b>New Keynesian Phillips curve</b> π<sub>t</sub> = βE<sub>t</sub>π<sub>t+1</sub> + κx<sub>t</sub> + u<sub>t</sub>, with κ = λ(σ + (φ + α)/(1 − α)) and cost-push shock u<sub>t</sub>.</li>
+<li><b>Monetary policy</b>: i<sub>t</sub> = ρ + φ<sub>π</sub>π<sub>t</sub> + φ<sub>y</sub>x<sub>t</sub> + v<sub>t</sub> (Taylor rule with policy shock v<sub>t</sub>).</li>
+<li><b>Shocks</b> follow AR(1) processes: z<sub>t</sub> = ρ<sub>z</sub>z<sub>t−1</sub> + ε<sub>t</sub>, where ρ<sub>z</sub> is persistence.</li>
+<li><b>Determinacy</b>: a unique stable solution exists when κ(φ<sub>π</sub> − 1) + (1 − β)φ<sub>y</sub> &gt; 0 (Bullard and Mitra, 2002): policy must raise the real rate when inflation rises.</li>
+<li><b>Solution</b> by undetermined coefficients: guess x<sub>t</sub> = ψ<sub>x</sub>z<sub>t</sub> and π<sub>t</sub> = ψ<sub>π</sub>z<sub>t</sub>, substitute, and solve the two linear equations [σ(1 − ρ) + φ<sub>y</sub>]ψ<sub>x</sub> + (φ<sub>π</sub> − ρ)ψ<sub>π</sub> = −v + r + σd and −κψ<sub>x</sub> + (1 − βρ)ψ<sub>π</sub> = u. For a policy shock: ψ<sub>x</sub> = −(1 − βρ)Λ and ψ<sub>π</sub> = −κΛ, with Λ = 1/[(1 − βρ)(σ(1 − ρ) + φ<sub>y</sub>) + κ(φ<sub>π</sub> − ρ)]. With this calibration κ = 0.1717 and, for ρ = 0.5, Λ = 2.052: a 25 basis-point shock lowers the output gap by 0.26% and annualised inflation by 0.35 percentage point on impact, as in the chart. A productivity shock moves potential output by ψ<sub>ya</sub> = (1 + φ)/(σ(1 − α) + φ + α) = 1 and the natural rate by −σψ<sub>ya</sub>(1 − ρ<sub>a</sub>)a<sub>t</sub>.</li>
+</ol>`;
+function dsgeExtras(body, D) {
+  if (D.est && D.est.length) {
+    const s = sec(body, 'Estimated equations for Bangladesh', 'The calibration above comes from a textbook. Here the three equations are estimated on Bangladesh data, giving each coefficient a standard error, p-value and 95% and 99% confidence intervals.');
+    D.est.forEach(eq => {
+      let h = '<thead><tr><th scope="col">Coefficient</th><th scope="col" class="num">Estimate</th><th scope="col" class="num">Std. error</th><th scope="col" class="num">t</th><th scope="col" class="num">p-value</th><th scope="col">Significance</th><th scope="col" class="num">95% interval</th><th scope="col" class="num">99% interval</th></tr></thead><tbody>';
+      eq.rows.forEach(r => {
+        const sig = r.p < 0.01 ? 'Significant at 1%' : r.p < 0.05 ? 'Significant at 5%' : r.p < 0.1 ? 'Significant at 10%' : 'Not significant';
+        h += '<tr' + (r.derived ? ' class="foot"' : '') + '><th scope="row">' + esc(r.name) + '</th><td class="num big">' + nf(r.coef, 3) + stars(r.p) + '</td><td class="num">' + nf(r.se, 3) + '</td><td class="num">' + nf(r.t, 2) + '</td><td class="num">' + fp(r.p) + '</td><td>' + sig + '</td><td class="num">' + nf(r.ci95[0], 3) + ' to ' + nf(r.ci95[1], 3) + '</td><td class="num">' + nf(r.ci99[0], 3) + ' to ' + nf(r.ci99[1], 3) + '</td></tr>';
+      });
+      tableWrap(s, h + '</tbody>', tcap(eq.eq), 'N = ' + eq.n + ' quarters (' + esc(eq.sample) + '); R² = ' + nf(eq.r2, 3) + '. *** p < 0.01, ** p < 0.05, * p < 0.10. Rows shaded at the foot are long-run responses derived from the short-run coefficients (delta method).', { src: 'BBS and Bangladesh Bank; author’s estimates.' });
+    });
+    const find = (e, t) => (D.est[e].rows.find(r => r.name.indexOf(t) >= 0) || null);
+    const fpi = find(0, 'Long-run response to inflation'), fy = find(0, 'Long-run response to the output gap'), sm = find(0, 'smoothing'), kap = find(1, 'κ'), per = find(1, 'persistence'), rr = find(2, 'real interest');
+    const ci = r => nf(r.ci95[0], 2) + ' to ' + nf(r.ci95[1], 2), pv = r => (r.p < 0.001 ? 'p < 0.001' : 'p = ' + nf(r.p, 3));
+    const items = [];
+    if (fpi) items.push('<b>Policy reacts to inflation.</b> The long-run response of the call-money rate to inflation is ' + nf(fpi.coef, 2) + ' (' + pv(fpi) + '; 95% interval ' + ci(fpi) + '). ' + (fpi.ci95[0] > 1 ? 'Even the lower bound exceeds 1, so policy satisfies the Taylor principle: real rates rise when inflation rises.' : fpi.coef > 1 ? 'The estimate exceeds 1, consistent with the Taylor principle, but the 95% interval reaches down to ' + nf(fpi.ci95[0], 2) + ', so this holds only with some uncertainty.' : 'The estimate is below 1, so real rates have not risen with inflation.') + ' The calibration assumes 1.5.');
+    if (fy) items.push('<b>Little reaction to the output gap.</b> The long-run response is ' + nf(fy.coef, 2) + ' (' + pv(fy) + '), ' + (fy.p < 0.1 ? 'statistically significant.' : 'not statistically different from zero.'));
+    if (sm) items.push('<b>Gradual policy.</b> The smoothing coefficient is ' + nf(sm.coef, 2) + ': about ' + Math.round((1 - sm.coef) * 100) + '% of the gap between the actual and desired rate closes each quarter.');
+    if (per && kap) items.push('<b>A flat Phillips curve.</b> Inflation is highly persistent (' + nf(per.coef, 2) + ') and the output-gap slope is ' + nf(kap.coef, 3) + ' (' + pv(kap) + '). ' + (kap.p < 0.1 ? 'Domestic slack moves inflation.' : 'Domestic slack has had little measurable effect, so inflation in Bangladesh has been driven more by costs, food and import prices and by expectations than by the output gap.'));
+    if (rr) items.push('<b>Interest rates and demand.</b> A higher real interest rate is associated with a ' + (rr.coef < 0 ? 'lower' : 'higher') + ' output gap (' + nf(rr.coef, 2) + ', ' + pv(rr) + '; 95% interval ' + ci(rr) + '). ' + (rr.p < 0.05 ? 'The effect is significant at 5%.' : 'The sign is as theory predicts, but the effect is not significant at 5%, because the interval includes zero.'));
+    items.push('<b>Caveats.</b> ' + esc((D.est_meta || {}).data || '') + '. The sample is short, the output gap is a proxy, and least squares with a lagged dependent variable can be biased; treat the numbers as indicative. ' + esc((D.est_meta || {}).method || '') + '.');
+    s.insertAdjacentHTML('beforeend', '<h3>Interpretation</h3><ul class="cl-list">' + items.map(x => '<li>' + x + '</li>').join('') + '</ul>');
+  }
+  const g2 = sec(body, 'Guide to DSGE models', 'Definition, background, how the model works, what it needs, merits and drawbacks, where it works and where not, with practical examples.');
+  g2.insertAdjacentHTML('beforeend', '<div class="dsge-guide">' + DSGE_GUIDE + '</div>');
+  const a = sec(body, 'Every shock, combination and application', 'The charts above compute eleven scenarios with the three-equation model. Other shocks need extended models; this table lists them, where they enter and what they do.');
+  let t = '<thead><tr><th scope="col">Shock or application</th><th scope="col">Where it enters</th><th scope="col">Typical effect</th><th scope="col">Model needed</th><th scope="col">On this site</th></tr></thead><tbody>';
+  DSGE_APPS.forEach(r => { t += '<tr><th scope="row">' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td><td>' + esc(r[2]) + '</td><td>' + esc(r[3]) + '</td><td>' + esc(r[4]) + '</td></tr>'; });
+  tableWrap(a, t + '</tbody>', tcap('Shocks, combinations and model families'), 'Because the solved model is linear, the response to any combination of shocks is the sum of the single-shock responses.', { src: 'Galí (2015); studies cited.' });
+  const d = sec(body, 'Equations and derivation, step by step', 'How the three equations follow from household and firm behaviour (Galí, 2015, chapter 3).');
+  d.insertAdjacentHTML('beforeend', '<div class="formula deriv-box">' + DSGE_DERIV + '</div>');
+}
+function longInfl(host) {
+  const s = wser('inflation', 'BGD'), P = PK('infl'), e = BD.ensemble.path, st = BD.ensemble.start;
+  if (!s.length || !P || !e || !st) return;
+  const kS = (+st.slice(0, 4)) * 12 + (+st.slice(5, 7)) - 1, months = {};
+  for (let k = P.k0; k < kS; k++) { const v = P.v[k - P.k0]; if (v != null) (months[Math.floor(k / 12)] = months[Math.floor(k / 12)] || []).push(v); }
+  e.forEach((x, i) => { const k = kS + i; (months[Math.floor(k / 12)] = months[Math.floor(k / 12)] || []).push(x.mean); });
+  const lastWB = s[s.length - 1][0], proj = Object.keys(months).map(Number).filter(y => y > lastWB && months[y].length === 12);
+  const y1 = Math.max(lastWB, ...proj), labels = [];
+  for (let y = s[0][0]; y <= y1; y++) labels.push(String(y));
+  const m = new Map(s), avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const act = labels.map(l => (m.has(+l) ? m.get(+l) : null));
+  const pr = labels.map(l => (+l === lastWB ? m.get(lastWB) : proj.includes(+l) ? avg(months[+l]) : null));
+  figure(host, { prefix: labState.prefix, wide: true, title: 'Inflation since ' + s[0][0] + ', with the projection', sub: '% a year; World Bank annual series from its first year, with the monthly ensemble projection averaged by year', h: 340,
+    notes: 'The World Bank series for Bangladesh starts in ' + s[0][0] + '; there is no official consumer-price inflation figure for earlier years. Projected years average actual months and the monthly ensemble forecast.',
+    source: 'World Bank; BBS via Bangladesh Bank; model estimates.',
+    render: TH => tsOption(TH, labels, [S('Inflation (World Bank)', act, { w: 2.4, std: 'inflation', end: true, dec: 2 }), S('Projection (annual average)', pr, { dash: true, w: 2.4, color: TH.signal || '#C9A24B', end: true, dec: 2 })], { y1: '% a year', dec: 2, events: false }) });
+}
+function worldLocator(host, iso) {
+  try {
+    const G = RAW.geo && RAW.geo.dots, e = EMAPB()[iso];
+    if (!G || !G.d || !G.iso || !host || host.querySelector('.geo-world')) return;
+    const k0 = G.iso.indexOf(iso), name = e ? e[1] : iso, s = G.s, VW = +RAW.geo.w || 1000, VH = +RAW.geo.h || 436;
+    const box = document.createElement('div');
+    box.className = 'geo-world';
+    box.innerHTML = '<p class="geo-world-t">Where ' + esc(name) + ' is in the world</p><canvas role="img" aria-label="World map with ' + esc(name) + ' highlighted"></canvas><p class="src-line"><b>Source:</b> Natural Earth.</p>';
+    host.append(box);
+    const cv = box.querySelector('canvas'), W = Math.max(240, (box.clientWidth || 360) - 20), sc = W / VW, H = VH * sc, dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = Math.round(H) + 'px';
+    const c = cv.getContext('2d'); c.scale(dpr, dpr);
+    const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#8a96a3';
+    let sx = 0, sy = 0, n = 0;
+    c.fillStyle = muted; c.globalAlpha = 0.35;
+    for (let q = 0; q < G.d.length; q += 3) { if (G.d[q + 2] === k0) continue; c.beginPath(); c.arc((s / 2 + G.d[q] * s) * sc, (s / 2 + G.d[q + 1] * s) * sc, s * 0.37 * sc, 0, 6.2832); c.fill(); }
+    c.fillStyle = '#E5484D'; c.globalAlpha = 1;
+    for (let q = 0; q < G.d.length; q += 3) { if (G.d[q + 2] !== k0) continue; const x = (s / 2 + G.d[q] * s) * sc, y = (s / 2 + G.d[q + 1] * s) * sc; c.beginPath(); c.arc(x, y, s * 0.5 * sc, 0, 6.2832); c.fill(); sx += x; sy += y; n++; }
+    if (n) { c.strokeStyle = '#E5484D'; c.lineWidth = 2; c.beginPath(); c.arc(sx / n, sy / n, Math.max(10, Math.sqrt(n) * s * sc * 1.2), 0, 6.2832); c.stroke(); }
+    else box.insertAdjacentHTML('beforeend', '<p class="note">' + esc(name) + ' is too small to show at this map’s scale.</p>');
+  } catch (err) { /* the locator map is optional */ }
+}
+function band312(vals) {
+  const v = (vals || []).filter(x => x != null && isFinite(x));
+  if (v.length < 13) return null;
+  const last = v[v.length - 1], prev = v.slice(0, -1), mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const a3 = mean(prev.slice(-3)), a12 = mean(prev.slice(-12)), lo = Math.min(a3, a12), hi = Math.max(a3, a12), tol = 1e-9 + 0.002 * Math.abs(hi);
+  return { out: last > hi + tol || last < lo - tol, a3: a3, a12: a12, last: last };
+}
+const bandMsg = (b, unit) => 'Outside the band between its 3-period average (' + nf(b.a3, 2) + ') and 12-period average (' + nf(b.a12, 2) + ')' + (unit ? ' ' + unit : '') + '; values blink when they leave this band and no official benchmark applies';
 
 return { initCL, routeCL, initSecurity, initPlans, renderAds, initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo, initLearnX, initFAQ };
 })();
@@ -3152,3 +3288,64 @@ function declutterAll(opt) {
     els.forEach(e => { e.style.opacity = dim ? '0.4' : ''; });
   }, 650);
 })();
+
+/* ================= Data labels: vertical, in each line's colour, as dense as the chart allows ================= */
+function labelPlan(opt, inst, fromZoom) {
+  try {
+    if (!opt || !Array.isArray(opt.series)) return opt;
+    const xa = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
+    if (!xa || xa.type === 'value' || !Array.isArray(xa.data) || xa.data.length < 2) return opt;
+    const cats = xa.data.map(c => (c && typeof c === 'object' ? c.value : c));
+    const idx = [];
+    opt.series.forEach((s, i) => { if (s && s.type === 'line' && Array.isArray(s.data) && !s.stack && !/range|band/i.test(s.name || '') && !s.data.some(d => Array.isArray(d))) idx.push(i); });
+    if (!idx.length) return opt;
+    if (inst && !fromZoom) { inst.__lpRaw = { xAxis: xa, series: opt.series.map(s => (s && Array.isArray(s.data) ? Object.assign({}, s, { data: s.data.slice() }) : s)), color: opt.color }; inst.__lpWin = null; }
+    const W = (inst && inst.getWidth && inst.getWidth()) || 600, n = cats.length;
+    let a = 0, b = n - 1;
+    if (inst && inst.__lpWin) { a = inst.__lpWin[0]; b = inst.__lpWin[1]; }
+    else { const dz = (Array.isArray(opt.dataZoom) ? opt.dataZoom : opt.dataZoom ? [opt.dataZoom] : [])[0]; if (dz) { if (dz.start != null) a = Math.floor(dz.start / 100 * (n - 1)); if (dz.end != null) b = Math.ceil(dz.end / 100 * (n - 1)); } }
+    const many = idx.length > 2, vis = Math.max(1, b - a + 1), slots = Math.max(6, Math.floor(W / (many ? 13 : 15))), per = Math.max(2, Math.floor(slots / (many ? idx.length : 1)));
+    const c0 = String(cats[0]), kind = /^\d{4}-\d{2}$/.test(c0) ? 'M' : /^\d{4}-Q\d$/.test(c0) ? 'Q' : 'A';
+    const steps = kind === 'M' ? (many ? [3, 12, 24, 60, 120] : [1, 3, 6, 12, 24, 60, 120]) : kind === 'Q' ? (many ? [4, 8, 20, 40] : [1, 2, 4, 8, 20, 40]) : [1, 2, 5, 10, 20, 50];
+    const step = steps.find(k => vis / k <= per) || steps[steps.length - 1];
+    const ok = i => {
+      if (step === 1) return true;
+      const c = String(cats[i]);
+      if (kind === 'M') { const yy = +c.slice(0, 4), mm = +c.slice(5, 7); return step < 12 ? mm % step === 0 : mm === 12 && yy % (step / 12) === 0; }
+      if (kind === 'Q') { const yy = +c.slice(0, 4), qq = +c.slice(-1); return step < 4 ? qq % step === 0 : qq === 4 && yy % (step / 4) === 0; }
+      const y = parseInt(c.replace(/\D/g, ''), 10); return isFinite(y) ? y % step === 0 : i % step === 0;
+    };
+    const pal = Array.isArray(opt.color) ? opt.color : (inst && inst.__lpRaw && inst.__lpRaw.color) || [];
+    idx.forEach((si, j) => {
+      const s = opt.series[si], raw = inst && inst.__lpRaw && fromZoom ? inst.__lpRaw.series[si].data : s.data;
+      const ls = s.lineStyle || {}, it = s.itemStyle || {};
+      const col = (typeof ls.color === 'string' && ls.color) || (typeof it.color === 'string' && it.color) || (typeof s.color === 'string' && s.color) || pal[si % (pal.length || 1)] || 'inherit';
+      let last = -1;
+      raw.forEach((d, i) => { const v = d && typeof d === 'object' ? d.value : d; if (v != null && v !== '' && isFinite(v)) last = i; });
+      const marks = new Set();
+      s.data = raw.map((d, i) => {
+        const obj = d && typeof d === 'object', v = obj ? d.value : d;
+        if (obj && d.label && d.label.show) return d;
+        if (v == null || v === '' || !isFinite(v) || i < a || i > b || i === last || !ok(i)) return d;
+        marks.add(i);
+        return Object.assign({}, obj ? d : {}, { value: v, label: { show: true, rotate: 90, position: 'top', align: 'left', verticalAlign: 'middle', distance: 5, color: col, fontSize: 9.5, fontWeight: 650, formatter: p => Number(p.value).toFixed(2) } });
+      });
+      s.labelLayout = { hideOverlap: true };
+      s.lineStyle = Object.assign({}, ls, { width: Math.max(ls.width || 2, 2.2), cap: 'round', join: 'round' });
+      if (!s.symbol || s.symbol === 'none') { s.symbol = 'circle'; s.showSymbol = true; s.symbolSize = (v, p) => (marks.has(p.dataIndex) ? 4.5 : 0); }
+    });
+    if (inst && !inst.__lpOn) {
+      inst.__lpOn = true; let tm = null;
+      inst.on('datazoom', () => { clearTimeout(tm); tm = setTimeout(() => {
+        try {
+          const o = inst.getOption(), z = (o.dataZoom || [])[0], R = inst.__lpRaw; if (!z || !R) return;
+          const N = (Array.isArray(R.xAxis.data) ? R.xAxis.data.length : 0); if (!N) return;
+          inst.__lpWin = [Math.floor((z.start || 0) / 100 * (N - 1)), Math.ceil((z.end == null ? 100 : z.end) / 100 * (N - 1))];
+          const fresh = labelPlan({ xAxis: R.xAxis, series: R.series.map(s => (s && Array.isArray(s.data) ? Object.assign({}, s, { data: s.data.slice() }) : s)), color: R.color }, inst, true);
+          inst.setOption({ series: fresh.series.map(s => (s && s.type === 'line' && Array.isArray(s.data) ? { data: s.data, symbolSize: s.symbolSize } : {})) });
+        } catch (e) { /* keep labels as they are */ }
+      }, 160); });
+    }
+  } catch (e) { /* labels are optional */ }
+  return opt;
+}

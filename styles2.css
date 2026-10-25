@@ -634,3 +634,16 @@ html[data-theme="dark"] .cell{box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
 .onpage{flex-wrap:wrap!important;overflow:visible!important}
 
 .mon-links{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin:4px 0 12px}.mon-links .note{flex-basis:100%;margin:2px 0 0}
+
+/* ================= DSGE guide, derivation and world locator ================= */
+.dsge-guide h3,.bd-sec h3{margin:18px 0 6px;font-size:17px}
+.dsge-guide p{line-height:1.7;margin:6px 0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 24px}
+.deriv{padding-left:22px}.deriv li{margin:10px 0;line-height:1.75}
+.deriv-box{padding:14px 18px}
+.geo-world{margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--paper)}
+.geo-world-t{margin:0 0 6px;font-weight:700;font-size:13.5px;color:var(--ink)}
+.geo-world canvas{display:block;max-width:100%}
+
+/* phones: long row names wrap instead of running under the value pills */
+@media (max-width: 899px) { .view table th[scope="row"] { white-space: normal !important; min-width: 150px; max-width: 220px; overflow-wrap: anywhere; } }

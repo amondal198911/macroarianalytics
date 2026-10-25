@@ -423,7 +423,7 @@ function applyChart(node, rec) {
     if (rec.onInit) rec.onInit(rec.inst);
     rec.reset = true;
   }
-  rec.inst.setOption(declutterAll(wmark(opt)), rec.merge && !rec.reset ? { notMerge: false } : true);
+  rec.inst.setOption(labelPlan(declutterAll(wmark(opt)), rec.inst), rec.merge && !rec.reset ? { notMerge: false } : true);
   rec.reset = false;
 }
 function disposeIn(root) {
