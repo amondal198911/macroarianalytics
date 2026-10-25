@@ -684,3 +684,57 @@ html[data-theme="dark"] .cell{box-shadow:inset 0 0 0 1px rgba(255,255,255,.1)}
 .eqn .tag{flex:none;color:var(--muted);font-size:13px;text-align:right;max-width:40%}
 /* ================= Owner-only links ================= */
 html:not(.owner) .owner-only{display:none!important}
+
+/* ================= Bangladesh map: legend, economic facts, owner notice ================= */
+.bd-legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin:8px 0 4px;font-size:13px}
+.bd-legend span{display:inline-flex;align-items:center;gap:6px}.bd-legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.bd-legend small{color:var(--muted)}
+.bdfacts2 .bdf small{display:block;font-size:11px;color:var(--muted)}
+.owner-note{margin:8px 0 12px;padding:10px 14px;border-radius:10px;border:1px solid #C9A24B;background:rgba(201,162,75,.12);font-size:14px}
+
+/* ---------- v3.8 ---------- */
+.figs{grid-template-columns:minmax(0,1fr);grid-auto-flow:row dense}
+@media (min-width:980px){.figs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.xpick{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:2px 0 6px;font-size:.78rem}
+.xpick-l{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-weight:600}
+.xpick select{font:inherit;max-width:min(100%,280px);padding:3px 6px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--ink)}
+.xchip{font:inherit;font-size:.74rem;border:1px dashed var(--line);border-radius:999px;padding:2px 9px;background:transparent;color:var(--ink);cursor:pointer}
+.ol-sum{margin:12px 0}.ol-list{margin:4px 0 0;padding-left:1.2em}.ol-list li{margin:4px 0}
+.ol-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin:12px 0}
+@media (min-width:760px){.ol-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ol-grid>div{border:1px solid var(--line);border-radius:12px;padding:10px 14px}.ol-grid h3{margin:0 0 6px;font-size:1rem}
+.md-toc{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 16px}
+.md-toc button{font:inherit;font-size:.8rem;border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:transparent;color:var(--ink);cursor:pointer}
+.md-card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:0 0 14px;scroll-margin-top:90px}
+.md-card h3{margin:0 0 8px}.md-eq{overflow-x:auto;margin:8px 0}
+.md-vars{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;margin:6px 0 10px}.md-vars dt{font-weight:600}.md-vars dd{margin:0}
+.md-refs{font-size:.86rem;padding-left:1.3em}.md-refs li{margin:4px 0}.md-refs a{overflow-wrap:anywhere}
+.wx-groups{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin:6px 0 10px}
+@media (min-width:760px){.wx-groups{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.wx-groups details,.wx-vars{border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+.wx-groups summary,.wx-vars summary{cursor:pointer;font-weight:600}
+.wx-chk{display:inline-flex;align-items:center;gap:4px;margin:3px 12px 3px 0;font-size:.84rem}.wx-chk small{color:var(--muted)}
+.wx-ctl{flex-wrap:wrap;gap:10px}.wx-ctl select{max-width:min(100%,320px)}
+.wx-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
+.wx-tabs button{font:inherit;font-size:.85rem;border:1px solid var(--line);border-radius:999px;padding:5px 12px;background:transparent;color:var(--ink);cursor:pointer}
+.wx-tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+.wx-map canvas{display:block;max-width:100%}.wx-cap{margin:4px 0 8px}
+.wx-leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem;margin:8px 0}.wx-leg i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
+.wx-cm td{white-space:nowrap}.wx-cm small{color:var(--muted);font-size:.7em}
+.wx-guide ol,.wx-guide ul{padding-left:1.3em}.wx-guide li{margin:5px 0}
+
+/* v3.8: no blank spaces, nothing wider than a phone */
+.charts{grid-template-columns:minmax(0,1fr)}
+@media (min-width:980px){.charts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.charts>.wide1{grid-column:1/-1}
+.res-grid{display:flex;flex-wrap:wrap}.res-grid>*{flex:1 1 230px;min-width:0}
+.xpick-l{max-width:100%;min-width:0}.xpick select{width:min(250px,60vw);max-width:100%}
+.wx-ctl label{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;max-width:100%;min-width:0}.wx-ctl select{width:min(320px,82vw)}
+.wx .controls select{max-width:82vw}
+@media (max-width:899px),(pointer:coarse){
+.live-top{grid-template-columns:minmax(0,1fr)}.geo-grid{grid-template-columns:minmax(0,1fr)}
+}
+.live-top>*,.geo-grid>*{min-width:0}
+#bd-mapbox canvas,#bd-mapbox svg,#live-spot canvas,#live-spot svg,.geo-grid canvas,.geo-grid svg,.geo-world canvas{max-width:100%}
+#bd-mapbox canvas,#live-spot canvas,.geo-grid canvas,.geo-world canvas{height:auto!important}
+.view select,.view input[type=text],.view input[type=search]{max-width:86vw}.controls .field{max-width:100%;min-width:0}

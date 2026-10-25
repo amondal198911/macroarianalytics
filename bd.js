@@ -238,6 +238,7 @@ function figure(host, o) {
     '<div class="chart" style="height:' + (o.h || 300) + 'px" role="img" aria-label="' + esc(o.title + (o.sub ? '. ' + o.sub : '')) + '"></div>' +
     '<div class="fig-foot">' + (o.notes ? '<p><i>Notes:</i> ' + esc(o.notes) + '</p>' : '') + (o.source ? '<p><i>Source:</i> ' + esc(o.source) + '</p>' : '') + '<div class="fig-act"></div></div>';
   host.append(f);
+  if (host.classList && host.classList.contains('figs')) fillReg(host, o, f);
   const node = f.querySelector('.chart');
   let nat = o.ts;
   if (nat === undefined) {
@@ -399,8 +400,15 @@ function renderBD() {
   const s = sec(body, c.name, c.lede);
   matrix(s, c.keys, tcap('Key indicators: ' + c.name.toLowerCase()));
   ({ prices: bdPrices, real: bdReal, money: bdMoney, rates: bdRates, ext: bdExt, fiscal: bdFiscal, cap: bdCap })[c.id](body);
+  sectorOutlook(body, c);
+}
+function ownerStatusNote(body) {
+  if (!document.documentElement.classList.contains('owner')) return;
+  const P = PK('infl'); let last = ''; if (P) for (let j = P.v.length - 1; j >= 0; j--) if (P.v[j] != null) { last = bdLab('M', P.k0 + j); break; }
+  body.insertAdjacentHTML('afterbegin', '<div class="owner-note"><b>Owner notice:</b> the newest Bangladesh data are for ' + esc(last) + ' (Bangladesh Bank, Monthly Economic Trends). Figures for later months are not yet published. <a href="/owner/#status">Data status and download links →</a></div>');
 }
 function bdGlance(body) {
+  ownerStatusNote(body);
   const s1 = sec(body, 'Charts', 'The inflation outlook beside a map of Bangladesh.');
   const top = document.createElement('div');
   top.className = 'live-top';
@@ -704,7 +712,7 @@ function renderLab(keep) {
   FIGN = 0; TABN = 0; labState.prefix = 'L';
   TSRC = labState.tab === 'world' ? 'World Bank; model estimates.' : labState.tab === 'dsge' ? 'Model simulation.' : 'Bangladesh Bank, BBS; model estimates.';
   $$('#lab-tabs [data-lab]').forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-lab') === labState.tab ? 'true' : 'false'));
-  ({ overview: labOverview, data: labData, arima: labArima, var: labVar, robust: labRobust, dsge: labDsge, world: labWorld, refs: labRefs })[labState.tab in { overview: 1, data: 1, arima: 1, var: 1, robust: 1, dsge: 1, world: 1, refs: 1 } ? labState.tab : 'overview'](body);
+  ({ overview: labOverview, data: labData, arima: labArima, var: labVar, robust: labRobust, dsge: labDsge, world: b => { worldExplorer(b); labWorld(b); }, refs: b => { modelDocs(b); labRefs(b); } })[labState.tab in { overview: 1, data: 1, arima: 1, var: 1, robust: 1, dsge: 1, world: 1, refs: 1 } ? labState.tab : 'overview'](body);
   if (keep) window.scrollTo(0, y);
 }
 function sel(key, opts, cur, label) { return '<label class="field"><span>' + esc(label) + '</span><select data-lset="' + key + '">' + opts.map(o => '<option value="' + o[0] + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('') + '</select></label>'; }
@@ -1409,7 +1417,7 @@ function renderGeo(iso) {
   profileTable($('#c-geo-prof'), iso, null);
   loadMaps().then(done).catch(() => done(null));
 }
-const DIVC = ['#7BC8A4', '#F2C14E', '#F78154', '#5FAD56', '#4D9DE0', '#E15554', '#B07BAC', '#3BB273'];
+const DIVC = ['#E4572E', '#17A398', '#F2B134', '#2E86AB', '#76B041', '#9B5DE5', '#E8578B', '#4C6EF5'];
 function bdMapSVG(B) {
   const W = 520, H = 600, P = projFor([87.85, 20.55, 92.75, 26.75], W, H, 10);
   let sv = '<svg viewBox="0 0 ' + W + ' ' + H + '" class="bdmap" role="img" aria-label="Map of Bangladesh with its divisions, main rivers and cities">';
@@ -1425,6 +1433,23 @@ function bdMapSVG(B) {
   sv += '<text class="bdsea-l" x="' + bay[0].toFixed(1) + '" y="' + bay[1].toFixed(1) + '">Bay of Bengal</text><text class="bdnb-l" x="' + ind[0].toFixed(1) + '" y="' + ind[1].toFixed(1) + '">INDIA</text><text class="bdnb-l" x="' + mya[0].toFixed(1) + '" y="' + mya[1].toFixed(1) + '">MYANMAR</text>';
   return sv + '</svg>';
 }
+function bdMapExtra(B) {
+  const OFFN = { Barisal: 'Barishal', Chittagong: 'Chattogram' };
+  let areas = []; try { areas = B.div.map(d => ({ n: OFFN[d.n] || d.n, a: divArea(d.r) })); } catch (e) { areas = []; }
+  const tot = areas.reduce((s, x) => s + x.a, 0);
+  const leg = areas.length ? '<div class="bd-legend">' + areas.map((x, i) => '<span><i style="background:' + DIVC[i % DIVC.length] + '"></i>' + esc(x.n) + ' <small>' + nf(x.a / 1000, 1) + 'k km² · ' + nf(x.a / tot * 100, 1) + '%</small></span>').join('') + '</div>' : '';
+  const L = k => lastOfS(k, 'BGD'), f = (lab, v, u) => (v ? '<div class="bdf"><span>' + lab + '</span><b>' + v + '</b>' + (u ? '<small>' + u + '</small>' : '') + '</div>' : '');
+  const gdp = L('gdp_usd'), gpc = L('gdp_pc'), gr = L('gdp_growth'), pv = L('poverty'), lit = L('literacy') || L('lit'), el = L('electricity') || L('elec');
+  const inf = PK('infl'); let iv = null, ip = '';
+  if (inf) { for (let j = inf.v.length - 1; j >= 0; j--) if (inf.v[j] != null) { iv = inf.v[j]; ip = bdLab('M', inf.k0 + j); break; } }
+  const econ = f('GDP', gdp ? 'US$ ' + nf(gdp[1] > 1e6 ? gdp[1] / 1e9 : gdp[1], 1) + ' bn' : '', gdp ? String(gdp[0]) : '') + f('GDP per person', gpc ? 'US$ ' + nf(gpc[1], 0) : '', gpc ? String(gpc[0]) : '') + f('Real growth', gr ? nf(gr[1], 2) + '%' : '', gr ? String(gr[0]) : '') + f('Inflation', iv != null ? nf(iv, 2) + '%' : '', ip) + f('Poverty ($3/day)', pv ? nf(pv[1], 2) + '%' : '', pv ? String(pv[0]) : '');
+  return leg + (econ ? '<div class="bdfacts bdfacts2">' + econ + '</div>' : '');
+}
+function divArea(rings) {
+  const R = 6371.0088, rad = Math.PI / 180; let tot = 0;
+  (rings || []).forEach((ring, ri) => { let s = 0; for (let i = 0; i < ring.length; i++) { const a = ring[i], b = ring[(i + 1) % ring.length]; s += (b[0] - a[0]) * rad * (2 + Math.sin(a[1] * rad) + Math.sin(b[1] * rad)); } tot += Math.abs(s * R * R / 2); });  /* every outline adds: islands are separate outlines, not holes */
+  return Math.abs(tot);
+}
 function bdMapBox(host) {
   const B = window.MM_BDMAP;
   if (!host || !B) return;
@@ -1432,7 +1457,7 @@ function bdMapBox(host) {
   const fact = (k, v) => '<div class="bdf"><span>' + k + '</span><b>' + v + '</b></div>';
   host.innerHTML = '<div class="mapbox-head"><h3>Bangladesh</h3><a class="mapbox-link" href="#country-BGD">Geography and people →</a></div>' + bdMapSVG(B) +
     '<div class="bdfacts">' + fact('Capital', 'Dhaka') + (pop ? fact('Population', nf(pop[1], 2) + ' million') : '') + (P.area ? fact('Area', nf(P.area[1], 0) + ' km²') : '') + (P.density ? fact('Density', nf(P.density[1], 2) + ' per km²') : '') + (P.urban ? fact('Urban', nf(P.urban[1], 2) + '%') : '') + (P.life ? fact('Life expectancy', nf(P.life[1], 2) + ' years') : '') + '</div>' +
-    '<p class="mx-note">' + esc(B.note) + ' Tap a division for its name.</p><p class="src-line"><b>Source:</b> World Bank; map: Natural Earth.</p>';
+    bdMapExtra(B) + '<p class="mx-note">' + esc(B.note) + ' Tap a division for its name. Division areas are the land area of the Natural Earth outlines, which leave out wide rivers, estuaries and coastal waters; official areas are larger (Bangladesh: about 148,000 km²).</p><p class="src-line"><b>Source:</b> World Bank; BBS via Bangladesh Bank; map: Natural Earth.</p>';
 }
 
 /* ---------- Results and conclusions (written from the model results) ---------- */
@@ -3224,7 +3249,595 @@ function bayesBlock(body, D) {
   s.insertAdjacentHTML('beforeend', '<h3>Interpretation</h3><ul class="cl-list">' + it.map(x => '<li>' + x + '</li>').join('') + '</ul>');
 }
 
-return { initCL, routeCL, initSecurity, worldGrowth2, initPlans, renderAds, initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo, initLearnX, initFAQ };
+/* ======================= v3.8 additions ======================= */
+/* (a) "+ Add a series" on every time chart. Hooked at the single drawing point (app.js -> BDX.extraPlan). */
+var XPAL = ['#E4572E', '#17A398', '#9B5DE5', '#C9A227', '#E8578B', '#4C6EF5'];
+var XFN = { M: 'monthly', Q: 'quarterly', FY: 'fiscal-year', Y: 'calendar-year' };
+function xFmt(l) { l = String(l); return /^\d{4}-\d{2}$/.test(l) ? 'M' : /^\d{4}-Q[1-4]$/.test(l) ? 'Q' : /^FY\d{4}$/.test(l) ? 'FY' : /^\d{4}$/.test(l) ? 'Y' : null; }
+function xIso(dom) {
+  if (dom.closest('#c-sections') && typeof curCountry !== 'undefined' && curCountry) return curCountry;
+  const v = dom.closest('.view'), id = v ? v.id : '';
+  if (id === 'v-bangladesh' || id === 'v-lab') return 'BGD';
+  return RAW.s.gdp_growth && RAW.s.gdp_growth.WLD ? 'WLD' : 'BGD';
+}
+function xName(key, iso) {
+  const p = key.indexOf(':'), src = key.slice(0, p), k = key.slice(p + 1);
+  if (src === 'bd') { const m = SER(k); return m ? m.label + (m.sub ? ' (' + m.sub + ')' : '') : k; }
+  const e = EMAPB()[iso]; return indL(k) + (e ? ', ' + e[1] : '');
+}
+function xGroups(fmt) {
+  const out = [];
+  const bd = Object.keys((BD && BD.series) || {}).filter(k => { const p = PK(k); return p && Array.isArray(p.v) && p.v.length > 3 && xFmt(bdLab(p.f, p.k0)) === fmt; });
+  if (bd.length) out.push(['Bangladesh, ' + XFN[fmt] + ' series', bd.map(k => ['bd:' + k, xName('bd:' + k)])]);
+  if (fmt === 'Y') {
+    const seen = new Set();
+    CL_CATS.forEach(c => { const ks = catKeys(c).filter(k => RAW.s[k] && !seen.has(k)); ks.forEach(k => seen.add(k)); if (ks.length) out.push(['World Bank: ' + c.t, ks.map(k => ['wb:' + k, indL(k)])]); });
+  }
+  return out;
+}
+function xVals(key, cats, iso) {
+  const p = key.indexOf(':'), src = key.slice(0, p), k = key.slice(p + 1), m = new Map();
+  if (src === 'bd') { const s = PK(k); if (s) s.v.forEach((v, j) => { if (v != null) m.set(bdLab(s.f, s.k0 + j), v); }); }
+  else wser(k, iso).forEach(q => { if (q && q[1] != null) m.set(String(q[0]), q[1]); });
+  return cats.map(c => (m.has(c) ? m.get(c) : null));
+}
+function holtArr(y, H) { const r = holtFc(y, H); return Array.isArray(r) ? r : r && Array.isArray(r.out) ? r.out : []; }
+function xKeys(dom) { return (dom.getAttribute('data-extra') || '').split('|').filter(Boolean); }
+function extraPlan(opt, inst) {
+  try {
+    if (!opt || !Array.isArray(opt.series) || !inst || !inst.getDom) return opt;
+    const xa = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis;
+    if (!xa || xa.type === 'value' || xa.type === 'time' || !Array.isArray(xa.data) || xa.data.length < 4) return opt;
+    if (!opt.series.some(s => s && (s.type === 'line' || s.type === 'bar'))) return opt;
+    const cats = xa.data.map(c => String(c && typeof c === 'object' ? c.value : c)), fmt = xFmt(cats[cats.length - 1]);
+    const dom = inst.getDom();
+    if (!fmt || !dom || dom.closest('#v-cl') || dom.closest('.no-xpick') || (dom.clientHeight || 0) < 150) return opt;
+    inst.__xb = opt; inst.__xf = fmt;
+    xBar(dom, inst);
+    const keys = xKeys(dom); if (!keys.length) return opt;
+    const iso = xIso(dom), ya0 = Array.isArray(opt.yAxis) ? opt.yAxis : [opt.yAxis || {}], ax = ya0.length, base = ya0[0] || {};
+    const o = Object.assign({}, opt, {
+      series: opt.series.map(s => Object.assign({}, s)),
+      yAxis: ya0.concat([Object.assign({}, base, { position: 'right', name: 'added', offset: ax > 1 ? 58 : 0, min: null, max: null, scale: true, inverse: false, splitLine: { show: false }, axisLine: { show: true, lineStyle: { color: XPAL[0] } }, nameTextStyle: Object.assign({}, base.nameTextStyle || {}, { align: 'right' }) })])
+    });
+    if (ax > 1 && o.grid && !Array.isArray(o.grid)) o.grid = Object.assign({}, o.grid, { right: (+o.grid.right || 10) + 58 });
+    keys.forEach((key, j) => { const c = XPAL[j % XPAL.length]; o.series.push({ name: xName(key, iso) + ' (added)', type: 'line', yAxisIndex: ax, data: xVals(key, cats, iso), showSymbol: false, connectNulls: true, lineStyle: { width: 2, type: 'dashed', color: c }, itemStyle: { color: c }, z: 5 }); });
+    if (o.legend && !Array.isArray(o.legend) && Array.isArray(o.legend.data)) o.legend = Object.assign({}, o.legend, { data: o.legend.data.concat(o.series.slice(-keys.length).map(s => s.name)) });
+    return o;
+  } catch (e) { console.warn('v38 xplan', e && e.stack ? e.stack.slice(0, 300) : e); return opt; }
+}
+function xBar(dom, inst) {
+  let bar = dom.previousElementSibling;
+  if (bar && bar.classList && bar.classList.contains('xpick')) { bar.__i = inst; if (bar.__f === inst.__xf) return; bar.remove(); dom.removeAttribute('data-extra'); }
+  const groups = xGroups(inst.__xf); if (!groups.length || !dom.parentNode) return;
+  bar = document.createElement('div'); bar.className = 'xpick'; bar.__i = inst; bar.__f = inst.__xf;
+  bar.innerHTML = '<label class="xpick-l"><span>+ Add a series</span><select aria-label="Add a series to this chart"><option value="">choose…</option>' +
+    groups.map(([g, list]) => '<optgroup label="' + esc(g) + '">' + list.map(([v, l]) => '<option value="' + esc(v) + '">' + esc(l) + '</option>').join('') + '</optgroup>').join('') +
+    '</select></label><span class="xchips"></span>';
+  dom.parentNode.insertBefore(bar, dom);
+  const chips = () => { const iso = xIso(dom); bar.querySelector('.xchips').innerHTML = xKeys(dom).map(key => '<button type="button" class="xchip" data-key="' + esc(key) + '" title="Remove this series">× ' + esc(xName(key, iso)) + '</button>').join(''); };
+  const redraw = () => { chips(); const I = bar.__i; if (I && I.__xb && !(I.isDisposed && I.isDisposed())) { try { I.setOption(labelPlan(declutterAll(extraPlan(I.__xb, I)), I), true); } catch (e) { /* keep the chart as it was */ } } };
+  bar.querySelector('select').addEventListener('change', e => { const v = e.target.value; e.target.value = ''; if (!v) return; const ks = xKeys(dom); if (!ks.includes(v)) { if (ks.length >= 4) ks.shift(); ks.push(v); } dom.setAttribute('data-extra', ks.join('|')); redraw(); });
+  bar.addEventListener('click', e => { const b = e.target.closest('.xchip'); if (!b) return; dom.setAttribute('data-extra', xKeys(dom).filter(k => k !== b.getAttribute('data-key')).join('|')); redraw(); });
+  chips();
+}
+
+/* (b) No blank spaces: a grid left with an odd number of half-width charts gets one more. */
+function fillReg(g, o, f) {
+  if (o.filler) { g.__filler = f; return; }
+  (g.__figs = g.__figs || []).push(o);
+  if (g.__filler) { try { disposeIn(g.__filler); } catch (e) { /* none */ } g.__filler.remove(); g.__filler = null; }
+  clearTimeout(g.__ft); g.__ft = setTimeout(() => fillGrid(g), 0);
+}
+function xSeriesOf(o, TH) {
+  let op; try { op = o.render(TH); } catch (e) { return []; }
+  if (!op || !Array.isArray(op.series)) return [];
+  const xa = Array.isArray(op.xAxis) ? op.xAxis[0] : op.xAxis; if (!xa || !Array.isArray(xa.data)) return [];
+  const cats = xa.data.map(c => String(c && typeof c === 'object' ? c.value : c));
+  const ya = Array.isArray(op.yAxis) ? op.yAxis : [op.yAxis || {}];
+  return op.series.filter(s => s && (s.type === 'line' || s.type === 'bar') && !s.stack && Array.isArray(s.data) && !/range|band|projection|forecast|warning|bound|interval|average|benchmark|target|lower|upper|added/i.test(s.name || ''))
+    .slice(0, 3).map(s => ({ name: String(s.name || ''), unit: String((ya[s.yAxisIndex || 0] || {}).name || ''), cats, vals: s.data.map(d => { const v = Array.isArray(d) ? d[1] : d && typeof d === 'object' ? d.value : d; return v == null || v === '' || !isFinite(+v) ? null : +v; }) }))
+    .filter(s => s.vals.filter(v => v != null).length >= 3);
+}
+function fillGrid(g) {
+  if (!g || g.__filler || !g.isConnected) return;
+  const all = g.__figs || [], half = all.filter(o => !o.wide);
+  if (half.length % 2 === 0) return;
+  const TH = theme(), pre = half[0].prefix, src = (half.find(o => o.source) || {}).source || '';
+  try {
+    if (half.length === 1) {
+      const sr = xSeriesOf(half[0], TH)[0];
+      if (!sr) { g.lastElementChild && g.lastElementChild.classList.add('wide'); return; }
+      figure(g, { filler: true, prefix: pre, ts: false, title: 'Distribution: ' + sr.name, sub: 'How often each range of values occurred in the chart beside this one; red = the range holding the latest value', h: half[0].h || 300, source: src, render: TH2 => fillHist(TH2, sr) });
+    } else {
+      const ss = half.flatMap(o => xSeriesOf(o, TH)), same = new Set(ss.map(s => s.unit)).size <= 1;
+      if (ss.length < 2) { g.lastElementChild && g.lastElementChild.classList.add('wide'); return; }
+      figure(g, { filler: true, prefix: pre, title: 'All the series above in one chart', sub: same ? 'Same units, plotted together for comparison' : 'Each series standardised, (value − its average) ÷ its standard deviation, so different units share one axis', h: Math.max(...half.map(o => o.h || 300)), source: src, render: TH2 => fillComb(TH2, half) });
+    }
+  } catch (e) { console.warn('v38 fill', e && e.stack ? e.stack.slice(0, 300) : e); }
+}
+function fillHist(TH, sr) {
+  const xs = sr.vals.filter(v => v != null);
+  if (xs.length < 5) return { title: { text: 'Not enough data', left: 'center', top: 'middle', textStyle: { color: TH.muted, fontSize: 12 } } };
+  const mn = Math.min(...xs), mx = Math.max(...xs), nb = Math.max(6, Math.min(20, Math.round(Math.sqrt(xs.length)))), w = (mx - mn) / nb || 1;
+  const cnt = Array(nb).fill(0); xs.forEach(v => { cnt[Math.min(nb - 1, Math.floor((v - mn) / w))]++; });
+  const lb = Math.min(nb - 1, Math.floor((xs[xs.length - 1] - mn) / w)), d = Math.abs(w) >= 10 ? 0 : Math.abs(w) >= 1 ? 1 : 2;
+  return {
+    animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 10, top: 24, bottom: 8, containLabel: true }, tooltip: { trigger: 'axis', confine: true },
+    xAxis: { type: 'category', data: cnt.map((_, i) => nf(mn + i * w, d) + ' to ' + nf(mn + (i + 1) * w, d)), axisLabel: { color: TH.muted, fontSize: 10, rotate: 40 }, axisLine: { lineStyle: { color: TH.muted } } },
+    yAxis: valAxis(TH, 'number of periods'),
+    series: [{ name: sr.name, type: 'bar', barCategoryGap: '8%', data: cnt.map((c, i) => ({ value: c, itemStyle: { color: i === lb ? '#E5484D' : '#3B82C4' } })), label: { show: true, position: 'top', fontSize: 9, color: TH.muted } }]
+  };
+}
+function fillComb(TH, half) {
+  const all = half.flatMap(o => xSeriesOf(o, TH)), n = {};
+  all.forEach(s => { const f = xFmt(s.cats[s.cats.length - 1]) || 'x'; n[f] = (n[f] || 0) + 1; });
+  const main = Object.keys(n).sort((a, b) => n[b] - n[a])[0], use = all.filter(s => (xFmt(s.cats[s.cats.length - 1]) || 'x') === main).slice(0, 8);
+  const labels = [...new Set(use.flatMap(s => s.cats))].sort(), same = new Set(use.map(s => s.unit)).size <= 1;
+  const out = use.map((s, j) => {
+    const m = new Map(); s.cats.forEach((c, i) => { if (s.vals[i] != null) m.set(c, s.vals[i]); });
+    let v = labels.map(l => (m.has(l) ? m.get(l) : null));
+    if (!same) { const xs = v.filter(x => x != null), mu = xs.reduce((a, b) => a + b, 0) / xs.length, sd = Math.sqrt(xs.reduce((a, b) => a + (b - mu) * (b - mu), 0) / Math.max(1, xs.length - 1)) || 1; v = v.map(x => (x == null ? null : (x - mu) / sd)); }
+    return S(s.name, v, { w: 2, color: XPAL[j % XPAL.length] });
+  });
+  return tsOption(TH, labels, out, { y1: same ? (use[0] && use[0].unit) || '' : 'standardised (z-score)', dec: 2, zoom: labels.length > 60 });
+}
+
+/* (c) Outlook at the end of every Bangladesh sector tab. */
+var SOUT = {
+  prices: { m: 'Inflation is also modelled in the Forecast lab with ARIMA, a VAR and a small DSGE model; this outlook is the simple benchmark they are judged against.', l: 'Government-set fuel, electricity and gas prices change in steps the model cannot foresee.', f: 'Watch food prices around the Aman and Boro harvests, how much exchange-rate depreciation passes through to import prices, and the path of Bangladesh Bank’s policy rate. LDC graduation, scheduled for November 2026, may change trade preferences and import costs over time.' },
+  real: { m: 'Annual and quarterly output series have few observations, so their ranges are wide.', l: 'GDP figures are revised, sometimes by large amounts, and quarterly estimates are still young.', f: 'Track the recovery of private investment, ready-made garment export orders and remittance-financed consumption; each new quarterly GDP release will narrow the range.' },
+  money: { m: 'Money and credit are projected in growth rates, which are closer to stable than the levels.', l: 'Bank restructuring, mergers and reclassification of loans can move these series abruptly.', f: 'Private-sector credit growth and non-performing loans are the key signals; recapitalisation and asset-quality reviews will shape lending capacity.' },
+  rates: { m: 'Interest rates move in steps set by policy, so the projection mostly shows where momentum is heading.', l: 'A single policy decision can make any extrapolation wrong overnight; read the range, not the line.', f: 'Watch the policy-rate path, the spread between lending and deposit rates, and real interest rates (nominal minus inflation): positive real rates are needed for tightening to bite.' },
+  ext: { m: 'External flows are projected one by one; their sum, the balance of payments, is not modelled here.', l: 'Exchange-rate regime changes, import controls and one-off official financing break past patterns.', f: 'Remittances, export earnings and the managed exchange rate drive reserves; import demand and programme financing reviews are the swing factors.' },
+  fiscal: { m: 'Fiscal series are short and seasonal, so only the broad direction is meaningful.', l: 'Budget revisions and the timing of large payments make month-to-month figures noisy.', f: 'Revenue mobilisation (Bangladesh’s tax-to-GDP ratio is among the lowest in the world), rising interest costs and the mix of bank and savings-certificate borrowing are the main watch points.' },
+  cap: { m: 'Market capitalisation is projected as a trend; prices themselves are close to unpredictable.', l: 'Floor prices, regulatory changes and listing decisions move the market in ways models cannot anticipate.', f: 'Governance reforms, turnover and new large listings would deepen the market; capitalisation relative to GDP is the yardstick to watch.' }
+};
+function sectorOutlook(body, c) {
+  try {
+    const keys = (c.keys || []).filter(k => PK(k) && PK(k).v.filter(v => v != null).length >= 8);
+    if (!keys.length) return;
+    const T = SOUT[c.id] || {}, H = f => (f === 'M' ? 12 : f === 'Q' ? 4 : 1);
+    const s = sec(body, 'Outlook: ' + c.name.toLowerCase(), 'Where each series stands now, where a simple model projects it over the next year, and how much to trust that projection.', 'outlook-' + c.id);
+    const rows = keys.map(k => {
+      const p = PK(k), m = SER(k), v = p.v; let li = v.length - 1; while (li >= 0 && v[li] == null) li--;
+      const lag = H(p.f), y = v.slice(0, li + 1).filter(x => x != null), last = v[li], prev = li - lag >= 0 ? v[li - lag] : null;
+      const fc0 = y.length >= 8 ? holtArr(y.slice(-120), H(p.f)) : [], fc = fc0.length ? fc0 : null, end = fc ? fc[fc.length - 1] : null, b = band312(y);
+      return { k, m, p, li, last, lab: bdLab(p.f, p.k0 + li), chg: prev != null ? last - prev : null, b, fc, end, h: H(p.f) };
+    });
+    const dir = r => !r.end ? '–' : r.end.f > r.last + Math.max(0.05, Math.abs(r.last) * 0.02) ? '↑ rising' : r.end.f < r.last - Math.max(0.05, Math.abs(r.last) * 0.02) ? '↓ falling' : '→ about flat';
+    const pos = r => !r.b ? '–' : r.b.out ? (r.last > Math.max(r.b.a3, r.b.a12) ? 'above' : 'below') + ' both averages' : 'within the band';
+    const per = r => (r.p.f === 'M' ? '12 months' : r.p.f === 'Q' ? '4 quarters' : '1 year');
+    tableWrap(s, '<table><thead><tr><th>Indicator</th><th>Latest</th><th>Period</th><th>Change on a year earlier</th><th>3- and 12-period averages</th><th>Position</th><th>Projection in one year</th><th>80% range</th><th>Direction</th></tr></thead><tbody>' +
+      rows.map(r => '<tr><th scope="row">' + esc(r.m.label + (r.m.sub ? ' (' + r.m.sub + ')' : '')) + ' <small>' + esc(r.m.unit || '') + '</small></th><td class="num">' + nf(r.last) + '</td><td>' + esc(r.lab) + '</td><td class="num">' + (r.chg == null ? '–' : (r.chg > 0 ? '+' : '') + nf(r.chg)) + '</td><td class="num">' + (r.b ? nf(r.b.a3) + ' / ' + nf(r.b.a12) : '–') + '</td><td>' + pos(r) + '</td><td class="num">' + (r.end ? nf(r.end.f) : '–') + '</td><td class="num">' + (r.end ? nf(r.end.lo80) + ' to ' + nf(r.end.hi80) : '–') + '</td><td>' + dir(r) + '</td></tr>').join('') + '</tbody></table>',
+      tcap('Outlook: ' + c.name.toLowerCase()), 'Projection: Holt’s linear exponential smoothing on up to the last 120 observations, ' + 'one year ahead (12 months, 4 quarters or 1 year). The 80% range would contain the outcome 8 times in 10 if past forecast errors repeat. Position compares the latest value with the averages of the last 3 and last 12 observations.');
+    const out = rows.filter(r => r.b && r.b.out), up = rows.filter(r => dir(r).startsWith('↑')), dn = rows.filter(r => dir(r).startsWith('↓'));
+    const big = rows.filter(r => r.chg != null).sort((a, b) => Math.abs(b.chg / (Math.abs(b.last) || 1)) - Math.abs(a.chg / (Math.abs(a.last) || 1)))[0];
+    const nm = r => r.m.label + (r.m.sub ? ' (' + r.m.sub + ')' : '');
+    const box = document.createElement('div'); box.className = 'card ol-sum';
+    box.innerHTML = '<h3>Summary</h3><ul class="ol-list">' +
+      '<li>' + (out.length ? out.length + ' of ' + rows.length + ' series are outside the band of their recent averages: ' + esc(out.map(r => nm(r) + ' (' + pos(r).split(' ')[0] + ')').join('; ')) + '.' : 'All ' + rows.length + ' series are within the band of their recent averages: no unusual readings.') + '</li>' +
+      (up.length ? '<li>Projected to rise over the next year: ' + esc(up.map(nm).join('; ')) + '.</li>' : '') +
+      (dn.length ? '<li>Projected to fall over the next year: ' + esc(dn.map(nm).join('; ')) + '.</li>' : '') +
+      (big ? '<li>Largest relative move over the past year: ' + esc(nm(big)) + ', ' + (big.chg > 0 ? 'up ' : 'down ') + nf(Math.abs(big.chg)) + ' ' + esc(big.m.unit || '') + ' to ' + nf(big.last) + ' (' + esc(big.lab) + ').</li>' : '') +
+      '<li>Projections extend past patterns only; read them with the ranges in the table and the limitations below.</li></ul>';
+    s.append(box);
+    const r0 = rows[0];
+    if (r0.fc) {
+      const p = r0.p, n0 = Math.max(0, r0.li - (p.f === 'M' ? 119 : p.f === 'Q' ? 39 : 24)), labs = [], hist = [], fcs = [], lo = [], hi = [];
+      for (let i = n0; i <= r0.li; i++) { labs.push(bdLab(p.f, p.k0 + i)); hist.push(p.v[i]); fcs.push(i === r0.li ? p.v[i] : null); lo.push(i === r0.li ? p.v[i] : null); hi.push(i === r0.li ? p.v[i] : null); }
+      r0.fc.forEach(q => { labs.push(bdLab(p.f, p.k0 + r0.li + q.h)); hist.push(null); fcs.push(q.f); lo.push(q.lo80); hi.push(q.hi80); });
+      figure(s, { wide: true, title: nm(r0) + ': history and one-year projection', sub: 'Holt projection (dashed) with its 80% range (dotted)', h: 300, source: 'Bangladesh Bank, BBS; model estimates.', render: TH => tsOption(TH, labs, [S('History', hist, { w: 2 }), S('Projection', fcs, { w: 2, dash: true }), S('80% range, lower', lo, { w: 1, dash: true }), S('80% range, upper', hi, { w: 1, dash: true })], { y1: r0.m.unit || '', dec: 2 }) });
+    }
+    const cl = CL_CATS.find(t => (t.bd || []).some(k => (c.keys || []).includes(k)));
+    const tx = document.createElement('div'); tx.className = 'ol-grid';
+    tx.innerHTML =
+      '<div><h3>Methods</h3><p>Each series is projected with Holt’s linear exponential smoothing, which tracks a level and a trend and updates both as data arrive; its two smoothing weights are chosen to minimise one-step-ahead errors. The 80% range comes from the spread of past one-step errors and widens with the horizon. ' + esc(T.m || '') + '</p></div>' +
+      '<div><h3>Merits</h3><p>Transparent and quick, hard to over-fit, and it reacts to turning points in the trend. It gives an honest range rather than a single number, and the same method is used for every series, so readings are comparable across the sector.</p></div>' +
+      '<div><h3>Limitations</h3><p>It extrapolates the past and knows nothing about policy decisions, harvests or world prices; the ranges assume past errors are a guide to future ones, which fails in crises. Data revisions and base-year changes can shift the picture. ' + esc(T.l || '') + '</p></div>' +
+      '<div><h3>Future perspectives</h3><p>' + esc(T.f || '') + '</p>' + (cl ? '<p><a href="#cl~BGD~' + cl.id + '">Full 16-page analysis of ' + esc(cl.t.toLowerCase()) + ' for Bangladesh →</a></p>' : '') + '</div>';
+    s.append(tx);
+  } catch (e) { console.warn('v38 outlook', e && e.stack ? e.stack.slice(0, 300) : e); }
+}
+
+/* (d) Every model and test, documented (Forecast lab, References tab). */
+function mdDocs() {
+  const { i, n, o, sub, sup, ss, fr, r } = MX;
+  const hat = a => '<mover accent="true">' + a + '<mo>^</mo></mover>', sq = a => '<msqrt>' + a + '</msqrt>';
+  const sum = (lo, hi) => hi ? '<munderover><mo>∑</mo>' + lo + hi + '</munderover>' : '<munder><mo>∑</mo>' + lo + '</munder>', p_ = a => r(o('('), a, o(')'));
+  const t = i('t'), y = i('y'), yt = sub(y, t), et = sub(i('ε'), t), tm = k => r(t, o('−'), k), L = i('L'), D = o('Δ');
+  const m = a => '<math>' + a + '</math>';
+  return [
+    { name: 'ARIMA and seasonal ARIMA', what: 'A model that forecasts a series from its own past values (autoregressive part) and past forecast errors (moving-average part), after differencing it to remove trends.', bg: 'Developed by George Box and Gwilym Jenkins in 1970; still the standard short-run benchmark in central banks and statistical offices.',
+      eqs: [EQN(r(i('φ'), p_(L), sup(p_(r(n('1'), o('−'), L)), i('d')), yt, o('='), i('c'), o('+'), i('θ'), p_(L), et), '(1) ARIMA(p, d, q)'), EQN(r(i('φ'), p_(L), o('='), n('1'), o('−'), sub(i('φ'), n('1')), L, o('−'), o('…'), o('−'), sub(i('φ'), i('p')), sup(L, i('p')), o(','), o('&#8195;'), i('θ'), p_(L), o('='), n('1'), o('+'), sub(i('θ'), n('1')), L, o('+'), o('…'), o('+'), sub(i('θ'), i('q')), sup(L, i('q'))), '(2) Lag polynomials'), EQN(r(i('AIC'), o('='), o('−'), n('2'), i('ln'), hat(i('ℒ')), o('+'), n('2'), i('k')), '(3) Order selection')],
+      vars: [[m(yt), 'the series at time t, for example monthly inflation'], [m(L), 'lag operator: L·yₜ = yₜ₋₁'], [m(i('d')), 'number of times the series is differenced'], [m(sub(i('φ'), i('j'))), 'autoregressive coefficients'], [m(sub(i('θ'), i('j'))), 'moving-average coefficients'], [m(et), 'unpredictable shock (white noise)'], [m(r(hat(i('ℒ')), o(','), i('k'))), 'maximised likelihood and number of estimated parameters']],
+      ex: 'Illustrative numbers. An ARIMA(1,1,0) for inflation estimates Δπₜ = 0.05 + 0.30·Δπₜ₋₁ + εₜ. If inflation rose by 0.4 points last month to 8.3%, the forecast change is 0.05 + 0.30 × 0.4 = 0.17, so next month’s forecast is 8.3 + 0.17 = 8.47%.',
+      site: 'Forecast lab, ARIMA tab; Bangladesh projections.', pm: 'Strengths: flexible, well understood and hard to beat over short horizons. Limits: uses one series only, so it cannot explain why things change; long-horizon forecasts settle at the mean or trend.',
+      refs: [['Akaike, H. (1974). A new look at the statistical model identification. IEEE Transactions on Automatic Control, 19(6), 716–723.', 'https://doi.org/10.1109/TAC.1974.1100705'], ['Box, G. E. P., Jenkins, G. M., Reinsel, G. C., & Ljung, G. M. (2015). Time series analysis: Forecasting and control (5th ed.). Wiley.', ''], ['Hyndman, R. J., & Khandakar, Y. (2008). Automatic time series forecasting: The forecast package for R. Journal of Statistical Software, 27(3), 1–22.', 'https://doi.org/10.18637/jss.v027.i03']] },
+    { name: 'Unit-root and stationarity tests (ADF and KPSS)', what: 'Tests of whether a series wanders without returning to a fixed mean (a unit root) or is stationary. ADF assumes a unit root and looks for evidence against it; KPSS assumes stationarity and looks for evidence against that.', bg: 'Dickey and Fuller (1979) proposed the test; Said and Dickey (1984) added lags (the “augmented” version); Kwiatkowski, Phillips, Schmidt and Shin (1992) proposed the reverse test.',
+      eqs: [EQN(r(D, yt, o('='), i('α'), o('+'), i('γ'), sub(y, tm(n('1'))), o('+'), sum(r(i('j'), o('='), n('1')), i('p')), sub(i('δ'), i('j')), D, sub(y, tm(i('j'))), o('+'), et, o(','), o('&#8195;'), sub(i('H'), n('0')), o(':'), i('γ'), o('='), n('0')), '(1) Augmented Dickey–Fuller'), EQN(r(i('η'), o('='), fr(n('1'), sup(i('T'), n('2'))), sum(r(t, o('='), n('1')), i('T')), fr(ss(i('S'), t, n('2')), sup(hat(i('σ')), n('2'))), o(','), o('&#8195;'), sub(i('S'), t), o('='), sum(r(i('s'), o('='), n('1')), t), sub(hat(i('e')), i('s'))), '(2) KPSS statistic')],
+      vars: [[m(D), 'first difference: Δyₜ = yₜ − yₜ₋₁'], [m(i('γ')), 'zero under a unit root; negative if the series reverts to its mean'], [m(i('p')), 'number of lagged differences that remove autocorrelation'], [m(sub(i('S'), t)), 'running sum of residuals from a regression on a constant'], [m(sup(hat(i('σ')), n('2'))), 'long-run variance of those residuals'], [m(i('T')), 'number of observations']],
+      ex: 'Illustrative numbers. On monthly changes in inflation, ADF gives τ = −3.9 against a 5% critical value of −2.86: reject the unit root. KPSS gives η = 0.21 below its 5% critical value of 0.463: do not reject stationarity. Both tests agree that the changes are stationary.',
+      site: 'Forecast lab, Data tab; Country analysis, Tests page.', pm: 'Strengths: decide whether to model levels or differences. Limits: low power in short samples, and structural breaks can look like unit roots; that is why both tests are reported together.',
+      refs: [['Dickey, D. A., & Fuller, W. A. (1979). Distribution of the estimators for autoregressive time series with a unit root. Journal of the American Statistical Association, 74(366), 427–431.', 'https://doi.org/10.1080/01621459.1979.10482531'], ['Kwiatkowski, D., Phillips, P. C. B., Schmidt, P., & Shin, Y. (1992). Testing the null hypothesis of stationarity against the alternative of a unit root. Journal of Econometrics, 54(1–3), 159–178.', 'https://doi.org/10.1016/0304-4076(92)90104-Y'], ['Said, S. E., & Dickey, D. A. (1984). Testing for unit roots in autoregressive-moving average models of unknown order. Biometrika, 71(3), 599–607.', 'https://doi.org/10.1093/biomet/71.3.599']] },
+    { name: 'Vector autoregression (VAR) and Granger causality', what: 'A system in which each variable is explained by past values of itself and of every other variable. Granger causality asks whether past values of one variable improve forecasts of another.', bg: 'Christopher Sims (1980) introduced VARs as an alternative to large structural models; Clive Granger (1969) defined predictive causality. Both later received the Nobel Prize.',
+      eqs: [EQN(r(sub(i('𝐲'), t), o('='), i('𝐜'), o('+'), sub(i('𝐀'), n('1')), sub(i('𝐲'), tm(n('1'))), o('+'), o('…'), o('+'), sub(i('𝐀'), i('p')), sub(i('𝐲'), tm(i('p'))), o('+'), sub(i('𝐮'), t)), '(1) VAR(p)'), EQN(r(i('F'), o('='), fr(r(p_(r(sub(i('RSS'), i('r')), o('−'), sub(i('RSS'), i('u')))), o('/'), i('q')), r(sub(i('RSS'), i('u')), o('/'), p_(r(i('T'), o('−'), i('k'))))), o('∼'), i('F'), p_(r(i('q'), o(','), i('T'), o('−'), i('k')))), '(2) Granger causality test')],
+      vars: [[m(sub(i('𝐲'), t)), 'vector of variables, for example inflation and the call-money rate'], [m(sub(i('𝐀'), i('j'))), 'matrices of coefficients on lag j'], [m(sub(i('𝐮'), t)), 'vector of forecast errors'], [m(r(sub(i('RSS'), i('r')), o(','), sub(i('RSS'), i('u')))), 'residual sums of squares without and with the lags being tested'], [m(r(i('q'), o(','), i('k'))), 'number of restrictions and of parameters in the unrestricted equation']],
+      ex: 'Illustrative numbers. In a VAR(2) of inflation and the call-money rate, dropping the two call-rate lags from the inflation equation gives F = 3.4 with p = 0.035: past call rates help predict inflation. On this site the call rate Granger-causes inflation while broad money does not.',
+      site: 'Forecast lab, VAR tab; Country analysis, Analysis page.', pm: 'Strengths: captures feedback between variables with few assumptions. Limits: many parameters, so only a few variables fit; “Granger causality” is about prediction, not proof of cause.',
+      refs: [['Granger, C. W. J. (1969). Investigating causal relations by econometric models and cross-spectral methods. Econometrica, 37(3), 424–438.', 'https://doi.org/10.2307/1912791'], ['Lütkepohl, H. (2005). New introduction to multiple time series analysis. Springer.', 'https://doi.org/10.1007/978-3-540-27752-1'], ['Sims, C. A. (1980). Macroeconomics and reality. Econometrica, 48(1), 1–48.', 'https://doi.org/10.2307/1912017']] },
+    { name: 'Impulse responses and variance decomposition (structural VAR)', what: 'Traces how all variables respond over time to a one-off shock in one of them, and splits each variable’s forecast uncertainty into the shares due to each shock.', bg: 'Shocks are identified by ordering the variables (a Cholesky decomposition): variables placed first are assumed not to react within the same period to those placed later.',
+      eqs: [EQN(r(sub(i('𝐮'), t), o('='), i('𝐁'), sub(i('𝛆'), t), o(','), o('&#8195;'), i('𝐁'), sup(i('𝐁'), o('′')), o('='), sub(i('𝚺'), i('u'))), '(1) Identification'), EQN(r(sub(i('𝚯'), i('h')), o('='), sub(i('𝚽'), i('h')), i('𝐁'), o(','), o('&#8195;'), sub(i('𝚽'), i('h')), o('='), sum(r(i('j'), o('='), n('1')), r(i('min'), p_(r(i('h'), o(','), i('p'))))), sub(i('𝐀'), i('j')), sub(i('𝚽'), r(i('h'), o('−'), i('j')))), '(2) Impulse responses'), EQN(r(sub(i('ω'), r(i('j'), i('k'))), p_(i('H')), o('='), fr(r(sum(r(i('h'), o('='), n('0')), r(i('H'), o('−'), n('1'))), ss(i('θ'), r(i('j'), i('k'), o(','), i('h')), n('2'))), r(sum(r(i('h'), o('='), n('0')), r(i('H'), o('−'), n('1'))), sum(i('m'), ''), ss(i('θ'), r(i('j'), i('m'), o(','), i('h')), n('2'))))), '(3) Variance decomposition')],
+      vars: [[m(i('𝐁')), 'lower-triangular matrix linking forecast errors to independent shocks'], [m(sub(i('𝚯'), i('h'))), 'responses h periods after the shock'], [m(sub(i('θ'), r(i('j'), i('k'), o(','), i('h')))), 'response of variable j to shock k after h periods'], [m(sub(i('ω'), r(i('j'), i('k')))), 'share of variable j’s H-step forecast-error variance due to shock k']],
+      ex: 'Illustrative numbers. A one-standard-deviation rise in the call rate lowers inflation by 0.15 points after six months and the effect fades within two years; rate shocks explain 12% of the uncertainty in inflation 12 months ahead.',
+      site: 'Forecast lab, VAR tab.', pm: 'Strengths: tells a story of transmission over time. Limits: results depend on the ordering, and the confidence bands are wide in short samples.',
+      refs: [['Kilian, L., & Lütkepohl, H. (2017). Structural vector autoregressive analysis. Cambridge University Press.', 'https://doi.org/10.1017/9781108164818'], ['Sims, C. A. (1980). Macroeconomics and reality. Econometrica, 48(1), 1–48.', 'https://doi.org/10.2307/1912017']] },
+    { name: 'Least squares, Newey–West standard errors and the delta method', what: 'Ordinary least squares fits a straight-line relationship; Newey–West standard errors stay valid when errors are correlated over time or vary in size; the delta method gives standard errors for quantities derived from estimates.', bg: 'Least squares dates to Legendre and Gauss (around 1805); Newey and West published their estimator in 1987.',
+      eqs: [EQN(r(hat(i('𝛃')), o('='), sup(p_(r(sup(i('𝐗'), o('′')), i('𝐗'))), r(o('−'), n('1'))), sup(i('𝐗'), o('′')), i('𝐲')), '(1) Least squares'), EQN(r(sub(hat(i('𝐕')), i('NW')), o('='), sup(p_(r(sup(i('𝐗'), o('′')), i('𝐗'))), r(o('−'), n('1'))), hat(i('𝐒')), sup(p_(r(sup(i('𝐗'), o('′')), i('𝐗'))), r(o('−'), n('1'))), o(','), o('&#8195;'), sub(i('w'), i('l')), o('='), n('1'), o('−'), fr(i('l'), r(i('L'), o('+'), n('1')))), '(2) Newey–West'), EQN(r(i('Var'), o('['), i('g'), p_(hat(i('𝛃'))), o(']'), o('≈'), sup(r(o('∇'), i('g')), o('′')), sub(hat(i('𝐕')), i('NW')), o('∇'), i('g')), '(3) Delta method')],
+      vars: [[m(i('𝐗')), 'matrix of explanatory variables, one row per period'], [m(hat(i('𝐒'))), 'weighted sum of products of residuals and regressors over L lags'], [m(sub(i('w'), i('l'))), 'Bartlett weight that falls with the lag l'], [m(i('g')), 'any smooth function of the coefficients, such as a long-run effect']],
+      ex: 'Illustrative numbers. A long-run effect θ = β ÷ (1 − ρ) with β = 0.20 and ρ = 0.84 equals 1.25. The delta method combines the uncertainty of β and ρ (including their covariance) to give its standard error.',
+      site: 'Forecast lab (Phillips curve, Taylor rule); Country analysis, Robustness page.', pm: 'Strengths: simple and transparent; Newey–West protects the test results. Limits: shows association, not causation; the lag length L is a judgement call.',
+      refs: [['Newey, W. K., & West, K. D. (1987). A simple, positive semi-definite, heteroskedasticity and autocorrelation consistent covariance matrix. Econometrica, 55(3), 703–708.', 'https://doi.org/10.2307/1913610'], ['Oehlert, G. W. (1992). A note on the delta method. The American Statistician, 46(1), 27–29.', 'https://doi.org/10.1080/00031305.1992.10475842'], ['Wooldridge, J. M. (2020). Introductory econometrics: A modern approach (7th ed.). Cengage.', '']] },
+    { name: 'Taylor rule with interest-rate smoothing', what: 'A description of how a central bank sets its interest rate: higher when inflation is above target or output is above potential, adjusting gradually from last period’s rate.', bg: 'John Taylor (1993) showed that a simple rule tracked US policy well; Clarida, Galí and Gertler (2000) added smoothing and expectations.',
+      eqs: [EQN(r(sub(i('i'), t), o('='), i('ρ'), sub(i('i'), tm(n('1'))), o('+'), p_(r(n('1'), o('−'), i('ρ'))), o('['), sup(i('r'), o('∗')), o('+'), sub(i('π'), t), o('+'), sub(i('φ'), i('π')), p_(r(sub(i('π'), t), o('−'), sup(i('π'), o('∗')))), o('+'), sub(i('φ'), i('y')), sub(i('x'), t), o(']'), o('+'), et), '(1) Smoothed Taylor rule')],
+      vars: [[m(sub(i('i'), t)), 'policy or call-money rate'], [m(i('ρ')), 'smoothing: the share of last period’s rate kept'], [m(r(sup(i('r'), o('∗')), o(','), sup(i('π'), o('∗')))), 'neutral real rate and inflation target'], [m(r(sub(i('φ'), i('π')), o(','), sub(i('φ'), i('y')))), 'responses to the inflation gap and the output gap'], [m(sub(i('x'), t)), 'output gap']],
+      ex: 'On this site the smoothing estimate is ρ = 0.84 (the R package gives 0.839): the rate closes about 16% of the gap to the rule’s target each period.',
+      site: 'Forecast lab; DSGE tab (equation 3).', pm: 'Strengths: a clear benchmark for judging policy. Limits: the neutral rate and the output gap are not observed, and actual decisions also weigh the exchange rate and financial stability.',
+      refs: [['Clarida, R., Galí, J., & Gertler, M. (2000). Monetary policy rules and macroeconomic stability: Evidence and some theory. The Quarterly Journal of Economics, 115(1), 147–180.', 'https://doi.org/10.1162/003355300554692'], ['Taylor, J. B. (1993). Discretion versus policy rules in practice. Carnegie-Rochester Conference Series on Public Policy, 39, 195–214.', 'https://doi.org/10.1016/0167-2231(93)90009-L']] },
+    { name: 'Hodrick–Prescott filter', what: 'Splits a series into a smooth trend and the cycle around it (the gap). The smoothing weight λ sets how stiff the trend is.', bg: 'Circulated by Hodrick and Prescott in 1980 and published in 1997; Ravn and Uhlig (2002) showed how to adjust λ for monthly and annual data.',
+      eqs: [EQN(r(mdUnder('min', sub(i('τ'), t)), sum(t, ''), sup(p_(r(yt, o('−'), sub(i('τ'), t))), n('2')), o('+'), i('λ'), sum(t, ''), o('['), p_(r(sub(i('τ'), r(t, o('+'), n('1'))), o('−'), sub(i('τ'), t))), o('−'), p_(r(sub(i('τ'), t), o('−'), sub(i('τ'), tm(n('1'))))), sup(o(']'), n('2'))), '(1) HP trend')],
+      vars: [[m(sub(i('τ'), t)), 'trend'], [m(r(yt, o('−'), sub(i('τ'), t))), 'cycle or gap'], [m(i('λ')), 'smoothing weight: 1,600 for quarterly, 129,600 for monthly and 6.25 for annual data (Ravn–Uhlig)']],
+      ex: 'Illustrative numbers. If GDP is 2% above its HP trend, the economy is running hot and inflation pressure is likely to build; a gap of −2% suggests slack.',
+      site: 'Forecast lab (output gap); Country analysis.', pm: 'Strengths: simple and widely used. Limits: the trend bends towards the latest data, so end-of-sample gaps are revised as new data arrive; Hamilton (2018) proposes a regression alternative.',
+      refs: [['Hamilton, J. D. (2018). Why you should never use the Hodrick–Prescott filter. The Review of Economics and Statistics, 100(5), 831–843.', 'https://doi.org/10.1162/rest_a_00706'], ['Hodrick, R. J., & Prescott, E. C. (1997). Postwar U.S. business cycles: An empirical investigation. Journal of Money, Credit and Banking, 29(1), 1–16.', 'https://doi.org/10.2307/2953682'], ['Ravn, M. O., & Uhlig, H. (2002). On adjusting the Hodrick–Prescott filter for the frequency of observations. The Review of Economics and Statistics, 84(2), 371–376.', 'https://doi.org/10.1162/003465302317411604']] },
+    { name: 'Holt’s linear exponential smoothing', what: 'A forecasting method that keeps a running level and a running trend, each updated as a weighted average of the newest information and the previous estimate.', bg: 'Charles Holt developed it in 1957 (published in 2004); it is one of the most widely used methods in business and government forecasting.',
+      eqs: [EQN(r(sub(i('ℓ'), t), o('='), i('α'), yt, o('+'), p_(r(n('1'), o('−'), i('α'))), p_(r(sub(i('ℓ'), tm(n('1'))), o('+'), sub(i('b'), tm(n('1')))))), '(1) Level'), EQN(r(sub(i('b'), t), o('='), i('β'), p_(r(sub(i('ℓ'), t), o('−'), sub(i('ℓ'), tm(n('1'))))), o('+'), p_(r(n('1'), o('−'), i('β'))), sub(i('b'), tm(n('1')))), '(2) Trend'), EQN(r(sub(hat(i('y')), r(t, o('+'), i('h'), o('|'), t)), o('='), sub(i('ℓ'), t), o('+'), i('h'), sub(i('b'), t), o(','), o('&#8195;'), i('80%'), o(':'), sub(hat(i('y')), r(t, o('+'), i('h'))), o('±'), n('1.2816'), sub(hat(i('σ')), i('h'))), '(3) Forecast and 80% range')],
+      vars: [[m(r(sub(i('ℓ'), t), o(','), sub(i('b'), t))), 'level and trend at time t'], [m(r(i('α'), o(','), i('β'))), 'smoothing weights between 0 and 1, chosen to minimise one-step errors'], [m(i('h')), 'forecast horizon'], [m(sub(hat(i('σ')), i('h'))), 'standard deviation of h-step errors']],
+      ex: 'Illustrative numbers. With level 8.0, trend −0.10 a month, the 12-month forecast is 8.0 − 12 × 0.10 = 6.8; with σ̂₁₂ = 1.1 the 80% range is 6.8 ± 1.41, from 5.39 to 8.21.',
+      site: 'Outlook sections of every Bangladesh tab; Country analysis, Forecasting page; World analysis projections.', pm: 'Strengths: fast, robust and transparent. Limits: extrapolates the latest trend, which can overshoot at turning points.',
+      refs: [['Gardner, E. S., Jr. (1985). Exponential smoothing: The state of the art. Journal of Forecasting, 4(1), 1–28.', 'https://doi.org/10.1002/for.3980040103'], ['Holt, C. C. (2004). Forecasting seasonals and trends by exponentially weighted moving averages. International Journal of Forecasting, 20(1), 5–10.', 'https://doi.org/10.1016/j.ijforecast.2003.09.015'], ['Hyndman, R. J., & Athanasopoulos, G. (2021). Forecasting: Principles and practice (3rd ed.). OTexts.', 'https://otexts.com/fpp3/']] },
+    { name: 'Forecast combination and the Diebold–Mariano test', what: 'Averages forecasts from several models, giving more weight to those with smaller past errors; the Diebold–Mariano test checks whether one model’s forecasts are significantly more accurate than another’s.', bg: 'Bates and Granger (1969) showed that combinations usually beat the best single model; Diebold and Mariano (1995) gave the accuracy test.',
+      eqs: [EQN(r(sub(hat(i('y')), i('c')), o('='), sum(i('m'), ''), sub(i('w'), i('m')), sub(hat(i('y')), i('m')), o(','), o('&#8195;'), sub(i('w'), i('m')), o('∝'), fr(n('1'), sub(i('MSE'), i('m')))), '(1) Inverse-error weights'), EQN(r(i('DM'), o('='), fr(mdBar(i('d')), sq(r(n('2'), i('π'), sub(hat(i('f')), i('d')), p_(n('0')), o('/'), i('T')))), o(','), o('&#8195;'), sub(i('d'), t), o('='), ss(i('e'), r(n('1'), t), n('2')), o('−'), ss(i('e'), r(n('2'), t), n('2'))), '(2) Diebold–Mariano')],
+      vars: [[m(sub(hat(i('y')), i('m'))), 'forecast from model m'], [m(sub(i('MSE'), i('m'))), 'mean squared error of model m in back-tests'], [m(sub(i('d'), t)), 'difference in squared errors of two models'], [m(sub(hat(i('f')), i('d'))), 'long-run variance (spectral density at zero) of the differences']],
+      ex: 'Illustrative numbers. ARIMA has back-test MSE 0.40 and a VAR 0.60: weights are 0.6 and 0.4. If they forecast 7.0% and 7.5%, the combination is 0.6 × 7.0 + 0.4 × 7.5 = 7.2%.',
+      site: 'Forecast lab (ensemble); Country analysis, Validation page; World analysis projections (equal-weight ensemble).', pm: 'Strengths: combinations are robust to any one model failing. Limits: weights estimated from few errors are noisy; equal weights often do as well.',
+      refs: [['Bates, J. M., & Granger, C. W. J. (1969). The combination of forecasts. Operational Research Quarterly, 20(4), 451–468.', 'https://doi.org/10.1057/jors.1969.103'], ['Diebold, F. X., & Mariano, R. S. (1995). Comparing predictive accuracy. Journal of Business & Economic Statistics, 13(3), 253–263.', 'https://doi.org/10.1080/07350015.1995.10524599'], ['Timmermann, A. (2006). Forecast combinations. In G. Elliott, C. W. J. Granger, & A. Timmermann (Eds.), Handbook of economic forecasting (Vol. 1, pp. 135–196). Elsevier.', 'https://doi.org/10.1016/S1574-0706(05)01004-9']] },
+    { name: 'New Keynesian DSGE model', what: 'A small model of the whole economy built from the decisions of households, firms and the central bank: demand (IS curve), price setting (Phillips curve) and the policy rule.', bg: 'The three-equation model was popularised by Clarida, Galí and Gertler (1999) and Galí’s textbook; Smets and Wouters (2007) showed that larger versions fit data well.',
+      eqs: [].concat(dsgeEquations()),
+      vars: [[m(sub(i('x'), t)), 'output gap'], [m(sub(i('π'), t)), 'inflation'], [m(sub(i('i'), t)), 'nominal interest rate'], [m(sub(i('E'), t)), 'expectation formed at time t'], [m(r(i('σ'), o(','), i('β'), o(','), i('κ'))), 'inverse sensitivity of demand to the real rate, discount factor and Phillips-curve slope'], [m(r(sub(i('d'), t), o(','), sub(i('u'), t), o(','), sub(i('v'), t))), 'demand, cost-push and policy shocks']],
+      ex: 'On this site the Bayesian estimate of the inflation response φπ is 1.98 (90% interval 1.60 to 2.48): above 1, so the rule satisfies the Taylor principle and inflation expectations stay anchored in the model.',
+      site: 'Forecast lab, DSGE tab (shock scenarios, derivation and estimates).', pm: 'Strengths: tells a coherent story that respects how people respond to policy. Limits: heavily simplified; results depend on the assumed structure.',
+      refs: [['Clarida, R., Galí, J., & Gertler, M. (1999). The science of monetary policy: A New Keynesian perspective. Journal of Economic Literature, 37(4), 1661–1707.', 'https://doi.org/10.1257/jel.37.4.1661'], ['Galí, J. (2015). Monetary policy, inflation, and the business cycle (2nd ed.). Princeton University Press.', ''], ['Smets, F., & Wouters, R. (2007). Shocks and frictions in US business cycles: A Bayesian DSGE approach. American Economic Review, 97(3), 586–606.', 'https://doi.org/10.1257/aer.97.3.586']] },
+    { name: 'Bayesian estimation by Metropolis–Hastings', what: 'Combines prior beliefs about parameters with the information in the data to give a full probability distribution for each parameter, by drawing thousands of candidate values and keeping them in proportion to how well they fit.', bg: 'The algorithm comes from physics (Metropolis and colleagues, 1953; Hastings, 1970); An and Schorfheide (2007) set out its use for DSGE models.',
+      eqs: [EQN(r(i('p'), p_(r(i('θ'), o('|'), i('Y'))), o('∝'), i('p'), p_(r(i('Y'), o('|'), i('θ'))), i('p'), p_(i('θ'))), '(1) Posterior'), EQN(r(i('α'), o('='), i('min'), o('{'), n('1'), o(','), fr(r(i('p'), p_(r(sup(i('θ'), o('∗')), o('|'), i('Y')))), r(i('p'), p_(r(sup(i('θ'), p_(r(i('j'), o('−'), n('1')))), o('|'), i('Y'))))), o('}')), '(2) Acceptance probability'), EQN(r(hat(i('R')), o('='), sq(fr(r(fr(r(i('n'), o('−'), n('1')), i('n')), i('W'), o('+'), fr(i('B'), i('n'))), i('W')))), '(3) Gelman–Rubin convergence')],
+      vars: [[m(i('θ')), 'parameters'], [m(i('Y')), 'data'], [m(sup(i('θ'), o('∗'))), 'candidate draw'], [m(r(i('W'), o(','), i('B'))), 'variation within and between chains'], [m(i('n')), 'draws per chain']],
+      ex: 'On this site: two chains of 30,000 draws each for 10 parameters; every R̂ is at most 1.003 (values below 1.1 indicate convergence), and the probability that φπ exceeds 1 is 100%.',
+      site: 'Forecast lab, DSGE tab (Bayesian estimates).', pm: 'Strengths: full uncertainty for every parameter and a principled way to use prior knowledge. Limits: results depend on the priors and need convergence checks.',
+      refs: [['An, S., & Schorfheide, F. (2007). Bayesian analysis of DSGE models. Econometric Reviews, 26(2–4), 113–172.', 'https://doi.org/10.1080/07474930701220071'], ['Gelman, A., & Rubin, D. B. (1992). Inference from iterative simulation using multiple sequences. Statistical Science, 7(4), 457–472.', 'https://doi.org/10.1214/ss/1177011136'], ['Hastings, W. K. (1970). Monte Carlo sampling methods using Markov chains and their applications. Biometrika, 57(1), 97–109.', 'https://doi.org/10.1093/biomet/57.1.97'], ['Metropolis, N., Rosenbluth, A. W., Rosenbluth, M. N., Teller, A. H., & Teller, E. (1953). Equation of state calculations by fast computing machines. The Journal of Chemical Physics, 21(6), 1087–1092.', 'https://doi.org/10.1063/1.1699114']] },
+    { name: 'β- and σ-convergence', what: 'β-convergence asks whether poorer economies grow faster than richer ones; σ-convergence asks whether the spread of incomes across economies is shrinking.', bg: 'Barro and Sala-i-Martin (1992) made the regression standard in growth economics.',
+      eqs: [EQN(r(sub(i('g'), i('i')), o('='), i('α'), o('+'), i('β'), i('ln'), sub(i('y'), r(i('i'), o(','), n('0'))), o('+'), sub(i('ε'), i('i'))), '(1) β-convergence'), EQN(r(i('λ'), o('='), o('−'), fr(r(i('ln'), p_(r(n('1'), o('+'), i('β'), i('T')))), i('T')), o(','), o('&#8195;'), sub(i('t'), r(n('1'), o('/'), n('2'))), o('='), fr(r(i('ln'), n('2')), i('λ'))), '(2) Speed and half-life'), EQN(r(sub(i('σ'), t), o('='), i('SD'), p_(r(i('ln'), sub(i('y'), r(i('i'), o(','), t))))), '(3) σ-convergence')],
+      vars: [[m(sub(i('g'), i('i'))), 'average annual growth of income per person in economy i'], [m(sub(i('y'), r(i('i'), o(','), n('0')))), 'income per person at the start'], [m(i('β')), 'negative means convergence'], [m(r(i('T'), o(','), i('λ'))), 'length of the period in years and speed of convergence per year']],
+      ex: 'Illustrative numbers. β = −0.010 over T = 24 years gives λ = −ln(1 − 0.24) ÷ 24 = 1.14% a year, so half the income gap closes in about ln 2 ÷ 0.0114 ≈ 61 years.',
+      site: 'Forecast lab, World analysis tab (explorer and fixed analyses).', pm: 'Strengths: simple summary of catching up. Limits: β-convergence can coexist with widening spreads (Galton’s fallacy), which is why σ is shown too.',
+      refs: [['Barro, R. J., & Sala-i-Martin, X. (1992). Convergence. Journal of Political Economy, 100(2), 223–251.', 'https://doi.org/10.1086/261816'], ['Sala-i-Martin, X. X. (1996). The classical approach to convergence analysis. The Economic Journal, 106(437), 1019–1036.', 'https://doi.org/10.2307/2235375']] },
+    { name: 'Kruskal–Wallis test', what: 'Tests whether several groups (such as continents) come from the same distribution, using only the ranks of the values, so outliers matter little.', bg: 'Proposed by William Kruskal and W. Allen Wallis in 1952 as a rank-based version of one-way analysis of variance.',
+      eqs: [EQN(r(i('H'), o('='), fr(n('12'), r(i('N'), p_(r(i('N'), o('+'), n('1'))))), sum(r(i('j'), o('='), n('1')), i('k')), fr(ss(i('R'), i('j'), n('2')), sub(i('n'), i('j'))), o('−'), n('3'), p_(r(i('N'), o('+'), n('1'))), o('∼'), ss(i('χ'), r(i('k'), o('−'), n('1')), n('2'))), '(1) Kruskal–Wallis H')],
+      vars: [[m(i('N')), 'total number of economies'], [m(i('k')), 'number of groups'], [m(sub(i('R'), i('j'))), 'sum of the ranks in group j'], [m(sub(i('n'), i('j'))), 'size of group j']],
+      ex: 'Illustrative numbers. Inflation across five continents gives H = 21.3 with 4 degrees of freedom, p < 0.001: typical inflation differs between continents.',
+      site: 'Forecast lab, World analysis tab; Country analysis, Heterogeneity page.', pm: 'Strengths: no normality assumption. Limits: says that groups differ, not which ones.',
+      refs: [['Kruskal, W. H., & Wallis, W. A. (1952). Use of ranks in one-criterion variance analysis. Journal of the American Statistical Association, 47(260), 583–621.', 'https://doi.org/10.1080/01621459.1952.10483441']] },
+    { name: 'Ljung–Box and Jarque–Bera tests', what: 'Checks on model residuals. Ljung–Box tests whether they are still correlated over time (a sign the model missed something); Jarque–Bera tests whether they are normally distributed.', bg: 'Ljung and Box (1978) refined the Box–Pierce test; Jarque and Bera (1980) combined skewness and kurtosis into one statistic.',
+      eqs: [EQN(r(i('Q'), o('='), i('T'), p_(r(i('T'), o('+'), n('2'))), sum(r(i('k'), o('='), n('1')), i('h')), fr(ss(hat(i('ρ')), i('k'), n('2')), r(i('T'), o('−'), i('k'))), o('∼'), ss(i('χ'), i('h'), n('2'))), '(1) Ljung–Box'), EQN(r(i('JB'), o('='), fr(i('T'), n('6')), p_(r(sup(i('S'), n('2')), o('+'), fr(sup(p_(r(i('K'), o('−'), n('3'))), n('2')), n('4')))), o('∼'), ss(i('χ'), n('2'), n('2'))), '(2) Jarque–Bera')],
+      vars: [[m(sub(hat(i('ρ')), i('k'))), 'autocorrelation of residuals at lag k'], [m(i('h')), 'number of lags tested'], [m(r(i('S'), o(','), i('K'))), 'skewness and kurtosis of residuals (3 for a normal distribution)']],
+      ex: 'Illustrative numbers. Q(12) = 9.8 with p = 0.63: no remaining autocorrelation, so the model has captured the dynamics. JB = 25 with p < 0.001: residuals have fat tails, so ranges should be read with care.',
+      site: 'Forecast lab, ARIMA tab; Country analysis, Tests page; World analysis distribution table.', pm: 'Strengths: quick diagnostics. Limits: with many observations tiny departures become “significant”.',
+      refs: [['Jarque, C. M., & Bera, A. K. (1980). Efficient tests for normality, homoscedasticity and serial independence of regression residuals. Economics Letters, 6(3), 255–259.', 'https://doi.org/10.1016/0165-1765(80)90024-5'], ['Ljung, G. M., & Box, G. E. P. (1978). On a measure of lack of fit in time series models. Biometrika, 65(2), 297–303.', 'https://doi.org/10.1093/biomet/65.2.297']] },
+    { name: 'Correlation (Pearson and Spearman)', what: 'Measures how closely two variables move together, from −1 (perfectly opposite) to +1 (perfectly together). Spearman uses ranks, so it captures any steadily rising or falling relationship and resists outliers.', bg: 'Karl Pearson formalised the coefficient in 1896; Charles Spearman introduced the rank version in 1904.',
+      eqs: [EQN(r(i('r'), o('='), fr(r(sum(i('i'), ''), p_(r(sub(i('x'), i('i')), o('−'), mdBar(i('x')))), p_(r(sub(i('y'), i('i')), o('−'), mdBar(i('y'))))), sq(r(sum(i('i'), ''), sup(p_(r(sub(i('x'), i('i')), o('−'), mdBar(i('x')))), n('2')), sum(i('i'), ''), sup(p_(r(sub(i('y'), i('i')), o('−'), mdBar(i('y')))), n('2'))))), o(','), o('&#8195;'), i('t'), o('='), fr(r(i('r'), sq(r(i('n'), o('−'), n('2')))), sq(r(n('1'), o('−'), sup(i('r'), n('2')))))), '(1) Pearson r and its t-test')],
+      vars: [[m(r(sub(i('x'), i('i')), o(','), sub(i('y'), i('i')))), 'values of the two variables for economy or period i'], [m(r(mdBar(i('x')), o(','), mdBar(i('y')))), 'their averages'], [m(i('n')), 'number of pairs; t has n − 2 degrees of freedom']],
+      ex: 'Illustrative numbers. Across 40 economies, r = 0.45 between inflation and money growth gives t = 0.45 × √38 ÷ √(1 − 0.2025) = 3.11, p ≈ 0.004.',
+      site: 'Inflation explorer (lead correlations); World analysis, Correlations tab.', pm: 'Strengths: simple and comparable. Limits: correlation is not causation, and Pearson only captures straight-line relationships.',
+      refs: [['Pearson, K. (1896). Mathematical contributions to the theory of evolution. III. Regression, heredity, and panmixia. Philosophical Transactions of the Royal Society of London, Series A, 187, 253–318.', 'https://doi.org/10.1098/rsta.1896.0007'], ['Spearman, C. (1904). The proof and measurement of association between two things. The American Journal of Psychology, 15(1), 72–101.', 'https://doi.org/10.2307/1412159']] },
+    { name: 'Placebo and permutation tests', what: 'Checks whether a result could arise by chance: the data are shuffled (or a fake treatment date is used) many times, and the real result is compared with the spread of shuffled results.', bg: 'The idea goes back to Ronald Fisher’s randomisation tests in the 1930s; computers made it routine.',
+      eqs: [EQN(r(i('p'), o('='), fr(r(n('1'), o('+'), sum(r(i('b'), o('='), n('1')), i('B')), n('𝟏'), o('{'), o('|'), ss(i('T'), i('b'), o('∗')), o('|'), o('≥'), o('|'), i('T'), o('|'), o('}')), r(i('B'), o('+'), n('1')))), '(1) Permutation p-value')],
+      vars: [[m(i('T')), 'statistic on the real data'], [m(ss(i('T'), i('b'), o('∗'))), 'statistic on shuffled data set b'], [m(i('B')), 'number of shuffles']],
+      ex: 'Illustrative numbers. With B = 999 shuffles, if 14 shuffled statistics are at least as large as the real one, p = (1 + 14) ÷ 1,000 = 0.015.',
+      site: 'Country analysis, Placebo page.', pm: 'Strengths: few assumptions. Limits: shuffling must respect the structure of the data, for example blocks of time.',
+      refs: [['Fisher, R. A. (1935). The design of experiments. Oliver and Boyd.', ''], ['Good, P. I. (2005). Permutation, parametric, and bootstrap tests of hypotheses (3rd ed.). Springer.', 'https://doi.org/10.1007/b138696']] },
+    { name: 'Benchmark projections: AR(1), linear trend and no-change', what: 'Three simple yardsticks used in the World analysis projections: AR(1) pulls the series back towards its average, the linear trend extends a straight line, and no-change repeats the last value.', bg: 'Simple benchmarks are hard to beat for annual macroeconomic data; any complex model should be judged against them.',
+      eqs: [EQN(r(yt, o('='), i('a'), o('+'), i('b'), sub(y, tm(n('1'))), o('+'), sub(i('e'), t), o(','), o('&#8195;'), sub(hat(i('y')), r(i('T'), o('+'), i('h'))), o('='), i('a'), fr(r(n('1'), o('−'), sup(i('b'), i('h'))), r(n('1'), o('−'), i('b'))), o('+'), sup(i('b'), i('h')), sub(i('y'), i('T'))), '(1) AR(1)'), EQN(r(sub(hat(i('y')), r(i('T'), o('+'), i('h'))), o('='), i('α'), o('+'), i('β'), p_(r(i('T'), o('+'), i('h'))), o(','), o('&#8195;'), sub(hat(i('y')), r(i('T'), o('+'), i('h'))), o('='), sub(i('y'), i('T'))), '(2) Linear trend and no-change')],
+      vars: [[m(r(i('a'), o(','), i('b'))), 'AR(1) intercept and persistence; |b| < 1 means the series returns to a / (1 − b)'], [m(r(i('α'), o(','), i('β'))), 'trend intercept and slope'], [m(i('h')), 'years ahead']],
+      ex: 'Illustrative numbers. With a = 1.2, b = 0.8 and the latest value 9.0, the AR(1) forecasts 1.2 + 0.8 × 9.0 = 8.4 next year, heading towards 1.2 ÷ 0.2 = 6.0 in the long run.',
+      site: 'Forecast lab, World analysis explorer, Projections tab.', pm: 'Strengths: transparent and robust. Limits: ignore all other information.',
+      refs: [['Hamilton, J. D. (1994). Time series analysis. Princeton University Press.', '']] }
+  ];
+}
+function mdUnder(a, b) { return '<munder><mi>' + a + '</mi>' + b + '</munder>'; }
+function mdBar(a) { return '<mover accent="true">' + a + '<mo>¯</mo></mover>'; }
+function modelDocs(body) {
+  try {
+    const D = mdDocs();
+    const s = sec(body, 'Models explained', 'Every model and test used on this site: what it is, where it comes from, its equations, what each symbol means, a worked example, where it is used here, and where to read more (APA 7th edition; DOI links open the publisher’s page).', 'models');
+    const toc = document.createElement('div'); toc.className = 'md-toc';
+    toc.innerHTML = D.map((d, j) => '<button type="button" data-md="' + j + '">' + (j + 1) + '. ' + esc(d.name) + '</button>').join('');
+    s.append(toc);
+    toc.addEventListener('click', e => { const b = e.target.closest('[data-md]'); if (!b) return; const t = s.querySelector('#md-' + b.getAttribute('data-md')); if (t) t.scrollIntoView({ behavior: RM ? 'auto' : 'smooth', block: 'start' }); });
+    D.forEach((d, j) => {
+      const a = document.createElement('article'); a.className = 'md-card'; a.id = 'md-' + j;
+      a.innerHTML = '<h3>' + (j + 1) + '. ' + esc(d.name) + '</h3>' +
+        '<p><b>What it is.</b> ' + esc(d.what) + '</p><p><b>Background.</b> ' + esc(d.bg) + '</p>' +
+        '<div class="md-eq">' + d.eqs.join('') + '</div>' +
+        '<p><b>Symbols.</b></p><dl class="md-vars">' + d.vars.map(([sym, txt]) => '<dt>' + sym + '</dt><dd>' + esc(txt) + '</dd>').join('') + '</dl>' +
+        '<p><b>Worked example.</b> ' + esc(d.ex) + '</p><p><b>Used on this site.</b> ' + esc(d.site) + '</p><p><b>Strengths and limits.</b> ' + esc(d.pm) + '</p>' +
+        '<p><b>References.</b></p><ol class="md-refs">' + d.refs.map(([txt, url]) => '<li>' + esc(txt) + (url ? ' <a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + esc(url) + '</a>' : '') + '</li>').join('') + '</ol>';
+      s.append(a);
+    });
+  } catch (e) { console.warn('v38 docs', e && e.stack ? e.stack.slice(0, 300) : e); }
+}
+
+/* (e) World analysis explorer: groups, combinations, maps, distributions, tables, tests, correlations, projections. */
+var WXG = {
+  'G7': 'USA JPN DEU GBR FRA ITA CAN',
+  'G20 (19 member countries)': 'ARG AUS BRA CAN CHN FRA DEU IND IDN ITA JPN KOR MEX RUS SAU ZAF TUR GBR USA',
+  'BRICS': 'BRA RUS IND CHN ZAF EGY ETH IRN ARE IDN',
+  'OECD': 'AUS AUT BEL CAN CHL COL CRI CZE DNK EST FIN FRA DEU GRC HUN ISL IRL ISR ITA JPN KOR LVA LTU LUX MEX NLD NZL NOR POL PRT SVK SVN ESP SWE CHE TUR GBR USA',
+  'European Union': 'AUT BEL BGR HRV CYP CZE DNK EST FIN FRA DEU GRC HUN IRL ITA LVA LTU LUX MLT NLD POL PRT ROU SVK SVN ESP SWE',
+  'SAARC': 'AFG BGD BTN IND MDV NPL PAK LKA',
+  'ASEAN': 'BRN KHM IDN LAO MYS MMR PHL SGP THA VNM TLS',
+  'OPEC': 'DZA COG GNQ GAB IRN IRQ KWT LBY NGA SAU ARE VEN',
+  'OIC': 'AFG ALB DZA AZE BHR BGD BEN BRN BFA CMR TCD COM CIV DJI EGY GAB GMB GIN GNB GUY IDN IRN IRQ JOR KAZ KWT KGZ LBN LBY MYS MDV MLI MRT MAR MOZ NER NGA OMN PAK PSE QAT SAU SEN SLE SOM SDN SUR SYR TJK TGO TUN TUR TKM UGA ARE UZB YEM',
+  'Arab League': 'DZA BHR COM DJI EGY IRQ JOR KWT LBN LBY MRT MAR OMN PSE QAT SAU SOM SDN SYR TUN ARE YEM',
+  'UN least developed countries': 'AFG AGO BGD BEN BFA BDI KHM CAF TCD COM COD DJI ERI ETH GMB GIN GNB HTI KIR LAO LSO LBR MDG MWI MLI MRT MOZ MMR NPL NER RWA SEN SLE SLB SOM SSD SDN TLS TGO TUV UGA TZA YEM ZMB'
+};
+var WX = { g: ['SAARC'], mode: 'union', ind: 'gdp_growth', vars: ['gdp_growth', 'inflation', 'gdp_pc', 'unemployment', 'current_account', 'gov_debt'], tab: 'map', econ: 'BGD', models: ['ar1', 'holt', 'trend', 'naive'], corr: 'pearson', box: null };
+var WX_TABS = [['map', 'Map'], ['dist', 'Distribution'], ['table', 'Table'], ['conv', 'Convergence and tests'], ['corr', 'Correlations'], ['proj', 'Projections'], ['guide', 'Guidance']];
+var WX_MOD = { ar1: 'AR(1)', holt: 'Holt smoothing', trend: 'Linear trend', naive: 'No change' };
+function wxSets() {
+  if (wxSets.c) return wxSets.c;
+  const S0 = {}, cats = { 'Groups and blocs': [], 'Income (approximate)': [], 'Continents': [], 'Sub-continents': [] }, have = new Set(clCountries().map(e => e[0]));
+  const add = (cat, nm, iso) => { if (!S0[nm]) { S0[nm] = new Set(); cats[cat].push(nm); } if (iso && have.has(iso)) S0[nm].add(iso); };
+  Object.entries(WXG).forEach(([g, s]) => { add('Groups and blocs', g); s.split(' ').forEach(iso => add('Groups and blocs', g, iso)); });
+  clCountries().forEach(e => {
+    if (e[3]) add('Continents', e[3], e[0]); if (e[4]) add('Sub-continents', e[4], e[0]);
+    const ig = incomeGroup(e[0]); if (!ig) return;
+    add('Income (approximate)', ig, e[0]);
+    if (ig !== 'High income') add('Income (approximate)', 'Developing (low and middle income)', e[0]);
+    if (/middle/.test(ig)) add('Income (approximate)', 'Middle income (lower and upper)', e[0]);
+  });
+  cats['Continents'].sort(); cats['Sub-continents'].sort();
+  cats['Income (approximate)'] = ['Low income', 'Lower-middle income', 'Upper-middle income', 'High income', 'Middle income (lower and upper)', 'Developing (low and middle income)'].filter(nm => S0[nm]);
+  return (wxSets.c = { S: S0, cats });
+}
+function wxMembers() {
+  const S0 = wxSets().S, gs = WX.g.filter(g => S0[g]), E = EMAPB();
+  if (!gs.length) return [];
+  let set;
+  if (WX.mode === 'intersection') { set = new Set(S0[gs[0]]); gs.slice(1).forEach(g => { set = new Set([...set].filter(x => S0[g].has(x))); }); }
+  else { set = new Set(); gs.forEach(g => S0[g].forEach(x => set.add(x))); }
+  return [...set].filter(x => E[x]).sort((a, b) => E[a][1].localeCompare(E[b][1]));
+}
+function wxAvg(a) { return a.reduce((s, v) => s + v, 0) / a.length; }
+function wxSd(a) { if (a.length < 2) return 0; const m = wxAvg(a); return Math.sqrt(a.reduce((s, v) => s + (v - m) * (v - m), 0) / (a.length - 1)); }
+function wxQ(sorted, p) { if (!sorted.length) return null; const h = (sorted.length - 1) * p, lo = Math.floor(h), hi = Math.ceil(h); return sorted[lo] + (sorted[hi] - sorted[lo]) * (h - lo); }
+function wxLatest(k, mem, maxAge) {
+  const out = []; mem.forEach(iso => { const l = lastOfS(k, iso); if (l && l[1] != null && isFinite(+l[1])) out.push({ iso, y: +l[0], v: +l[1] }); });
+  const ym = out.reduce((m, r) => Math.max(m, r.y), 0); return out.filter(r => r.y >= ym - (maxAge == null ? 5 : maxAge));
+}
+function wxFew(body) { body.insertAdjacentHTML('beforeend', '<p class="note">Fewer than three of the selected economies have recent data for this variable. Add more groups or choose another variable.</p>'); }
+function worldExplorer(body) {
+  try {
+    const s = sec(body, 'World analysis explorer', 'Choose groups of economies, combine them, pick a variable, and see maps, distributions, rankings, convergence tests, correlations and projections. New here? Start with the Guidance tab.', 'wx');
+    const { S: S0, cats } = wxSets(), box = document.createElement('div'); box.className = 'wx'; WX.box = box;
+    const inds = Object.keys(RAW.s).filter(k => IND[k]);
+    if (!inds.includes(WX.ind)) WX.ind = inds[0];
+    const seen = new Set(), optg = CL_CATS.map(c => { const ks = catKeys(c).filter(k => RAW.s[k] && !seen.has(k)); ks.forEach(k => seen.add(k)); return ks.length ? '<optgroup label="' + esc(c.t) + '">' + ks.map(k => '<option value="' + k + '">' + esc(indL(k)) + '</option>').join('') + '</optgroup>' : ''; }).join('');
+    const rest = inds.filter(k => !seen.has(k));
+    box.innerHTML = '<div class="wx-groups">' + Object.entries(cats).map(([c, names], ci) => '<details' + (ci === 0 ? ' open' : '') + '><summary>' + esc(c) + '</summary><div>' + names.map(nm => '<label class="wx-chk"><input type="checkbox" value="' + esc(nm) + '"' + (WX.g.includes(nm) ? ' checked' : '') + '> ' + esc(nm) + ' <small>(' + S0[nm].size + ')</small></label>').join('') + '</div></details>').join('') + '</div>' +
+      '<div class="controls wx-ctl"><label>Combine <select data-w="mode"><option value="union">Union: in any chosen group</option><option value="intersection">Intersection: in every chosen group</option></select></label>' +
+      '<label>Variable <select data-w="ind">' + optg + (rest.length ? '<optgroup label="Other">' + rest.map(k => '<option value="' + k + '">' + esc(indL(k)) + '</option>').join('') + '</optgroup>' : '') + '</select></label>' +
+      '<button type="button" class="btn sm" data-w="clear">Clear groups</button></div>' +
+      '<p class="note wx-sum"></p><div class="wx-tabs" role="tablist" aria-label="Explorer views">' + WX_TABS.map(([id, t]) => '<button type="button" role="tab" data-wt="' + id + '" aria-selected="' + (WX.tab === id) + '">' + esc(t) + '</button>').join('') + '</div><div class="wx-body"></div>';
+    s.append(box);
+    box.querySelector('[data-w="mode"]').value = WX.mode; box.querySelector('[data-w="ind"]').value = WX.ind;
+    box.querySelector('.wx-groups').addEventListener('change', () => { WX.g = [...box.querySelectorAll('.wx-groups input:checked')].map(x => x.value); wxRender(box); });
+    box.querySelector('.wx-ctl').addEventListener('change', e => { const w = e.target.getAttribute('data-w'); if (w === 'mode' || w === 'ind') { WX[w] = e.target.value; wxRender(box); } });
+    box.querySelector('[data-w="clear"]').addEventListener('click', () => { box.querySelectorAll('.wx-groups input').forEach(x => { x.checked = false; }); WX.g = []; wxRender(box); });
+    box.querySelector('.wx-tabs').addEventListener('click', e => { const b = e.target.closest('[data-wt]'); if (!b) return; WX.tab = b.getAttribute('data-wt'); wxRender(box); });
+    wxRender(box);
+  } catch (e) { console.warn('v38 wx', e && e.stack ? e.stack.slice(0, 300) : e); }
+}
+function wxRender(box) {
+  const body = box.querySelector('.wx-body'); try { disposeIn(body); } catch (e) { /* none */ } body.innerHTML = '';
+  const mem = wxMembers(), E = EMAPB(), k = WX.ind, op = WX.mode === 'union' ? ' ∪ ' : ' ∩ ';
+  box.querySelector('.wx-sum').innerHTML = mem.length ? '<b>' + mem.length + ' economies</b> (' + esc(WX.g.join(op)) + '): ' + esc(mem.slice(0, 14).map(x => E[x][1]).join(', ')) + (mem.length > 14 ? ' and ' + (mem.length - 14) + ' more' : '') + '.' : 'No economies selected. Tick at least one group' + (WX.mode === 'intersection' && WX.g.length > 1 ? ', or switch to Union: no economy belongs to every chosen group' : '') + '.';
+  box.querySelectorAll('[data-wt]').forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-wt') === WX.tab ? 'true' : 'false'));
+  if (WX.tab === 'guide') { wxGuide(body); return; }
+  if (!mem.length) return;
+  try { ({ map: wxMap, dist: wxDist, table: wxTable, conv: wxConv, corr: wxCorr, proj: wxProj })[WX.tab](body, mem, k); }
+  catch (e) { console.warn('v38 wxtab', e && e.stack ? e.stack.slice(0, 300) : e); body.insertAdjacentHTML('beforeend', '<p class="note">This view could not be drawn for the current choice.</p>'); }
+}
+function wxMap(body, mem, k) {
+  const G = RAW.geo && RAW.geo.dots; if (!G || !G.d) { body.innerHTML = '<p class="note">Map data are not available.</p>'; return; }
+  const L = wxLatest(k, mem); if (L.length < 3) { wxFew(body); return; }
+  const V = new Map(L.map(q => [q.iso, q.v])), xs = L.map(q => q.v).sort((a, b) => a - b), cuts = [0.2, 0.4, 0.6, 0.8].map(p => wxQ(xs, p));
+  const PAL = ['#2166AC', '#67A9CF', '#E9C46A', '#EF8A62', '#B2182B'], bin = v => cuts.filter(c => v > c).length, E = EMAPB();
+  const w = document.createElement('div'); w.className = 'wx-map';
+  w.innerHTML = '<p class="wx-cap"><b>' + esc(indL(k)) + '</b> (' + esc(indU(k)) + '), latest year for each economy. Selected economies are coloured by fifths of their values; others are grey.</p><canvas role="img" aria-label="World map of ' + esc(indL(k)) + ' for the selected economies"></canvas><div class="wx-leg"></div><p class="src-line"><b>Source:</b> World Bank, World Development Indicators; map outlines: Natural Earth.</p>';
+  body.append(w);
+  const cv = w.querySelector('canvas'), VW = +RAW.geo.w || 1000, VH = +RAW.geo.h || 436, W = Math.max(280, w.clientWidth || 900), sc = W / VW, H = VH * sc, dpr = Math.min(2, window.devicePixelRatio || 1), s = G.s;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = Math.round(H) + 'px';
+  const c = cv.getContext('2d'); c.scale(dpr, dpr);
+  const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#8a96a3', ms = new Set(mem);
+  for (let q = 0; q < G.d.length; q += 3) {
+    const iso = G.iso[G.d[q + 2]], x = (s / 2 + G.d[q] * s) * sc, y = (s / 2 + G.d[q + 1] * s) * sc;
+    let col = muted, a = 0.22, rr = s * 0.4 * sc;
+    if (ms.has(iso)) { if (V.has(iso)) { col = PAL[bin(V.get(iso))]; a = 1; rr = s * 0.52 * sc; } else a = 0.7; }
+    c.globalAlpha = a; c.fillStyle = col; c.beginPath(); c.arc(x, y, rr, 0, 6.2832); c.fill();
+  }
+  c.globalAlpha = 1;
+  const edges = [xs[0], ...cuts, xs[xs.length - 1]];
+  w.querySelector('.wx-leg').innerHTML = PAL.map((p, j) => '<span><i style="background:' + p + '"></i>' + nf(edges[j]) + ' to ' + nf(edges[j + 1]) + '</span>').join('') + '<span><i style="background:' + muted + ';opacity:.7"></i>selected, no data</span><span><i style="background:' + muted + ';opacity:.22"></i>not selected</span>';
+  const hi = L.slice().sort((a, b) => b.v - a.v);
+  w.insertAdjacentHTML('beforeend', '<p class="note">Highest: ' + esc(E[hi[0].iso][1]) + ' (' + nf(hi[0].v) + ', ' + hi[0].y + '). Lowest: ' + esc(E[hi[hi.length - 1].iso][1]) + ' (' + nf(hi[hi.length - 1].v) + ', ' + hi[hi.length - 1].y + '). Median: ' + nf(wxQ(xs, 0.5)) + '. Small economies may be too small to see at this scale; the Table tab lists them all.</p>');
+}
+function wxDist(body, mem, k) {
+  const L = wxLatest(k, mem); if (L.length < 3) { wxFew(body); return; }
+  const E = EMAPB(), xs = L.map(q => q.v), nn = xs.length, mu = wxAvg(xs), sd = wxSd(xs), srt = xs.slice().sort((a, b) => a - b);
+  const sk = sd ? xs.reduce((a, v) => a + Math.pow((v - mu) / sd, 3), 0) / nn : null, ku = sd ? xs.reduce((a, v) => a + Math.pow((v - mu) / sd, 4), 0) / nn - 3 : null;
+  const jb = sk != null ? nn / 6 * (sk * sk + ku * ku / 4) : null, jp = jb != null ? chi2p(jb, 2) : null, src = 'World Bank, World Development Indicators.';
+  const g = grid(body), pre = labState.prefix || 'L';
+  figure(g, { prefix: pre, ts: false, title: 'Distribution of ' + indL(k), sub: 'Number of selected economies in each range of values; red = the range holding the last economy listed', h: 300, source: src, render: TH => fillHist(TH, { name: indL(k), vals: xs }) });
+  const by = {}; L.forEach(q => { const c = E[q.iso][3] || 'Other'; (by[c] = by[c] || []).push(q.v); });
+  const cs = Object.keys(by).sort();
+  figure(g, { prefix: pre, ts: false, title: indL(k) + ' by continent', sub: 'Box plots: line = median, box = middle half of economies, whiskers = lowest to highest', h: 300, source: src, render: TH => ({ animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 10, top: 24, bottom: 8, containLabel: true }, tooltip: { trigger: 'item', confine: true },
+    xAxis: { type: 'category', data: cs.map(c => c + ' (' + by[c].length + ')'), axisLabel: { color: TH.muted, fontSize: 10 } }, yAxis: valAxis(TH, indU(k)),
+    series: [{ name: indL(k), type: 'boxplot', data: cs.map(c => { const a = by[c].slice().sort((x, y) => x - y); return [a[0], wxQ(a, 0.25), wxQ(a, 0.5), wxQ(a, 0.75), a[a.length - 1]]; }), itemStyle: { color: 'rgba(59,130,196,.18)', borderColor: '#3B82C4' } }] }) });
+  const lo = L.reduce((a, b) => (b.v < a.v ? b : a)), hi = L.reduce((a, b) => (b.v > a.v ? b : a));
+  const row = (a, b) => '<tr><th scope="row">' + a + '</th><td class="num">' + b + '</td></tr>';
+  tableWrap(body, '<table><thead><tr><th>Statistic</th><th>Value</th></tr></thead><tbody>' + row('Economies with data', nn) + row('Mean', nf(mu)) + row('Median', nf(wxQ(srt, 0.5))) + row('Standard deviation', nf(sd)) + row('Lowest', nf(lo.v) + ' (' + esc(E[lo.iso][1]) + ')') + row('Highest', nf(hi.v) + ' (' + esc(E[hi.iso][1]) + ')') + row('Middle half (25th to 75th percentile)', nf(wxQ(srt, 0.25)) + ' to ' + nf(wxQ(srt, 0.75))) + row('Skewness', nf(sk)) + row('Excess kurtosis', nf(ku)) + row('Jarque–Bera normality test', nf(jb) + ' (p = ' + fp(jp) + ')') + '</tbody></table>',
+    tcap('Summary statistics: ' + indL(k)), 'Latest value for each economy, within five years of the most recent year. Skewness above 0 means a long right tail; a Jarque–Bera p below 0.05 means the values are not normally distributed.');
+}
+function wxTable(body, mem, k) {
+  const L = wxLatest(k, mem, 99).sort((a, b) => b.v - a.v); if (!L.length) { wxFew(body); return; }
+  const E = EMAPB(), xs = L.map(q => q.v), mu = wxAvg(xs), sd = wxSd(xs) || 1, miss = mem.filter(x => !L.some(q => q.iso === x));
+  const rows = L.map((q, j) => { const m = new Map(wser(k, q.iso)), b5 = m.get(q.y - 5), ch = b5 != null ? q.v - b5 : null, z = (q.v - mu) / sd;
+    return '<tr><td class="num">' + (j + 1) + '</td><th scope="row">' + esc(E[q.iso][1]) + '</th><td>' + esc(E[q.iso][4] || '') + '</td><td class="num">' + nf(q.v) + '</td><td class="num">' + q.y + '</td><td class="num">' + nf(z) + (Math.abs(z) > 2 ? ' ⚑' : '') + '</td><td class="num">' + (ch == null ? '–' : (ch > 0 ? '+' : '') + nf(ch)) + '</td></tr>'; }).join('');
+  tableWrap(body, '<table><thead><tr><th>Rank</th><th>Economy</th><th>Sub-continent</th><th>' + esc(indL(k)) + ' (' + esc(indU(k)) + ')</th><th>Year</th><th>z-score</th><th>Change over 5 years</th></tr></thead><tbody>' + rows + '</tbody></table>',
+    tcap('Ranking of the selected economies: ' + indL(k)), 'z-score = (value − group average) ÷ group standard deviation; ⚑ marks |z| above 2, an unusual value for this group.' + (miss.length ? ' No data for: ' + miss.map(x => E[x][1]).join(', ') + '.' : ''));
+}
+function wxConv(body, mem, k) {
+  const E = EMAPB(), ky = RAW.s.gdp_pc_ppp ? 'gdp_pc_ppp' : 'gdp_pc', y0 = 2000, pre = labState.prefix || 'L', src = 'World Bank, World Development Indicators; model estimates.';
+  let yT = 0; mem.forEach(x => { const l = lastOfS(ky, x); if (l) yT = Math.max(yT, +l[0]); });
+  const pts = []; mem.forEach(x => { const m = new Map(wser(ky, x)), a = m.get(y0), Y = m.has(yT) ? yT : yT - 1, b = m.get(Y); if (a > 0 && b > 0 && Y - y0 > 5) pts.push({ iso: x, x: Math.log(a), g: (Math.log(b) - Math.log(a)) / (Y - y0) * 100, T: Y - y0 }); });
+  const g = grid(body);
+  if (pts.length >= 5) {
+    const r = ols(pts.map(p => [1, p.x]), pts.map(p => p.g)), b = r.beta[1], se = r.se[1], tt = b / se, pv = tp2(tt, r.df), T = Math.round(wxAvg(pts.map(p => p.T)));
+    const lam = 1 + b / 100 * T > 0 ? -Math.log(1 + b / 100 * T) / T : null, hl = lam > 0 ? Math.log(2) / lam : null;
+    const gm = wxAvg(pts.map(p => p.g)), sst = pts.reduce((a, p) => a + (p.g - gm) * (p.g - gm), 0), r2 = sst ? 1 - r.sse / sst : null;
+    const xmin = Math.min(...pts.map(p => p.x)), xmax = Math.max(...pts.map(p => p.x));
+    figure(g, { prefix: pre, ts: false, title: 'β-convergence: do poorer economies grow faster?', sub: 'Average annual growth of ' + indL(ky).toLowerCase() + ' since ' + y0 + ' against its ' + y0 + ' level (log scale)', h: 320, source: src, render: TH => ({ animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 14, top: 24, bottom: 8, containLabel: true }, tooltip: { trigger: 'item', confine: true, formatter: q => q.data && q.data.n ? esc(q.data.n) + '<br>growth ' + nf(q.data.value[1]) + '% a year' : '' },
+      xAxis: Object.assign(valAxis(TH, 'ln(' + indL(ky) + ', ' + y0 + ')'), { scale: true }), yAxis: valAxis(TH, '% a year'),
+      series: [{ name: 'Economies', type: 'scatter', symbolSize: 8, itemStyle: { color: '#3B82C4', opacity: 0.8 }, data: pts.map(p => ({ value: [p.x, p.g], n: E[p.iso][1] })) }, { name: 'Fitted line', type: 'line', showSymbol: false, data: [[xmin, r.beta[0] + b * xmin], [xmax, r.beta[0] + b * xmax]], lineStyle: { color: '#E5484D', width: 2 } }] }) });
+    const sig = [], years = [];
+    for (let yy = 1990; yy <= yT; yy++) { const v = []; mem.forEach(x => { const m = wxCache(ky, x).get(yy); if (m > 0) v.push(Math.log(m)); }); if (v.length >= 5) { years.push(String(yy)); sig.push(wxSd(v)); } }
+    figure(g, { prefix: pre, title: 'σ-convergence: is the spread of incomes shrinking?', sub: 'Standard deviation of log ' + indL(ky).toLowerCase() + ' across the selected economies', h: 320, source: src, render: TH => tsOption(TH, years, [S('Spread (SD of logs)', sig, { w: 2 })], { y1: 'SD of logs', dec: 3 }) });
+    const sTrend = sig.length > 4 ? ols(sig.map((_, j) => [1, j]), sig) : null;
+    tableWrap(body, '<table><thead><tr><th>Estimate</th><th>Value</th></tr></thead><tbody>' +
+      '<tr><th scope="row">β (slope on log initial income)</th><td class="num">' + nf(b, 3) + stars(pv) + '</td></tr><tr><th scope="row">Standard error; t; p</th><td class="num">' + nf(se, 3) + '; ' + nf(tt) + '; ' + fp(pv) + '</td></tr>' +
+      '<tr><th scope="row">R²; economies; years</th><td class="num">' + nf(r2) + '; ' + pts.length + '; ' + T + '</td></tr>' +
+      '<tr><th scope="row">Speed of convergence; half-life</th><td class="num">' + (lam != null && lam > 0 ? nf(lam * 100) + '% a year; ' + nf(hl, 0) + ' years' : 'no convergence (β ≥ 0)') + '</td></tr>' +
+      '<tr><th scope="row">σ trend (change in spread a year)</th><td class="num">' + (sTrend ? nf(sTrend.beta[1], 4) + ' (' + (sTrend.beta[1] < 0 ? 'narrowing' : 'widening') + ')' : '–') + '</td></tr></tbody></table>',
+      tcap('Convergence estimates for the selected economies'), 'β below 0 with p below 0.05 indicates catching up; σ falling over time indicates incomes are getting closer. Stars: *** p < 0.01, ** p < 0.05, * p < 0.1.');
+  } else wxFew(body);
+  const L = wxLatest(k, mem), by = {}; L.forEach(q => { const c = E[q.iso][3] || 'Other'; (by[c] = by[c] || []).push(q.v); });
+  const gs = Object.values(by).filter(a => a.length >= 2), kw = gs.length >= 2 ? kwH(gs) : null;
+  if (kw) { const Hh = kw.H != null ? kw.H : kw.h, pp = kw.p != null ? kw.p : chi2p(Hh, gs.length - 1);
+    tableWrap(body, '<table><thead><tr><th>Test</th><th>Statistic</th><th>Degrees of freedom</th><th>p-value</th><th>Reading</th></tr></thead><tbody><tr><th scope="row">Kruskal–Wallis: ' + esc(indL(k)) + ' across continents</th><td class="num">' + nf(Hh) + '</td><td class="num">' + (gs.length - 1) + '</td><td class="num">' + fp(pp) + '</td><td>' + (pp < 0.05 ? 'Continents differ' : 'No clear difference') + '</td></tr></tbody></table>', tcap('Do continents differ within the selection?'), 'Uses continents with at least two selected economies and the latest value for each economy.'); }
+}
+function wxCache(k, iso) { const c = wxCache.m || (wxCache.m = {}), id = k + '|' + iso; return c[id] || (c[id] = new Map(wser(k, iso))); }
+function wxCorr(body, mem, k) {
+  const avail = Object.keys(RAW.s).filter(x => IND[x]);
+  let vars = WX.vars.filter(v => avail.includes(v)); if (!vars.includes(k)) vars.unshift(k); vars = vars.slice(0, 10);
+  const pick = document.createElement('details'); pick.className = 'wx-vars';
+  pick.innerHTML = '<summary>Add or remove variables (' + vars.length + ' of up to 10)</summary><div>' + avail.map(v => '<label class="wx-chk"><input type="checkbox" value="' + v + '"' + (vars.includes(v) ? ' checked' : '') + '> ' + esc(indL(v)) + '</label>').join('') + '</div>';
+  const meth = document.createElement('div'); meth.className = 'controls'; meth.innerHTML = '<label>Method <select><option value="pearson">Pearson (values)</option><option value="spearman">Spearman (ranks)</option></select></label>';
+  body.append(pick, meth); meth.querySelector('select').value = WX.corr;
+  pick.addEventListener('change', () => { WX.vars = [...pick.querySelectorAll('input:checked')].map(x => x.value).slice(0, 10); wxRender(WX.box); WX.box.querySelector('.wx-vars').open = true; });
+  meth.addEventListener('change', e => { WX.corr = e.target.value; wxRender(WX.box); });
+  const V = vars.map(v => new Map(wxLatest(v, mem, 8).map(q => [q.iso, q.v])));
+  const rank = a => { const o = a.map((v, j) => [v, j]).sort((x, y) => x[0] - y[0]), r = Array(a.length); for (let j = 0; j < o.length;) { let e = j; while (e + 1 < o.length && o[e + 1][0] === o[j][0]) e++; for (let q = j; q <= e; q++) r[o[q][1]] = (j + e) / 2 + 1; j = e + 1; } return r; };
+  const cor = (a, b) => { const ma = wxAvg(a), mb = wxAvg(b); let sab = 0, sa = 0, sb = 0; a.forEach((v, j) => { sab += (v - ma) * (b[j] - mb); sa += (v - ma) * (v - ma); sb += (b[j] - mb) * (b[j] - mb); }); return sa && sb ? sab / Math.sqrt(sa * sb) : null; };
+  let h = '<table class="wx-cm"><thead><tr><th></th>' + vars.map((v, j) => '<th title="' + esc(indL(v)) + '">' + (j + 1) + '</th>').join('') + '</tr></thead><tbody>';
+  vars.forEach((va, i) => {
+    h += '<tr><th scope="row">' + (i + 1) + '. ' + esc(indL(va)) + '</th>';
+    vars.forEach((vb, j) => {
+      if (i === j) { h += '<td class="num">1</td>'; return; }
+      const xs = [], ys = []; mem.forEach(x => { if (V[i].has(x) && V[j].has(x)) { xs.push(V[i].get(x)); ys.push(V[j].get(x)); } });
+      if (xs.length < 5) { h += '<td class="num" title="fewer than 5 economies">–</td>'; return; }
+      const rr = WX.corr === 'spearman' ? cor(rank(xs), rank(ys)) : cor(xs, ys);
+      if (rr == null) { h += '<td class="num">–</td>'; return; }
+      const tt = rr * Math.sqrt((xs.length - 2) / Math.max(1e-12, 1 - rr * rr)), pv = tp2(tt, xs.length - 2), al = 0.12 + 0.55 * Math.abs(rr);
+      h += '<td class="num" style="background:' + (rr > 0 ? 'rgba(178,24,43,' : 'rgba(33,102,172,') + al.toFixed(2) + ')" title="n = ' + xs.length + ', p = ' + fp(pv) + '">' + nf(rr) + stars(pv) + '<small> n=' + xs.length + '</small></td>';
+    });
+    h += '</tr>';
+  });
+  tableWrap(body, h + '</tbody></table>', tcap('Correlation matrix (' + (WX.corr === 'spearman' ? 'Spearman' : 'Pearson') + ') across the selected economies'), 'Latest value for each economy within eight years of the most recent year; pairs need at least five economies. Red = move together, blue = move in opposite directions. Stars: *** p < 0.01, ** p < 0.05, * p < 0.1. Correlation is not causation.');
+}
+function wxAr1(y, H) {
+  if (y.length < 8) return null;
+  const r = ols(y.slice(0, -1).map(v => [1, v]), y.slice(1)), a = r.beta[0], b = r.beta[1], out = []; let v = y[y.length - 1];
+  for (let h = 0; h < H; h++) { v = a + b * v; out.push(v); }
+  return out;
+}
+function wxFc(y, mdl, H) {
+  if (mdl === 'ar1') return wxAr1(y, H);
+  if (mdl === 'holt') { const q = holtArr(y, H); return q.length ? q.map(z => z.f) : null; }
+  if (mdl === 'trend') { const tr = trendOf(y.map((v, j) => [j, v])); return tr ? Array.from({ length: H }, (_, h) => tr.a + tr.b * (y.length + h)) : null; }
+  return Array(H).fill(y[y.length - 1]);
+}
+function wxBack(y, mdl, k) { const e = []; for (let j = Math.max(8, y.length - k); j < y.length; j++) { const f = mdl === 'ens' ? (() => { const fs = WX.models.map(m2 => (wxFc(y.slice(0, j), m2, 1) || [null])[0]).filter(v => v != null && isFinite(v)); return fs.length ? wxAvg(fs) : null; })() : (wxFc(y.slice(0, j), mdl, 1) || [null])[0]; if (f != null && isFinite(f)) e.push(y[j] - f); }
+  return e.length ? { rmse: Math.sqrt(e.reduce((a, v) => a + v * v, 0) / e.length), mae: e.reduce((a, v) => a + Math.abs(v), 0) / e.length, n: e.length } : null; }
+function wxProj(body, mem, k) {
+  const E = EMAPB(); if (!mem.includes(WX.econ)) WX.econ = mem.includes('BGD') ? 'BGD' : mem[0];
+  const ctl = document.createElement('div'); ctl.className = 'controls';
+  ctl.innerHTML = '<label>Economy <select data-p="econ">' + mem.map(x => '<option value="' + x + '">' + esc(E[x][1]) + '</option>').join('') + '</select></label>' + Object.entries(WX_MOD).map(([id, t]) => '<label class="wx-chk"><input type="checkbox" data-p="m" value="' + id + '"' + (WX.models.includes(id) ? ' checked' : '') + '> ' + t + '</label>').join('');
+  body.append(ctl); ctl.querySelector('[data-p="econ"]').value = WX.econ;
+  ctl.addEventListener('change', e => { if (e.target.getAttribute('data-p') === 'econ') WX.econ = e.target.value; else WX.models = [...ctl.querySelectorAll('[data-p="m"]:checked')].map(x => x.value); wxRender(WX.box); });
+  const ser = wser(k, WX.econ).filter(q => q[1] != null && isFinite(+q[1])), H = 5;
+  if (ser.length < 10) { body.insertAdjacentHTML('beforeend', '<p class="note">' + esc(E[WX.econ][1]) + ' has fewer than ten years of data for ' + esc(indL(k)) + '. Choose another economy or variable.</p>'); return; }
+  if (!WX.models.length) { body.insertAdjacentHTML('beforeend', '<p class="note">Tick at least one model.</p>'); return; }
+  const y = ser.slice(-35).map(q => +q[1]), yrs = ser.slice(-35).map(q => +q[0]), y1 = yrs[yrs.length - 1];
+  const F = {}; WX.models.forEach(m2 => { const f = wxFc(y, m2, H); if (f) F[m2] = f; });
+  const ms = Object.keys(F); if (ms.length > 1) F.ens = Array.from({ length: H }, (_, h) => wxAvg(ms.map(m2 => F[m2][h])));
+  const show = Math.min(y.length, 25), labs = yrs.slice(-show).map(String).concat(Array.from({ length: H }, (_, h) => String(y1 + h + 1)));
+  const lastV = y[y.length - 1], pad = Array(show - 1).fill(null);
+  const series = [S('History', y.slice(-show).concat(Array(H).fill(null)), { w: 2 })].concat(Object.keys(F).map((m2, j) => S(m2 === 'ens' ? 'Ensemble (average)' : WX_MOD[m2], pad.concat([lastV]).concat(F[m2]), { w: m2 === 'ens' ? 3 : 1.6, dash: m2 !== 'ens', color: XPAL[j % XPAL.length] })));
+  const g = grid(body);
+  figure(g, { wide: true, prefix: labState.prefix || 'L', title: indL(k) + ', ' + E[WX.econ][1] + ': projections to ' + (y1 + H), sub: 'History and five-year projections from each chosen model' + (ms.length > 1 ? ', plus their equal-weight average' : ''), h: 330, source: 'World Bank, World Development Indicators; model estimates.', render: TH => tsOption(TH, labs, series, { y1: indU(k), dec: 2 }) });
+  const rows = Object.keys(F).map(m2 => { const bt = wxBack(y, m2, 8); return '<tr><th scope="row">' + (m2 === 'ens' ? 'Ensemble (average)' : WX_MOD[m2]) + '</th><td class="num">' + nf(F[m2][0]) + '</td><td class="num">' + nf(F[m2][2]) + '</td><td class="num">' + nf(F[m2][4]) + '</td><td class="num">' + (bt ? nf(bt.rmse) : '–') + '</td><td class="num">' + (bt ? nf(bt.mae) : '–') + '</td></tr>'; }).join('');
+  tableWrap(body, '<table><thead><tr><th>Model</th><th>' + (y1 + 1) + '</th><th>' + (y1 + 3) + '</th><th>' + (y1 + 5) + '</th><th>Back-test RMSE</th><th>Back-test MAE</th></tr></thead><tbody>' + rows + '</tbody></table>',
+    tcap('Projections and accuracy: ' + indL(k) + ', ' + E[WX.econ][1]), 'Back-tests: one-year-ahead forecasts for each of the last eight years, made only with data available at the time; lower RMSE and MAE mean more accurate. Equations and references: Forecast lab, References tab, “Models explained”.');
+}
+function wxGuide(body) {
+  body.insertAdjacentHTML('beforeend', '<div class="wx-guide">' +
+    '<h3>How to use the explorer</h3><ol>' +
+    '<li><b>Choose groups.</b> Tick one or more groups: blocs (G7, G20, BRICS, SAARC, ASEAN, EU, OECD, OPEC, OIC, Arab League, UN least developed countries), income groups, continents or sub-continents. The number in brackets is how many economies each contains.</li>' +
+    '<li><b>Combine them.</b> Union keeps economies in any chosen group (for example SAARC ∪ ASEAN = South and South-East Asia). Intersection keeps only economies in every chosen group (for example OIC ∩ G20 = the large Muslim-majority economies).</li>' +
+    '<li><b>Pick a variable.</b> The Map, Distribution, Table, Convergence and Projections tabs use it; the Correlations tab lets you add or remove up to ten variables.</li>' +
+    '<li><b>Read the tabs.</b> Map: where values are high or low. Distribution: how values spread, with a box plot by continent and a normality test. Table: ranking, z-scores and five-year changes. Convergence and tests: whether poorer economies catch up (β), whether the spread is narrowing (σ), and whether continents differ (Kruskal–Wallis). Correlations: which variables move together. Projections: five-year outlooks from four simple models and their average, with back-tested accuracy.</li></ol>' +
+    '<h3>Cautions</h3><ul><li>Latest values come from different years for different economies; the year is shown in the Table tab.</li><li>Income groups are approximate: they use GDP per person in current US dollars with the World Bank’s thresholds, not the official GNI-based classification.</li><li>Group lists follow membership as of 2025 (Timor-Leste joined ASEAN in 2025; Indonesia joined BRICS in 2025); check the official lists before citing.</li><li>Correlation is not causation, and simple projections ignore policy changes and shocks.</li></ul></div>');
+}
+
+/* (f) Country pages: a section left with an odd number of charts gets one combining its indicators. */
+function countryFill(grid, code, specs) {
+  try {
+    if (!grid || !specs || !specs.length) return;
+    if (specs.length === 1) { if (grid.firstElementChild) grid.firstElementChild.classList.add('wide1'); return; }
+    if (specs.length % 2 === 0) return;
+    const keys = [...new Set(specs.flatMap(sp => sp.k || []))].filter(k => RAW.s[k] && RAW.s[k][code] && IND[k]).slice(0, 8);
+    if (keys.length < 2) { if (grid.lastElementChild) grid.lastElementChild.classList.add('wide1'); return; }
+    const same = new Set(keys.map(k => indU(k))).size === 1;
+    const card = document.createElement('article'); card.className = 'chart-card chart-fill';
+    card.innerHTML = '<h3>All the indicators above in one chart</h3><div class="unit">' + esc(same ? indU(keys[0]) : 'standardised: (value − its average) ÷ its standard deviation') + '</div>';
+    const box = document.createElement('div'); box.className = 'chart'; card.append(box);
+    card.insertAdjacentHTML('beforeend', '<p class="note">' + esc(same ? 'Same units, plotted together for comparison. Follows the time-range buttons above.' : 'Different units, so each series is standardised to share one axis: 0 is its usual level, ±1 one standard deviation. Follows the time-range buttons above.') + '</p>');
+    grid.append(card);
+    chartOn(box, TH => {
+      const ser = keys.map(k => new Map(wser(k, code)));
+      let y0 = 9999, y1 = 0; ser.forEach(m => m.forEach((v, y) => { if (v != null) { y0 = Math.min(y0, +y); y1 = Math.max(y1, +y); } }));
+      const n = String(cRange) === 'all' ? 999 : Number(cRange) || 25, start = Math.max(y0, y1 - n + 1), labels = [];
+      for (let y = start; y <= y1; y++) labels.push(String(y));
+      const out = keys.map((k, j) => {
+        let v = labels.map(l => (ser[j].has(+l) ? ser[j].get(+l) : null));
+        if (!same) { const xs = v.filter(x => x != null); if (xs.length > 1) { const mu = wxAvg(xs), sd = wxSd(xs) || 1; v = v.map(x => (x == null ? null : (x - mu) / sd)); } }
+        return S(indL(k), v, { w: 2, color: XPAL[j % XPAL.length] });
+      });
+      return tsOption(TH, labels, out, { y1: same ? indU(keys[0]) : 'z-score', dec: 2 });
+    });
+  } catch (e) { console.warn('v38 cfill', e && e.stack ? e.stack.slice(0, 300) : e); }
+}
+
+return { extraPlan, countryFill, initCL, routeCL, initSecurity, worldGrowth2, initPlans, renderAds, initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo, initLearnX, initFAQ };
 })();
 function initBD() { return BDX.initBD(); }
 function initLab() { return BDX.initLab(); }
@@ -3409,6 +4022,7 @@ document.addEventListener('click', e => { const j = e.target.closest('[data-jump
 function declutterAll(opt) {
   try {
     if (!opt || !Array.isArray(opt.series)) return opt;
+    (Array.isArray(opt.xAxis) ? opt.xAxis : opt.xAxis ? [opt.xAxis] : []).forEach(ax => { if (ax && ax.type !== 'value' && Array.isArray(ax.data)) ax.axisLabel = Object.assign({}, ax.axisLabel || {}, { showMaxLabel: true, showMinLabel: true, hideOverlap: true }); });
     const xa = Array.isArray(opt.xAxis) ? opt.xAxis[0] : opt.xAxis, n = xa && Array.isArray(xa.data) ? xa.data.length : 0;
     const lines = opt.series.filter(s => s && s.type === 'line' && !s.stack).length, dense = n > 36 || (lines > 1 && n > 18);
     opt.series.forEach(s => {

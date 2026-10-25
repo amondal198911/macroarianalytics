@@ -78,3 +78,13 @@ Firestore rules:
         }
       }
     }
+
+## Version 3.8 (25 October 2026)
+- Series picker: "+ Add a series" on every time chart (Bangladesh series on monthly/quarterly charts, World Bank indicators on yearly charts); added series are dashed on their own right-hand axis and removable.
+- No blank spaces: chart grids fixed at two columns on desktop; a grid left with an odd number of charts gets one more ("All the series above in one chart", or a distribution chart); country-page sections get "All the indicators above in one chart".
+- Outlook section at the end of every Bangladesh tab: status table, summary, one-year Holt projection with 80% range, methods, merits, limitations, future perspectives.
+- Forecast lab, References tab: "Models explained" (17 models and tests, equations, symbols, worked examples, APA 7 references with DOI links).
+- Forecast lab, World analysis: explorer with groups (G7, G20, BRICS, OECD, EU, SAARC, ASEAN, OPEC, OIC, Arab League, UN LDCs, income groups, continents, sub-continents), union/intersection, and Map, Distribution, Table, Convergence and tests, Correlations, Projections and Guidance tabs.
+- Country pages: time range 5, 10, 15, 20, 25 years or All, a custom number of years, and Auto cycling.
+- Monitor and Inflation pages: vertical value labels on line charts, sized for the screen.
+- Phones: nothing wider than the screen (menus, maps and grids shrink to fit).

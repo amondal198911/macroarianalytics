@@ -423,7 +423,7 @@ function applyChart(node, rec) {
     if (rec.onInit) rec.onInit(rec.inst);
     rec.reset = true;
   }
-  rec.inst.setOption(labelPlan(declutterAll(wmark(opt)), rec.inst), rec.merge && !rec.reset ? { notMerge: false } : true);
+  rec.inst.setOption(labelPlan(declutterAll(xplanApp(wmark(opt), rec.inst)), rec.inst), rec.merge && !rec.reset ? { notMerge: false } : true);
   rec.reset = false;
 }
 function disposeIn(root) {
@@ -943,18 +943,27 @@ function initCountries() {
     if (!cmp.codes.includes(curCountry)) { cmp.codes.unshift(curCountry); cmp.codes = cmp.codes.slice(0, 8); store.set('mm.cmp', cmp.codes); }
     go('compare');
   });
+  const applyCR = v => { cRange = String(v); store.set('mm.range', cRange); syncRange(); resetCardRanges();
+    for (const [node, rec] of charts) if ($('#c-sections').contains(node)) { rec.dirty = true; if (rec.visible) applyChart(node, rec); } };
+  let crT = null; const CR_SEQ = ['5', '10', '15', '20', '25', 'all'];
+  const crAuto = on => { if (crT) { clearInterval(crT); crT = null; } const ab = $('#c-range-auto'); if (ab) { ab.setAttribute('aria-pressed', on ? 'true' : 'false'); ab.textContent = on ? '■ Stop' : '▶ Auto'; }
+    if (on) crT = setInterval(() => { const cs = $('#c-sections'); if (!cs || !cs.offsetParent) { crAuto(false); return; } if (document.hidden) return; applyCR(CR_SEQ[(CR_SEQ.indexOf(String(cRange)) + 1) % CR_SEQ.length]); }, 5000); };
   $('#c-range').addEventListener('click', e => {
     const b = e.target.closest('button[data-r]'); if (!b) return;
-    cRange = b.getAttribute('data-r'); store.set('mm.range', cRange); syncRange(); resetCardRanges();
-    for (const [node, rec] of charts) if ($('#c-sections').contains(node)) { rec.dirty = true; if (rec.visible) applyChart(node, rec); }
+    crAuto(false); applyCR(b.getAttribute('data-r'));
   });
+  const crn = $('#c-range-n');
+  if (crn) crn.addEventListener('change', () => { const n = Math.round(+crn.value); if (n >= 1 && n <= 80) { crAuto(false); applyCR(n); } });
+  const cra = $('#c-range-auto');
+  if (cra) cra.addEventListener('click', () => crAuto(!crT));
   $('#c-dl').addEventListener('click', () => downloadCountry(curCountry));
   $('#c-ai-btn').addEventListener('click', runAI);
   $('#c-ai-stop').addEventListener('click', () => { if (aiCtl) aiCtl.abort(); });
   syncRange();
   initCountriesExt();
 }
-function syncRange() { $$('#c-range button').forEach(b => b.setAttribute('aria-pressed', b.getAttribute('data-r') === cRange ? 'true' : 'false')); }
+function xplanApp(o, i) { try { return (typeof BDX !== 'undefined' && BDX && BDX.extraPlan) ? BDX.extraPlan(o, i) : o; } catch (e) { return o; } }
+function syncRange() { $$('#c-range button').forEach(b => b.setAttribute('aria-pressed', b.getAttribute('data-r') === String(cRange) ? 'true' : 'false')); const n = $('#c-range-n'); if (n) n.value = ['5', '10', '15', '20', '25', 'all'].includes(String(cRange)) ? '' : String(cRange); }
 function syncPin() {
   const on = pins.includes(curCountry);
   const b = $('#c-pin');
@@ -1043,6 +1052,7 @@ function buildSections(code) {
     const sec = el('section', { class: 'csec', id: 'sec-' + id }, el('h2', { text: title }));
     const grid = el('div', { class: 'charts' });
     for (const sp of avail) grid.append(chartCard(code, sp));
+    try { if (typeof BDX !== 'undefined' && BDX.countryFill) BDX.countryFill(grid, code, avail); } catch (e) { /* optional */ }
     sec.append(grid); host.append(sec);
     links.append(el('button', { type: 'button', text: shortT, onclick: () => {
       const top = sec.getBoundingClientRect().top + window.scrollY - (($('.topbar').offsetHeight || 60) + ($('.range-bar').offsetHeight || 50) + 8);
@@ -1514,3 +1524,4 @@ if (CL && typeof CL.use === 'function') {
   CL.use('comments').then(c => { if (c) { CM = c; syncContact(); } }).catch(() => {});
 }
 })();
+
