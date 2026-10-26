@@ -44,7 +44,7 @@ BUILD_STAMP = __import__('datetime').datetime.now(__import__('datetime').timezon
 
 # ---------------- Bangladesh Macroeconomic Monitor and Bangladesh Inflation Monitor (hosted at /monitor/ and /inflation/) ----------------
 MON_SRC = [('monitor.html', 'monitor'), ('inflation.html', 'inflation')]
-MON_CSS = """<style id="mm-host">.mm-v{font:700 8px/1 system-ui,-apple-system,"Segoe UI",sans-serif;paint-order:stroke;stroke:rgba(0,0,0,.6);stroke-width:2px;stroke-linejoin:round}
+MON_CSS = """<style id="mm-host">.mm-addb,.mm-chip{font:600 11px/1.2 system-ui,-apple-system,sans-serif;margin:4px 6px 2px 0;padding:3px 10px;border-radius:999px;border:1px dashed currentColor;background:transparent;color:inherit;cursor:pointer;opacity:.9}.mm-chip{border-style:solid}.mm-panel{position:absolute;z-index:9999;width:min(420px,calc(100vw - 16px));max-height:62vh;overflow:auto;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:12px;padding:10px;box-shadow:0 10px 30px rgba(0,0,0,.45);display:none;font:13px/1.35 system-ui,-apple-system,sans-serif}.mm-ph{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}.mm-x{background:none;border:0;color:inherit;font-size:20px;cursor:pointer}.mm-panel input{width:100%;box-sizing:border-box;padding:7px 9px;border-radius:8px;border:1px solid #475569;background:#111827;color:inherit;margin-bottom:6px}.mm-res button{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid #1f2937;color:inherit;padding:6px 4px;cursor:pointer}.mm-res button:hover{background:#1e293b}.mm-res small{display:block;opacity:.7}.mm-v{font:700 8px/1 system-ui,-apple-system,"Segoe UI",sans-serif;paint-order:stroke;stroke:rgba(0,0,0,.6);stroke-width:2px;stroke-linejoin:round}
 /* hosted on macroarianalytics.com: keep phones fast and link back to the main site */
 #hxRose{animation:none!important}
 nav.subnav,.hc{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
@@ -70,24 +70,45 @@ MON_SUBS = [
 
 
 MON_JS = r"""<script id="mm-labels">(function(){var NS='http://www.w3.org/2000/svg';
-function lab(svg){if(svg.__mmL)return;var vb=svg.viewBox&&svg.viewBox.baseVal;if(!vb||vb.width<200)return;var RW=svg.getBoundingClientRect().width;if(!RW)return;var sc=RW/vb.width;
-var ax=[].slice.call(svg.querySelectorAll('text.ax'));
-var yt=ax.filter(function(t){return t.getAttribute('text-anchor')==='end'}).map(function(t){return[parseFloat(t.getAttribute('y')),parseFloat((t.textContent||'').replace(/[^0-9.\-]/g,''))]}).filter(function(p){return isFinite(p[0])&&isFinite(p[1])});
-if(yt.length<2)return;
-if(ax.filter(function(t){return t.getAttribute('text-anchor')==='start'&&parseFloat(t.getAttribute('x'))>vb.width*0.6}).length>=2){svg.__mmL=1;return}
-var n=yt.length,sx=0,sy=0,sxx=0,sxy=0;yt.forEach(function(p){sx+=p[0];sy+=p[1];sxx+=p[0]*p[0];sxy+=p[0]*p[1]});var d=n*sxx-sx*sx;if(!d)return;var b=(n*sxy-sx*sy)/d,a=(sy-b*sx)/n;if(!isFinite(b)||!b)return;
-if(yt.some(function(p){return Math.abs(a+b*p[0]-p[1])>Math.abs(b)*2})){svg.__mmL=1;return}
-var st=Math.abs(yt[1][1]-yt[0][1]),dec=st>=50?0:st>=5?1:2;
-var lines=[].slice.call(svg.querySelectorAll('path')).filter(function(p){var dd=p.getAttribute('d')||'',f=p.getAttribute('fill');return(f==='none'||(!f&&getComputedStyle(p).fill==='none'))&&/^M\s*-?[\d.]+[ ,]-?[\d.]+\s*L/.test(dd)&&(p.getAttribute('stroke')||'none')!=='none'&&(dd.match(/L/g)||[]).length>=5});
-if(!lines.length||lines.length>4){svg.__mmL=1;return}
-var g=document.createElementNS(NS,'g');g.setAttribute('class','mm-lab');g.setAttribute('pointer-events','none');g.setAttribute('aria-hidden','true');
-var W=vb.width,fs=Math.max(7.5,9/sc),maxL=Math.max(4,Math.floor(RW/(lines.length>1?36:24)));
-lines.forEach(function(p){var pts=(p.getAttribute('d').match(/[ML]\s*-?[\d.]+[ ,]-?[\d.]+/g)||[]).map(function(s){var q=s.slice(1).trim().split(/[ ,]+/);return[+q[0],+q[1]]});var k=Math.max(1,Math.ceil(pts.length/maxL)),col=p.getAttribute('stroke');
-pts.forEach(function(q,i){if(i%k&&i!==pts.length-1)return;var x=q[0]+3,y=q[1]-5,t=document.createElementNS(NS,'text');t.setAttribute('x',x);t.setAttribute('y',y);t.setAttribute('transform','rotate(-90 '+x+' '+y+')');t.setAttribute('class','mm-v');t.style.fontSize=fs.toFixed(1)+'px';t.style.strokeWidth=(2/sc).toFixed(2)+'px';t.setAttribute('fill',col);t.textContent=(a+b*q[1]).toFixed(dec);g.appendChild(t)})});
-if(g.childNodes.length)svg.appendChild(g);svg.__mmL=1}
+function num(s){return parseFloat(String(s||'').replace(/[^0-9.\-]/g,''))}
+function fit(P){var n=P.length;if(n<2)return null;var sx=0,sy=0,sxx=0,sxy=0;P.forEach(function(p){sx+=p[0];sy+=p[1];sxx+=p[0]*p[0];sxy+=p[0]*p[1]});var d=n*sxx-sx*sx;if(!d)return null;var b=(n*sxy-sx*sy)/d,a=(sy-b*sx)/n;if(!isFinite(b)||!b)return null;if(P.some(function(p){return Math.abs(a+b*p[0]-p[1])>Math.abs(b)*2}))return null;return{a:a,b:b,st:Math.abs(P[1][1]-P[0][1])}}
+function tk(L){return L.map(function(t){return[parseFloat(t.getAttribute('y')),num(t.textContent)]}).filter(function(p){return isFinite(p[0])&&isFinite(p[1])})}
+function col(e){return(e.getAttribute('fill')||getComputedStyle(e).fill||'').toLowerCase().replace(/\s/g,'')}
+function dec(m){return m.st>=50?0:m.st>=5?1:2}
+function lab(svg){if(svg.__mmL)return;var vb=svg.viewBox&&svg.viewBox.baseVal;if(!vb||vb.width<200)return;var RW=svg.getBoundingClientRect().width;if(!RW)return;var sc=RW/vb.width,W=vb.width;
+var ax=[].slice.call(svg.querySelectorAll('text.ax'));var Lt=ax.filter(function(t){return t.getAttribute('text-anchor')==='end'});var Rt=ax.filter(function(t){return t.getAttribute('text-anchor')==='start'&&parseFloat(t.getAttribute('x'))>W*0.6});
+var mL=fit(tk(Lt));if(!mL){svg.__mmL=1;return}var mR=Rt.length>=2?fit(tk(Rt)):null,rc=Rt.length?col(Rt[0]):'',lc=Lt.length?col(Lt[0]):'';
+var g=document.createElementNS(NS,'g');g.setAttribute('class','mm-lab');g.setAttribute('pointer-events','none');g.setAttribute('aria-hidden','true');var fs=Math.max(7.5,9/sc);
+function put(x,y,t,c,end){var e=document.createElementNS(NS,'text');e.setAttribute('x',x);e.setAttribute('y',y);e.setAttribute('transform','rotate(-90 '+x+' '+y+')');if(end)e.setAttribute('text-anchor','end');e.setAttribute('class','mm-v');e.setAttribute('fill',c);e.style.fontSize=fs.toFixed(1)+'px';e.style.strokeWidth=(2/sc).toFixed(2)+'px';e.textContent=t;g.appendChild(e)}
+var lines=[].slice.call(svg.querySelectorAll('path')).filter(function(p){var d=p.getAttribute('d')||'',f=p.getAttribute('fill');return(f==='none'||(!f&&getComputedStyle(p).fill==='none'))&&/^M\s*-?[\d.]+[ ,]-?[\d.]+\s*L/.test(d)&&(p.getAttribute('stroke')||'none')!=='none'&&(d.match(/L/g)||[]).length>=5&&!(p.parentNode&&p.parentNode.getAttribute&&p.parentNode.getAttribute('class')==='mm-add')});
+if(lines.length&&lines.length<=4){var maxL=Math.max(4,Math.floor(RW/(lines.length>1?36:24)));
+lines.forEach(function(p){var c=(p.getAttribute('stroke')||'').toLowerCase().replace(/\s/g,''),m=mL;if(mR){if(rc&&c===rc)m=mR;else if(!(lc&&c===lc)&&!(rc&&rc!==lc))return}
+var P=(p.getAttribute('d').match(/[ML]\s*-?[\d.]+[ ,]-?[\d.]+/g)||[]).map(function(s){var q=s.slice(1).trim().split(/[ ,]+/);return[+q[0],+q[1]]});var k=Math.max(1,Math.ceil(P.length/maxL));
+P.forEach(function(q,i){if(i%k&&i!==P.length-1)return;put(q[0]+3,q[1]-5,(m.a+m.b*q[1]).toFixed(dec(m)),p.getAttribute('stroke'))})})}
+if(!mR){var y0=(0-mL.a)/mL.b;var bars=[].slice.call(svg.querySelectorAll('rect')).filter(function(r){var w=+r.getAttribute('width'),h=+r.getAttribute('height'),f=r.getAttribute('fill')||'',y=+r.getAttribute('y');return w>0&&w<W*0.2&&h>0.5&&f&&f!=='none'&&!/url\(/.test(f)&&(Math.abs(y+h-y0)<1.6||Math.abs(y-y0)<1.6)});
+if(bars.length&&bars.length<=80){var kb=Math.max(1,Math.ceil(bars.length/Math.max(6,Math.floor(RW/16))));bars.forEach(function(r,i){if(i%kb)return;var x=+r.getAttribute('x')+(+r.getAttribute('width'))/2+3,top=+r.getAttribute('y'),bot=top+(+r.getAttribute('height'));if(Math.abs(bot-y0)<1.6)put(x,top-4,(mL.a+mL.b*top).toFixed(dec(mL)),r.getAttribute('fill'));else put(x,bot+4,(mL.a+mL.b*bot).toFixed(dec(mL)),r.getAttribute('fill'),true)})}}
+if(g.childNodes.length)svg.appendChild(g);svg.__mmL=1;if(lines.length)addPick(svg,Lt)}
+var MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function kOf(s){s=String(s).trim();var m=/^([A-Za-z]{3})[a-z]*[\s'\u2019-]*(\d{2}|\d{4})$/.exec(s);if(m&&MON[m[1].toLowerCase()]!=null){var y=+m[2];if(y<100)y+=2000;return y*12+MON[m[1].toLowerCase()]}m=/^(\d{4})-(\d{2})$/.exec(s);if(m)return +m[1]*12+(+m[2]-1);m=/^FY\s?(\d{2}|\d{4})$/i.exec(s);if(m){var y2=+m[1];if(y2<100)y2+=2000;return(y2-1)*12+6}m=/^(\d{4})$/.exec(s);if(m)return +m[1]*12;return null}
+function xMap(svg){var X=[].slice.call(svg.querySelectorAll('text.ax')).filter(function(t){return t.getAttribute('text-anchor')==='middle'}).map(function(t){return[kOf(t.textContent),parseFloat(t.getAttribute('x'))]}).filter(function(p){return p[0]!=null&&isFinite(p[1])});if(X.length<2)return null;var f=fit(X);if(!f)return null;return{a:f.a,b:f.b,k0:Math.min.apply(null,X.map(function(p){return p[0]})),k1:Math.max.apply(null,X.map(function(p){return p[0]}))}}
+function addPick(svg,Lt){var xm=xMap(svg);if(!xm||!svg.parentNode)return;var pv=svg.previousElementSibling;if(pv&&pv.classList&&pv.classList.contains('mm-addb'))pv.remove();var b=document.createElement('button');b.type='button';b.className='mm-addb';b.textContent='+ Add a series';b.addEventListener('click',function(){openP(svg,xm,Lt,b)});svg.parentNode.insertBefore(b,svg)}
+var CAT=null,DAT=null,LD=null,ML=null,PNL=null;
+function load(){if(LD)return LD;LD=Promise.all([fetch('/bd_catalog.json').then(function(r){return r.json()}),fetch('/bd_M.json').then(function(r){return r.json()})]).then(function(a){CAT=a[0];DAT=a[1];ML=CAT.filter(function(e){var s=DAT[e[0]];return s&&s.length>25&&/^\d{4}-\d{2}$/.test(s[0])})});return LD}
+function E(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function openP(svg,xm,Lt,btn){load().then(function(){if(!PNL){PNL=document.createElement('div');PNL.className='mm-panel';PNL.innerHTML='<div class="mm-ph"><b>Add a series to this chart</b><button type="button" class="mm-x" aria-label="Close">\u00d7</button></div><input type="search" placeholder="Search '+ML.length+' monthly series, e.g. call money, reserves, food" aria-label="Search series"><div class="mm-res"></div>';document.body.appendChild(PNL);PNL.querySelector('.mm-x').addEventListener('click',function(){PNL.style.display='none'});PNL.querySelector('input').addEventListener('input',function(){lst(this.value)});PNL.querySelector('.mm-res').addEventListener('click',function(ev){var bb=ev.target.closest('button[data-c]');if(!bb)return;draw(PNL.__t,bb.getAttribute('data-c'));PNL.style.display='none'})}
+PNL.__t={svg:svg,xm:xm,Lt:Lt};PNL.style.display='block';var r=btn.getBoundingClientRect(),w=Math.min(420,window.innerWidth-16);PNL.style.top=(window.scrollY+r.bottom+4)+'px';PNL.style.left=Math.max(8,Math.min(window.innerWidth-w-8,r.left))+'px';var i=PNL.querySelector('input');i.value='';lst('');i.focus()}).catch(function(){btn.textContent='Series list unavailable'})}
+function lst(q){var ws=(q||'').toLowerCase().split(/\s+/).filter(Boolean);var res=ML.filter(function(e){var t=(e[3]+' '+e[2]).toLowerCase();return ws.every(function(w){return t.indexOf(w)>=0})}).slice(0,40);PNL.querySelector('.mm-res').innerHTML=res.map(function(e){return'<button type="button" data-c="'+E(e[0])+'"><b>'+E(e[3])+'</b><small>'+E(e[2])+' \u00b7 '+E(e[4])+'</small></button>'}).join('')||'<p>No match</p>'}
+var PAL=['#E4572E','#17A398','#9B5DE5','#C9A227'];
+function draw(T,code){var svg=T.svg,xm=T.xm,s=DAT[code];if(!s)return;var vb=svg.viewBox.baseVal,k0=kOf(s[0]),P=[];for(var i=1;i<s.length;i++){var v=s[i];if(v==null||!isFinite(v))continue;var x=xm.a+xm.b*(k0+i-1);if(x>=0&&x<=vb.width)P.push([x,v])}if(P.length<2)return;
+var ys=T.Lt.map(function(t){return parseFloat(t.getAttribute('y'))}).filter(isFinite),yT=Math.min.apply(null,ys),yB=Math.max.apply(null,ys),vs=P.map(function(p){return p[1]}),lo=Math.min.apply(null,vs),hi=Math.max.apply(null,vs);if(hi===lo)hi=lo+1;var pd=(hi-lo)*0.06;lo-=pd;hi+=pd;var Y=function(v){return yB-(v-lo)/(hi-lo)*(yB-yT)};
+var n=(svg.__mmN=(svg.__mmN||0)+1),c=PAL[(n-1)%PAL.length],g=document.createElementNS(NS,'g');g.setAttribute('class','mm-add');
+var p=document.createElementNS(NS,'path');p.setAttribute('d','M'+P.map(function(q){return q[0].toFixed(1)+' '+Y(q[1]).toFixed(1)}).join('L'));p.setAttribute('fill','none');p.setAttribute('stroke',c);p.setAttribute('stroke-width','2');p.setAttribute('stroke-dasharray','5 3');g.appendChild(p);
+[lo+pd,(lo+hi)/2,hi-pd].forEach(function(v){var t=document.createElementNS(NS,'text');t.setAttribute('x',vb.width-2);t.setAttribute('y',Y(v)+3);t.setAttribute('text-anchor','end');t.setAttribute('class','mm-v');t.setAttribute('fill',c);t.textContent=Math.abs(v)>=100?v.toFixed(0):v.toFixed(2);g.appendChild(t)});
+var e=null;for(var j=0;j<CAT.length;j++)if(CAT[j][0]===code){e=CAT[j];break}var nm=e?e[3]:code;var lg=document.createElementNS(NS,'text');lg.setAttribute('x',(vb.width*0.1).toFixed(1));lg.setAttribute('y',(yT+11*n).toFixed(1));lg.setAttribute('class','mm-v');lg.setAttribute('fill',c);lg.textContent='- - '+nm.slice(0,56)+' (right scale)';g.appendChild(lg);svg.appendChild(g);
+var rm=document.createElement('button');rm.type='button';rm.className='mm-chip';rm.style.borderColor=c;rm.textContent='\u00d7 '+nm.slice(0,40);rm.addEventListener('click',function(){g.remove();rm.remove()});svg.parentNode.insertBefore(rm,svg)}
 function run(){[].forEach.call(document.querySelectorAll('svg[viewBox]'),function(s){try{lab(s)}catch(e){}})}
-var tm;new MutationObserver(function(m){var own=m.every(function(r){return[].every.call(r.addedNodes,function(x){return x.nodeType===1&&x.getAttribute&&x.getAttribute('class')==='mm-lab'})});if(own)return;clearTimeout(tm);tm=setTimeout(run,450)}).observe(document.body,{childList:true,subtree:true});
-document.addEventListener('click',function(){clearTimeout(tm);tm=setTimeout(run,600)},true);window.addEventListener('resize',function(){clearTimeout(tm);tm=setTimeout(run,600)});setTimeout(run,1400)})();</script>"""
+var tm;new MutationObserver(function(m){var own=m.every(function(r){return[].every.call(r.addedNodes,function(x){return x.nodeType===1&&x.getAttribute&&/^mm-/.test(x.getAttribute('class')||'')})});if(own)return;clearTimeout(tm);tm=setTimeout(run,450)}).observe(document.body,{childList:true,subtree:true});
+document.addEventListener('click',function(ev){if(ev.target.closest&&ev.target.closest('.mm-panel,.mm-addb,.mm-chip'))return;clearTimeout(tm);tm=setTimeout(run,600)},true);window.addEventListener('resize',function(){clearTimeout(tm);tm=setTimeout(run,600)});setTimeout(run,1400)})();</script>"""
 
 
 def build_monitors(pub):
@@ -279,7 +300,7 @@ def build_owner(pub, built):
     size = (d / 'macro-data.xlsx').stat().st_size
     page = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Owner downloads</title>'
             '<style>body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#F4F6F8;color:#0E1C2B}.w{max-width:860px;margin:0 auto;padding:28px 20px}h1{font-size:28px;margin:0 0 6px}.card{background:#fff;border:1px solid #D8DEE4;border-radius:14px;padding:18px 20px;margin:16px 0}'
-            'a.b{display:inline-block;background:#0F3B2E;color:#F3EBD3;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700}table{border-collapse:collapse;width:100%;font-size:14px}td,th{border-bottom:1px solid #E3E8EC;padding:7px 8px;text-align:left;vertical-align:top}</style></head><body><div class="w">'
+            'a.b{display:inline-block;background:#0F3B2E;color:#F3EBD3;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700}table{border-collapse:collapse;width:100%;font-size:14px}td,th{border-bottom:1px solid #E3E8EC;padding:7px 8px;text-align:left;vertical-align:top}.card{overflow-x:auto}a{overflow-wrap:anywhere}label.f{display:block;margin:10px 0 0;font-weight:600;font-size:14px}label.f input{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:9px 11px;border:1px solid #B9C3CC;border-radius:9px;font:inherit}button.b{background:#0F3B2E;color:#F3EBD3;border:0;padding:12px 18px;border-radius:10px;font-weight:800;font-size:15px;cursor:pointer;margin-top:14px}.ok{color:#0F6B3E;font-weight:700}</style></head><body><div class="w">'
             '<p><a href="/">← Macroeconomic Monitor and Forecasting</a></p><h1>Owner downloads</h1><p>All data used on the website, in one Excel workbook. Built ' + built + '.</p>'
             '<div class="card"><a class="b" href="/owner/macro-data.xlsx" download>Download all data (Excel, ' + f'{size / 1e6:.1f}' + ' MB)</a><p>Sheets: ' + ', '.join(_xe(s[0]) for s in sheets) + '.</p></div>'
             '<div class="card" id="status"><h2>Data status</h2><p>Latest period in the site’s data for every Bangladesh series. A month is missing only because the publisher has not released it yet: Bangladesh Bank’s Monthly Economic Trends and BBS’s consumer price index appear several weeks after the month ends. When a newer edition is out, download it and send it to update the site.</p>'
@@ -290,24 +311,165 @@ def build_owner(pub, built):
             '<li><b>World Bank indicators</b>: <a href="https://databank.worldbank.org/source/world-development-indicators" rel="noopener">World Development Indicators</a> (updated automatically every day by the site).</li>'
             '<li><b>Market prices</b> (updated automatically every day): ' + ', '.join(f'<a href="{_xe(u)}" rel="noopener">{_xe(u.rsplit("/", 2)[-2] + "/" + u.rsplit("/", 1)[-1])}</a>' for u in dh[:14]) + '.</li></ul></div>'
             '<div class="card"><h2>Sources and links</h2><table><tr><th>Source</th><th>Publisher</th><th>What it covers</th></tr>' + ''.join(f'<tr><td><a href="{s[3]}" rel="noopener">{_xe(s[0])}</a></td><td>{_xe(s[1])}</td><td>{_xe(s[2])}</td></tr>' for s in SOURCES) + '</table></div>'
-            '<p style="font-size:13px;color:#4A5866">This page is for the owner. Protect the /owner/ path with an owner-only Cloudflare Access rule.</p></div></body></html>')
+            + owner_editor_html() + '<p style="font-size:13px;color:#4A5866">This page is for the owner. Protect the /owner/ path with an owner-only Cloudflare Access rule.</p></div></body></html>')
     (d / 'index.html').write_text(harden(page, main=True), encoding='utf-8')
     print(f'  owner workbook: {len(sheets)} sheets, {size / 1e6:.1f} MB')
 
 
+
+# ---------------------------------------------------------------- v3.10: Join, policies, contact, owner editor
+import datetime as _dt
+PAGE_CSS = ('body{margin:0;font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#F4F6F8;color:#0E1C2B}'
+            '.hd{background:#0F3B2E;color:#F3EBD3;text-align:center;padding:40px 20px 32px}.hd .t{margin:0;font-weight:800;font-size:clamp(28px,4vw,44px);line-height:1.1}'
+            '.hd p{max-width:700px;margin:10px auto 0;color:#E7DDC2}.w{max-width:980px;margin:0 auto;padding:22px 20px 34px}h1{font-size:clamp(24px,3vw,32px);margin:6px 0 10px}'
+            'h2{font-size:clamp(19px,2.2vw,24px);margin:26px 0 8px}h3{font-size:18px;margin:0 0 6px}.card{background:#fff;border:1px solid #D8DEE4;border-radius:16px;padding:18px 20px;margin:14px 0}'
+            '.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px}.pr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}'
+            '.pr b{font-size:24px}.pr .or{color:#4A5866;font-size:14px}.per{color:#4A5866;font-size:14px}'
+            '.ph{display:inline-block;background:repeating-linear-gradient(135deg,#EEF1F4 0 8px,#E2E7EC 8px 16px);color:#4A5866;border:1px dashed #B9C3CC;border-radius:8px;padding:3px 10px;font-style:italic;font-weight:600;font-size:15px}'
+            'a.b{display:inline-block;background:#C9A24B;color:#1A1300;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:800;margin:6px 6px 0 0}'
+            'ol li,ul li{margin:6px 0}.n{font-size:13px;color:#4A5866}.ft{border-top:1px solid #D8DEE4;margin-top:30px;padding-top:14px;font-size:14px}.ft a{margin-right:14px}'
+            'dl.ct{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 18px;margin:0}dl.ct dt{font-weight:700}dl.ct dd{margin:0}'
+            'label.f{display:block;margin:10px 0 0;font-weight:600;font-size:14px}label.f input,label.f textarea{display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:9px 11px;border:1px solid #B9C3CC;border-radius:9px;font:inherit}'
+            'button.b{background:#0F3B2E;color:#F3EBD3;border:0;padding:12px 18px;border-radius:10px;font-weight:800;font-size:15px;cursor:pointer;margin-top:14px}.ok{color:#0F6B3E;font-weight:700}')
+FOOT = ('<div class="ft"><a href="/join/">Join</a><a href="/terms/">Terms and conditions</a><a href="/refund/">Refund and cancellation</a>'
+        '<a href="/privacy/">Privacy</a><a href="/contact/">Contact</a><a href="/">Home</a></div>')
+
+
+def _ph(t):
+    return '<span class="ph">' + _xe(t) + '</span>'
+
+
+def _v(block, key, ph):
+    v = str((CFG.get(block) or {}).get(key) or '').strip()
+    return _xe(v) if v else _ph(ph)
+
+
+def _page(title, lede, body, robots=''):
+    return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' + robots +
+            '<title>' + _xe(title) + ' | Macroeconomic Monitor and Forecasting</title><style>' + PAGE_CSS + '</style></head><body>'
+            '<div class="hd"><p class="t">Macroeconomic Monitor and Forecasting</p><p>' + lede + '</p></div><div class="w">' + body + FOOT + '</div></body></html>')
+
+
+def _price(p):
+    u = str(p.get('usd') or '').strip().replace('US$', '').strip()
+    b = str(p.get('bdt') or '').strip().replace('৳', '').replace('Tk', '').strip()
+    if not u and not b and not str(p.get('price') or '').strip():
+        return '<div class="pr">' + _ph('Offer price coming soon') + '</div>'
+    us = '<b>US$ ' + _xe(u) + '</b>' if u else ('<b>' + _xe(p.get('price')) + '</b>' if p.get('price') else _ph('US$ price coming soon'))
+    bd = '<b>৳ ' + _xe(b) + '</b>' if b else _ph('Taka price coming soon')
+    return '<div class="pr">' + us + '<span class="or">or</span>' + bd + '</div>'
+
+
+def _biz():
+    v = str((CFG.get('contact') or {}).get('business') or '').strip()
+    return _xe(v) if v else _ph('business name')
+
+
+def _contact_block():
+    c = CFG.get('contact') or {}
+    rows = [('Business', 'business', 'business name'), ('Contact person', 'person', 'name'), ('Address', 'address', 'postal address'),
+            ('Phone', 'phone', 'phone number'), ('Email', 'email', 'email address'), ('WhatsApp', 'whatsapp', 'WhatsApp number'), ('Office hours', 'hours', 'office hours')]
+    return '<dl class="ct">' + ''.join('<dt>' + a + '</dt><dd>' + _v('contact', k, ph) + '</dd>' for a, k, ph in rows) + '</dl>'
+
+
 def build_join(pub):
-    earn = CFG.get('earn') or {}; plans = earn.get('plans') or []
-    form = str(CFG.get('join_form') or CFG.get('contact_form') or '').strip()
-    cards = ''.join('<div class="p"><h3>' + _xe(p.get('name', '')) + '</h3><p class="pr"><b>' + _xe(p.get('price', '')) + '</b> ' + _xe(p.get('period', '')) + '</p><ul>' + ''.join('<li>' + _xe(f) + '</li>' for f in p.get('features', [])) + '</ul>' + ('<a class="b" href="' + _xe(p['link']) + '" rel="noopener">Subscribe</a>' if p.get('link') else '') + '</div>' for p in plans if p.get('name') != 'Free')
-    page = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Join | ' + _xe(SITE_NAME if 'SITE_NAME' in globals() else 'Macroeconomic Monitor and Forecasting') + '</title>'
-            '<style>body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#F4F6F8;color:#0E1C2B}.hd{background:#0F3B2E;color:#F3EBD3;text-align:center;padding:44px 20px 36px}.hd h1{margin:0;font-size:clamp(26px,4vw,40px)}.hd p{max-width:680px;margin:10px auto 0;color:#E7DDC2}'
-            '.w{max-width:980px;margin:0 auto;padding:24px 20px}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}.p{background:#fff;border:1px solid #D8DEE4;border-radius:16px;padding:18px 20px}.p h3{margin:0}.pr b{font-size:24px}'
-            'a.b{display:inline-block;background:#C9A24B;color:#1A1300;text-decoration:none;padding:11px 18px;border-radius:10px;font-weight:800;margin-top:6px}ol li{margin:6px 0}.n{font-size:13px;color:#4A5866}</style></head><body>'
-            '<div class="hd"><h1>Macroeconomic Monitor and Forecasting</h1><p>Data, models and forecasts for Bangladesh and more than 200 economies. Access is by subscription and approved by the editor.</p></div><div class="w">'
-            '<h2>How to join</h2><ol><li>Choose a plan and subscribe.</li><li>' + ('<a href="' + _xe(form) + '" rel="noopener">Send the access request form</a>' if form else 'Send the editor the email address you will sign in with') + ', using the same email address as your payment.</li><li>Once approved, open <a href="/">www.macroarianalytics.com</a> and sign in with that email address: you receive a one-time code by email.</li></ol>'
-            '<div class="g">' + cards + '</div><p class="n">Already approved? <a href="/">Sign in</a>. Access is checked on every visit; it ends if the subscription lapses.</p></div></body></html>')
+    plans = [p for p in ((CFG.get('earn') or {}).get('plans') or []) if str(p.get('price', '')).strip().lower() != 'free']
+    pay = CFG.get('pay') or {}
+    hrs = str(pay.get('approval_hours') or '24').strip()
+    card = str(pay.get('card_link') or '').strip()
+    form = str(pay.get('form') or '').strip()
+    cards = ''.join('<div class="card"><h3>' + _xe(p.get('name', '')) + '</h3>' + _price(p) + '<div class="per">' + _xe(p.get('period', '')) + ', paid in advance; no automatic renewal</div><ul>' +
+                    ''.join('<li>' + _xe(f) + '</li>' for f in p.get('features', [])) + '</ul>' +
+                    ('<a class="b" href="' + _xe(card) + '" rel="noopener">Pay by card, bKash or Nagad (SSLCOMMERZ)</a>' if card else '<p>' + _ph('Card payment through SSLCOMMERZ: coming soon') + '</p>') + '</div>' for p in plans)
+    body = ('<h1>Join</h1><p>Every page of this website is available by subscription only. Choose a plan, pay, and the editor approves your access.</p>'
+            '<div class="g">' + cards + '</div>'
+            '<h2>Pay by bKash or Nagad</h2><div class="card"><ol>'
+            '<li>Choose a plan above and note its price in Taka.</li>'
+            '<li>Pay that amount to our <b>bKash merchant number</b> ' + _v('pay', 'bkash', 'to be added') + ' or our <b>Nagad merchant number</b> ' + _v('pay', 'nagad', 'to be added') + ', using the <b>Payment</b> option in the app. Write your email address as the reference.</li>'
+            '<li>Keep the <b>transaction ID</b> from the confirmation message.</li>'
+            '<li>' + ('<a class="b" href="' + _xe(form) + '" rel="noopener">Send the payment confirmation form</a>' if form else 'Send the payment confirmation form: ' + _ph('form link to be added')) + ' with your name, email, plan, payment method and transaction ID.</li>'
+            '<li>The editor checks the payment and approves your email, usually within ' + _xe(hrs) + ' hours.</li></ol></div>'
+            '<h2>Signing in</h2><div class="card"><p>Open <a href="/">the website</a> and enter the email address you paid with. A one-time code is sent to that email; enter it to sign in. Your access lasts for the period you paid for. To continue, pay again before it ends.</p></div>'
+            '<p class="n">By subscribing you agree to the <a href="/terms/">Terms and conditions</a> and the <a href="/refund/">Refund and cancellation policy</a>. Questions: see <a href="/contact/">Contact</a>.</p>')
     d = pub / 'join'; d.mkdir(parents=True, exist_ok=True)
-    (d / 'index.html').write_text(harden(page, main=True), encoding='utf-8')
+    (d / 'index.html').write_text(harden(_page('Join', 'Data, models and forecasts for Bangladesh and more than 200 economies. Access is by subscription.', body), main=True), encoding='utf-8')
+
+
+def build_legal(pub):
+    today = _dt.date.today().strftime('%d %B %Y').lstrip('0')
+    biz, site = _biz(), 'Macroeconomic Monitor and Forecasting (www.macroarianalytics.com)'
+    hrs = _xe(str((CFG.get('pay') or {}).get('approval_hours') or '24'))
+    terms = ('<h1>Terms and conditions</h1><p class="n">Last updated ' + today + '</p><div class="card">'
+             '<h2>1. The service</h2><p>' + site + ' is operated by ' + biz + '. It provides economic data, charts, analysis, models and forecasts on Bangladesh and other economies to subscribers.</p>'
+             '<h2>2. Subscription and access</h2><p>Every page requires an active subscription approved by us. Access is personal to the approved email address. Do not share your access, sign-in codes or downloaded material with others. We may suspend access that is shared or misused.</p>'
+             '<h2>3. Plans, prices and payment</h2><p>Plans and prices are shown on the <a href="/join/">Join</a> page in US dollars and Bangladeshi Taka. You can pay by bKash, Nagad or, when available, by card, bKash or Nagad through SSLCOMMERZ. Payment providers may charge their own fees. We may change prices; a change does not affect a period you have already paid for.</p>'
+             '<h2>4. Subscription period</h2><p>A subscription lasts for the period paid for (one month or one year) from the day access is approved, which is usually within ' + hrs + ' hours of a confirmed payment. It does not renew automatically. To continue, pay again before it ends.</p>'
+             '<h2>5. Cancellation and refunds</h2><p>You can stop at any time by not renewing. Refunds follow the <a href="/refund/">Refund and cancellation policy</a>.</p>'
+             '<h2>6. Use of the content</h2><p>You may use the content for your own study, research or work. You may quote short extracts with credit to ' + site + '. You may not copy large parts of the site, resell or republish the content, or collect it by automated means without our written permission.</p>'
+             '<h2>7. Data, accuracy and advice</h2><p>Data come from official and public sources such as Bangladesh Bank, the Bangladesh Bureau of Statistics and the World Bank, and each chart and table names its source. We work to keep the data accurate and up to date but cannot guarantee it. Projections are model estimates. Nothing on the site is financial, investment, legal or tax advice.</p>'
+             '<h2>8. Liability</h2><p>To the extent permitted by law, we are not liable for any loss arising from use of the site or reliance on its content. Our total liability to you is limited to the amount you paid us in the 12 months before the claim.</p>'
+             '<h2>9. Availability</h2><p>We aim to keep the site available at all times, but maintenance or faults may interrupt it.</p>'
+             '<h2>10. Privacy</h2><p>How we handle your information is explained in the <a href="/privacy/">Privacy notice</a>.</p>'
+             '<h2>11. Changes to these terms</h2><p>We may update these terms. The date at the top shows the latest version; subscribers are told of important changes by email.</p>'
+             '<h2>12. Governing law</h2><p>These terms are governed by the laws of the People’s Republic of Bangladesh, and the courts of Bangladesh have jurisdiction over any dispute.</p>'
+             '<h2>13. Contact</h2>' + _contact_block() + '</div>')
+    refund = ('<h1>Refund and cancellation policy</h1><p class="n">Last updated ' + today + '</p><div class="card">'
+              '<h2>What you buy</h2><p>A subscription gives you access to every page of ' + site + ' for the period you pay for: one month or one year. Access is usually approved within ' + hrs + ' hours of a confirmed payment.</p>'
+              '<h2>Full refund</h2><ul><li>We could not give you access within 3 working days of a confirmed payment.</li><li>You were charged twice, or more than the price shown: we refund the extra amount.</li><li>A technical fault on our side stopped you using the site for more than 7 days in a row, and we could not fix it: we refund the unused part of your period.</li></ul>'
+              '<h2>No refund</h2><p>We do not refund a period once access has been given and used, except in the cases above or where the law requires it. The editor may still grant a refund in other cases.</p>'
+              '<h2>Cancellation</h2><p>Subscriptions do not renew automatically, so you can cancel at any time simply by not paying again. To end your access early, contact us; this does not create a refund except as described above.</p>'
+              '<h2>How to ask for a refund</h2><ol><li>Contact us using the details below within 30 days of the payment.</li><li>Give the email you subscribed with, the payment method (bKash, Nagad or card), the transaction ID, the amount and the date.</li>'
+              '<li>We reply within 3 working days. An approved refund is sent back through the same payment method within 7 to 10 working days; card refunds can take longer, depending on your bank.</li></ol>'
+              '<h2>Contact</h2>' + _contact_block() + '</div>')
+    contact = ('<h1>Contact</h1><div class="card">' + _contact_block() + '</div><div class="card"><h3>Payments and refunds</h3><p>Please include the email you subscribed with and the transaction ID of your payment. See the <a href="/refund/">Refund and cancellation policy</a>.</p></div>')
+    priv = ''
+    try:
+        sh = read('shell.html'); m = re.search(r'id="v-privacy"[^>]*>(.*?)</section>', sh, flags=re.S)
+        if m: priv = re.sub(r'\sid="[^"]*"', '', re.sub(r'<a [^>]*href="#[^"]*"[^>]*>(.*?)</a>', r'\1', m.group(1)))
+    except Exception as e:
+        print('  privacy text not found:', e)
+    privacy = ('<h1>Privacy notice</h1><p class="n">Last updated ' + today + '</p><div class="card">' + priv +
+               '<h2>Payments</h2><p>Payments are processed by bKash, Nagad or SSLCOMMERZ. We never see or store your card or wallet details. We keep your name, email address, plan, payment method, transaction ID and dates, only to manage your subscription and answer questions about it.</p>'
+               '<h2>Contact</h2>' + _contact_block() + '</div>')
+    for slug, title, lede, body in [('terms', 'Terms and conditions', 'The rules for using this website and its subscription.', terms),
+                                    ('refund', 'Refund and cancellation policy', 'When and how you can get a refund or cancel.', refund),
+                                    ('contact', 'Contact', 'How to reach the editor.', contact),
+                                    ('privacy', 'Privacy notice', 'What we record and why.', privacy)]:
+        d = pub / slug; d.mkdir(parents=True, exist_ok=True)
+        (d / 'index.html').write_text(harden(_page(title, lede, body), main=True), encoding='utf-8')
+    print('  public pages: join, terms, refund, contact, privacy')
+
+
+def owner_editor_html():
+    c, p = CFG.get('contact') or {}, CFG.get('pay') or {}
+    plans = (CFG.get('earn') or {}).get('plans') or []
+    m = next((x for x in plans if 'month' in str(x.get('period', '')).lower()), {})
+    y = next((x for x in plans if 'year' in str(x.get('period', '')).lower()), {})
+    F = [('contact.business', 'Business name', c.get('business')), ('contact.person', 'Contact person', c.get('person')), ('contact.address', 'Address', c.get('address')),
+         ('contact.phone', 'Phone', c.get('phone')), ('contact.email', 'Public email', c.get('email')), ('contact.whatsapp', 'WhatsApp', c.get('whatsapp')), ('contact.hours', 'Office hours', c.get('hours')),
+         ('plan.month.usd', 'Monthly price, US$ (blank = “offer price coming soon”)', m.get('usd')), ('plan.month.bdt', 'Monthly price, Taka', m.get('bdt')),
+         ('plan.year.usd', 'Yearly price, US$', y.get('usd')), ('plan.year.bdt', 'Yearly price, Taka', y.get('bdt')),
+         ('pay.bkash', 'bKash merchant number', p.get('bkash')), ('pay.nagad', 'Nagad merchant number', p.get('nagad')), ('pay.form', 'Payment confirmation form link', p.get('form')),
+         ('pay.card_link', 'Card payment link (SSLCOMMERZ, when approved)', p.get('card_link')), ('pay.approval_hours', 'Approval time, hours', p.get('approval_hours') or '24')]
+    fields = ''.join('<label class="f">' + _xe(lab) + '<input data-k="' + k + '" value="' + _xe(str(v or '')) + '"></label>' for k, lab, v in F)
+    src = json.dumps(CFG, ensure_ascii=False).replace('</', '<\\/')
+    js = ("(function(){var want=window.MM_OWNERH,ed=document.getElementById('ed'),no=document.getElementById('ed-no');"
+          "function hex(b){return Array.prototype.map.call(new Uint8Array(b),function(x){return('0'+x.toString(16)).slice(-2)}).join('')}"
+          "try{var c=localStorage.getItem('mm.owner');if(c&&want&&window.crypto&&crypto.subtle){crypto.subtle.digest('SHA-256',new TextEncoder().encode(c)).then(function(h){var ok=hex(h)===want;ed.hidden=!ok;no.hidden=ok})}}catch(e){}"
+          "document.getElementById('ed-go').addEventListener('click',function(){var cfg=JSON.parse(document.getElementById('cfg-src').textContent),ch=[];"
+          "cfg.contact=cfg.contact||{};cfg.pay=cfg.pay||{};cfg.earn=cfg.earn||{};cfg.earn.plans=cfg.earn.plans||[];"
+          "function plan(per){var p=cfg.earn.plans.filter(function(x){return String(x.period||'').toLowerCase().indexOf(per)>=0})[0];if(!p){p={name:per==='month'?'Monthly':'Yearly',period:'a '+per,features:[],link:''};cfg.earn.plans.push(p)}return p}"
+          "[].forEach.call(document.querySelectorAll('#ed input[data-k]'),function(i){var k=i.getAttribute('data-k').split('.'),v=i.value.trim(),o,key;"
+          "if(k[0]==='plan'){o=plan(k[1]);key=k[2]}else{o=cfg[k[0]];key=k[1]}if(String(o[key]||'')!==v){ch.push(i.parentNode.firstChild.textContent+': '+(v||'(blank)'))}o[key]=v});"
+          "var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(cfg,null,2)],{type:'application/json'}));a.download='config.json';document.body.appendChild(a);a.click();a.remove();"
+          "document.getElementById('ed-out').innerHTML='<p class=\"ok\">config.json created with '+ch.length+' change'+(ch.length===1?'':'s')+'.</p>'+(ch.length?'<ul>'+ch.map(function(t){return'<li>'+t.replace(/[&<>]/g,function(s){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[s]})+'</li>'}).join('')+'</ul>':'')})})();")
+    return ('<div class="card" id="editor"><h2>Public details, prices and payment numbers</h2>'
+            '<p id="ed-no">This editor opens only on a device where you have opened your owner link.</p>'
+            '<div id="ed" hidden><p>Change any field, then press the button. It creates an updated <b>config.json</b>. Upload it to GitHub, replacing the old file; the site updates in about 10 minutes. '
+            'Only you can change these details: the editor needs your owner link, and publishing needs your GitHub sign-in.</p>' + fields +
+            '<button type="button" class="b" id="ed-go">Create updated config.json</button><div id="ed-out"></div></div>'
+            '<script type="application/json" id="cfg-src">' + src + '</script>'
+            '<script>window.MM_OWNERH=' + json.dumps(str((CFG.get('auth') or {}).get('owner') or '')) + ';' + js + '</script></div>')
 
 
 def harden(page, main=False):
@@ -332,7 +494,7 @@ def harden(page, main=False):
     return page.replace(anchor, anchor + '\n' + meta, 1)
 
 
-DIAG_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Phone check | Macroeconomic Monitor</title>\n<style>\nbody{margin:0;padding:16px;font:16px/1.5 Arial,Helvetica,sans-serif;background:#ffffff;color:#000000}\nh1{font-size:21px;margin:0 0 6px}\ntable{border-collapse:collapse;width:100%;font-size:14px;margin-top:10px}\ntd{border:1px solid #888;padding:6px;vertical-align:top;word-break:break-word}\n.t{padding:12px;margin:8px 0;border:2px solid #666;font-weight:700;font-size:17px}\n#ta{background:rgba(240,240,240,.7);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#000}\n#tb{background:#ffffff;color:#000000}\n#tc{background:#000000;color:#ffffff}\n#td{background:#123a66;color:#ffd000}\n.btn{display:inline-block;border:0;font:inherit;cursor:pointer;margin:8px 8px 0 0;padding:11px 15px;background:#0a7d4f;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px}\n</style></head><body>\n<h1>Macroeconomic Monitor: phone check</h1><p style="background:#fff7d6;border:1px solid #c9a24b;padding:8px 10px;border-radius:8px"><b>Site version 3.8, built %%BUILD%%</b></p>\n<p>Please take a screenshot of this page (scroll down for a second one if needed) and send it to Claude.</p>\n<div class="t" id="ta">Test A: text inside a blurred box</div>\n<div class="t" id="tb">Test B: black text on white</div>\n<div class="t" id="tc">Test C: white text on black</div>\n<div class="t" id="td">Test D: yellow text on blue</div>\n<table id="info"><tr><td>Checking…</td></tr></table>\n<p><a class="btn" href="/?safe=1">Open the site in safe mode</a><a class="btn" href="/?safe=0&amp;fresh=32">Open the site normally</a></p><p><button type="button" class="btn" id="rs">Reset this site’s saved settings and reload</button><button type="button" class="btn" id="ra" style="background:#8a2a1f">Reset everything, including the owner pass</button></p>\n<script>(function(){var r=[];function add(k,v){r.push(\'<tr><td>\'+k+\'</td><td>\'+String(v).replace(/&/g,\'&amp;\').replace(/</g,\'&lt;\')+\'</td></tr>\')}\nfunction mm(q){try{return matchMedia(q).matches?\'yes\':\'no\'}catch(e){return \'unknown\'}}\nadd(\'Browser\',navigator.userAgent);\nadd(\'Screen\',screen.width+\' x \'+screen.height+\', pixel ratio \'+window.devicePixelRatio);\nadd(\'Page area\',window.innerWidth+\' x \'+window.innerHeight);\nadd(\'Phone prefers dark\',mm(\'(prefers-color-scheme: dark)\'));\nadd(\'Reduce motion\',mm(\'(prefers-reduced-motion: reduce)\'));\nadd(\'Inside a frame\',window.top!==window.self?\'yes\':\'no\');\nvar s;try{s=\'theme=\'+localStorage.getItem(\'mm.theme\')+\', safe mode=\'+(localStorage.getItem(\'mm.safe\')||\'off\')+\', owner pass=\'+(localStorage.getItem(\'mm.owner\')?\'yes\':\'no\')}catch(e){s=\'storage blocked\'}\nadd(\'Saved settings\',s);\nvar el=document.createElement(\'div\');el.style.cssText=\'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px)\';document.body.appendChild(el);add(\'Top safe area\',Math.round(el.getBoundingClientRect().height)+\' px\');el.parentNode.removeChild(el);\nvar bf=window.CSS&&CSS.supports&&(CSS.supports(\'backdrop-filter\',\'blur(2px)\')||CSS.supports(\'-webkit-backdrop-filter\',\'blur(2px)\'));add(\'Blur supported\',bf?\'yes\':\'no\');\nadd(\'Language\',navigator.language);add(\'Checked at\',new Date().toString());\ndocument.getElementById(\'info\').innerHTML=r.join(\'\');\nfunction clr(all){try{var ks=[];for(var i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));ks.forEach(function(k){if(k&&k.indexOf(\'mm.\')===0&&(all||k!==\'mm.owner\'))localStorage.removeItem(k);});}catch(e){}try{sessionStorage.clear();}catch(e){}location.href=\'/?safe=0&fresh=\'+Date.now();}\ndocument.getElementById(\'rs\').addEventListener(\'click\',function(){clr(false);});document.getElementById(\'ra\').addEventListener(\'click\',function(){clr(true);});})();</script>\n</body></html>\n'
+DIAG_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Phone check | Macroeconomic Monitor</title>\n<style>\nbody{margin:0;padding:16px;font:16px/1.5 Arial,Helvetica,sans-serif;background:#ffffff;color:#000000}\nh1{font-size:21px;margin:0 0 6px}\ntable{border-collapse:collapse;width:100%;font-size:14px;margin-top:10px}\ntd{border:1px solid #888;padding:6px;vertical-align:top;word-break:break-word}\n.t{padding:12px;margin:8px 0;border:2px solid #666;font-weight:700;font-size:17px}\n#ta{background:rgba(240,240,240,.7);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:#000}\n#tb{background:#ffffff;color:#000000}\n#tc{background:#000000;color:#ffffff}\n#td{background:#123a66;color:#ffd000}\n.btn{display:inline-block;border:0;font:inherit;cursor:pointer;margin:8px 8px 0 0;padding:11px 15px;background:#0a7d4f;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px}\n</style></head><body>\n<h1>Macroeconomic Monitor: phone check</h1><p style="background:#fff7d6;border:1px solid #c9a24b;padding:8px 10px;border-radius:8px"><b>Site version 3.10, built %%BUILD%%</b></p>\n<p>Please take a screenshot of this page (scroll down for a second one if needed) and send it to Claude.</p>\n<div class="t" id="ta">Test A: text inside a blurred box</div>\n<div class="t" id="tb">Test B: black text on white</div>\n<div class="t" id="tc">Test C: white text on black</div>\n<div class="t" id="td">Test D: yellow text on blue</div>\n<table id="info"><tr><td>Checking…</td></tr></table>\n<p><a class="btn" href="/?safe=1">Open the site in safe mode</a><a class="btn" href="/?safe=0&amp;fresh=32">Open the site normally</a></p><p><button type="button" class="btn" id="rs">Reset this site’s saved settings and reload</button><button type="button" class="btn" id="ra" style="background:#8a2a1f">Reset everything, including the owner pass</button></p>\n<script>(function(){var r=[];function add(k,v){r.push(\'<tr><td>\'+k+\'</td><td>\'+String(v).replace(/&/g,\'&amp;\').replace(/</g,\'&lt;\')+\'</td></tr>\')}\nfunction mm(q){try{return matchMedia(q).matches?\'yes\':\'no\'}catch(e){return \'unknown\'}}\nadd(\'Browser\',navigator.userAgent);\nadd(\'Screen\',screen.width+\' x \'+screen.height+\', pixel ratio \'+window.devicePixelRatio);\nadd(\'Page area\',window.innerWidth+\' x \'+window.innerHeight);\nadd(\'Phone prefers dark\',mm(\'(prefers-color-scheme: dark)\'));\nadd(\'Reduce motion\',mm(\'(prefers-reduced-motion: reduce)\'));\nadd(\'Inside a frame\',window.top!==window.self?\'yes\':\'no\');\nvar s;try{s=\'theme=\'+localStorage.getItem(\'mm.theme\')+\', safe mode=\'+(localStorage.getItem(\'mm.safe\')||\'off\')+\', owner pass=\'+(localStorage.getItem(\'mm.owner\')?\'yes\':\'no\')}catch(e){s=\'storage blocked\'}\nadd(\'Saved settings\',s);\nvar el=document.createElement(\'div\');el.style.cssText=\'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top,0px)\';document.body.appendChild(el);add(\'Top safe area\',Math.round(el.getBoundingClientRect().height)+\' px\');el.parentNode.removeChild(el);\nvar bf=window.CSS&&CSS.supports&&(CSS.supports(\'backdrop-filter\',\'blur(2px)\')||CSS.supports(\'-webkit-backdrop-filter\',\'blur(2px)\'));add(\'Blur supported\',bf?\'yes\':\'no\');\nadd(\'Language\',navigator.language);add(\'Checked at\',new Date().toString());\ndocument.getElementById(\'info\').innerHTML=r.join(\'\');\nfunction clr(all){try{var ks=[];for(var i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));ks.forEach(function(k){if(k&&k.indexOf(\'mm.\')===0&&(all||k!==\'mm.owner\'))localStorage.removeItem(k);});}catch(e){}try{sessionStorage.clear();}catch(e){}location.href=\'/?safe=0&fresh=\'+Date.now();}\ndocument.getElementById(\'rs\').addEventListener(\'click\',function(){clr(false);});document.getElementById(\'ra\').addEventListener(\'click\',function(){clr(true);});})();</script>\n</body></html>\n'
 
 
 def extras_inject(page, artifact=False):
@@ -541,6 +703,7 @@ def main():
     urls += [f'{SITE}{s}/' for s in build_monitors(pub)]
     build_owner(pub, built)
     build_join(pub)
+    build_legal(pub)
     urls.append(f'{SITE}join/')
     (pub / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
                                      + ''.join(f'  <url><loc>{u}</loc><lastmod>{built}</lastmod></url>\n' for u in urls) + '</urlset>\n', encoding='utf-8')

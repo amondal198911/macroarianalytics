@@ -142,19 +142,36 @@ add('infl', 'Headline inflation', '% y/y', 'M', 'prices', ['ET.SEI_B.001', 'ET.S
 add('infl_avg', 'Headline inflation', '%', 'M', 'prices', ['ET.SEI_B.003', 'ET.SEI_B.004', 'ET.CPI.003', 'ET.CPI_B.003'], _i3, '12-month average', LINK_NOTE.replace(mlab(S1), mlab(S3)).replace(f'{d1:.2f}', f'{d3:.2f}'), 'splice')
 K12 = mk(2012, 7)
 COMP_NOTE = 'From July 2012 (base 2005–06, Table VII), after that table’s change of base; base 2021–22 (Table VIII) from April 2023.'
-add('food', 'Food inflation', '% y/y', 'M', 'prices', ['ET.CPI.005', 'ET.CPI_B.005'], {k: v for k, v in splice(M('ET.CPI.005'), M('ET.CPI_B.005')).items() if k >= K12}, 'point-to-point', COMP_NOTE, 'splice')
-add('nonfood', 'Non-food inflation', '% y/y', 'M', 'prices', ['ET.CPI.008', 'ET.CPI_B.008'], {k: v for k, v in splice(M('ET.CPI.008'), M('ET.CPI_B.008')).items() if k >= K12}, 'point-to-point', COMP_NOTE, 'splice')
+COMP_NOTE2 = 'July 2006 to June 2012: base 1995–96 (Table VII, as published); July 2012 to March 2023: base 2005–06; from April 2023: base 2021–22 (Table VIII). Published rates are used, so no index levels are spliced.'
+add('food', 'Food inflation', '% y/y', 'M', 'prices', ['ET.CPI.005', 'ET.CPI_B.005'], splice(M('ET.CPI.005'), M('ET.CPI_B.005')), 'point-to-point', COMP_NOTE2, 'splice')
+add('nonfood', 'Non-food inflation', '% y/y', 'M', 'prices', ['ET.CPI.008', 'ET.CPI_B.008'], splice(M('ET.CPI.008'), M('ET.CPI_B.008')), 'point-to-point', COMP_NOTE2, 'splice')
 _ov = [(k, M('ET.SEI_B.001')[k], M('ET.CPI_B.002')[k]) for k in M('ET.CPI_B.002') if k in M('ET.SEI_B.001')]
 print('check Table IB vs Table VIII overlap: months', len(_ov), 'max abs diff', round(max(abs(a - b) for _, a, b in _ov), 3) if _ov else None)
 _f = M('ET.CPI.005'); print('food Table VII 2012-04..09:', [_f.get(k) for k in range(mk(2012, 4), mk(2012, 10))])
 # CPI components (2021-22 base): year-on-year from the group indices
+OLDG = [('food', 'N.CPI.2.0005', False), ('cloth', 'N.CPI.2.0007', False), ('housing', 'N.CPI.2.0008', False), ('rent', 'N.CPI.2.0008', False), ('furnish', 'N.CPI.2.0009', False), ('health', 'N.CPI.2.0010', False), ('transport', 'N.CPI.2.0011', True), ('communication', 'N.CPI.2.0011', True), ('recreation', 'N.CPI.2.0012', True), ('education', 'N.CPI.2.0012', True), ('miscellaneous', 'N.CPI.2.0013', False), ('misc', 'N.CPI.2.0013', False)]
+def old_group(nm):
+    n = nm.lower()
+    for w, code, apx in OLDG:
+        if w in n:
+            try: d = yoy(M(code), 12)
+            except Exception: d = {}
+            return (d, code, apx) if d else (None, None, False)
+    return None, None, False
 comp = []
 for c in ['ET.CPI_B.004'] + [f'ET.CPI_B.0{i}' for i in range(11, 21)]:
     d = yoy(M(c), 12)
     if d:
         nm = META[c][3].split('|')[-1].strip() if c != 'ET.CPI_B.004' else 'Food'
         k = max(d)
-        comp.append({'name': nm, 'code': c, 'period': mlab(k), 'v': r4(d[k]), 'prev': r4(d.get(k - 1)), 'series': pack(d, 'M')})
+        od, oc, apx = old_group(nm)
+        full = dict(d)
+        if od:
+            k1 = min(d)
+            for kk, vv in od.items():
+                if kk < k1 and kk < mk(2023, 4): full[kk] = vv
+        comp.append({'name': nm, 'code': c, 'period': mlab(k), 'v': r4(d[k]), 'prev': r4(d.get(k - 1)), 'series': pack(full, 'M'), 'old': oc, 'approx': apx})
+        print('CPI group', nm[:34].ljust(34), 'from', mlab(min(full)), '(old base' + (' ' + oc + (', approximate' if apx else '') if oc else ': none') + ')')
 gdp_fy = splice(get('ET.NA_KEY.029', 'FY'), get('ET.NA_KEY.030', 'FY'))
 add('gdp_fy', 'Real GDP growth', '%', 'FY', 'real', ['ET.NA_KEY.029', 'ET.NA_KEY.030'], gdp_fy, 'fiscal year', 'Base 2005–06 to FY2016, base 2015–16 from FY2017.', 'splice')
 add('gdp_q', 'Real GDP growth', '% y/y', 'Q', 'real', ['ET.QGDP.034'], get('ET.QGDP.034', 'Q'), 'quarterly, constant prices')
@@ -797,6 +814,12 @@ OUT = {
     'placebo': PLACEBO, 'dsge': DS, 'ridge_bd': RIDGE_BD,
     'world': {'het': HET, 'conv': CONV, 'ridge': RIDGE_W, 'corr': CORR, 'fc': FCW},
 }
+# keep earlier Bayesian DSGE results when this run did not produce new ones
+try:
+    _old = json.loads((ROOT / 'bd_models.json').read_text(encoding='utf-8')) if (ROOT / 'bd_models.json').exists() else {}
+    if isinstance(OUT.get('dsge'), dict) and 'bayes' not in OUT['dsge'] and 'bayes' in (_old.get('dsge') or {}): OUT['dsge']['bayes'] = _old['dsge']['bayes']
+except Exception as _e:
+    print('could not carry over Bayesian results:', _e)
 js = json.dumps(OUT, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
 Path(A.out).write_text(js, encoding='utf-8')
 print('wrote', A.out, len(js), 'bytes;', len(series_out), 'series;', len(AR), 'ARIMA;', 'VAR p =', p, 'sample', OUT['var']['sample'])

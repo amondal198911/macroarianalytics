@@ -46,6 +46,7 @@
 </header>
 
 <main>
+<div class="site-head"><p class="site-title">Macroeconomic Monitor and Forecasting</p><p class="site-tag">Data, forecasts and analysis for Bangladesh and the world economy</p></div>
   <!-- ============ OVERVIEW ============ -->
   <div class="view" id="v-overview">
     <div class="ticker" id="ticker" role="region" aria-label="Latest prices and world growth">
@@ -208,7 +209,7 @@
       <div class="controls" style="gap:8px"><label class="chip"><input type="checkbox" id="c-log"> Log scale for amounts</label>
       <div class="seg" id="c-range" role="group" aria-label="Time range">
         <button type="button" data-r="5" title="5 years">5y</button><button type="button" data-r="10" title="10 years">10y</button><button type="button" data-r="15" title="15 years">15y</button><button type="button" data-r="20" title="20 years">20y</button><button type="button" data-r="25" title="25 years">25y</button><button type="button" data-r="all" title="All years">All</button>
-      </div><div class="span-x" id="c-range-x"><label class="span-c"><span class="sr-only">Custom number of years</span><input type="number" id="c-range-n" min="1" max="80" step="1" inputmode="numeric" placeholder="yrs" title="Custom number of years"></label><button type="button" class="btn sm" id="c-range-auto" aria-pressed="false" title="Cycle through 5, 10, 15, 20, 25 years and All">▶ Auto</button></div></div>
+      </div><div class="span-x" id="c-range-x"><label class="span-c"><span class="sr-only">Custom number of years</span><input type="number" id="c-range-n" min="1" max="80" step="1" inputmode="numeric" placeholder="yrs" title="Custom number of years"></label><button type="button" class="btn sm" id="c-range-auto" aria-pressed="false" title="Cycle through 5, 10, 15, 20, 25 years and All">▶ Auto</button><label class="span-c"><span class="sr-only">Seconds between changes</span><input type="number" id="c-range-s" min="2" max="120" step="1" value="6" inputmode="numeric" title="Seconds between automatic changes"></label><button type="button" class="btn sm" id="c-range-blink" aria-pressed="true" title="Blinking warnings on or off">Blink</button></div></div>
     </div>
     <div id="c-sections"></div>
   </div>
@@ -589,7 +590,8 @@
     <nav aria-label="About the site"><h3>About</h3><button type="button" data-go="about">About</button><button type="button" data-go="plans">Subscribe</button><button type="button" data-go="plans" data-jump="pl-ads">Advertise with us</button><button type="button" data-go="contact">Contact</button><button type="button" data-go="privacy">Privacy</button><button type="button" data-go="about" data-anchor="ab-disclaimer">Disclaimer</button></nav>
   </div>
   <div class="wrap foot-legal">© 2026 <span data-owner-gate hidden>{{OWNER}}</span><span data-owner-alt>Macroeconomic Monitor and Forecasting</span>. All rights reserved. Data: World Bank (CC BY 4.0), U.S. Energy Information Administration, Federal Reserve, U.S. Bureau of Labor Statistics. For information only, not investment advice. <button type="button" class="linklike blink-tg" id="blink-tg">Blinking warnings: on</button></div>
-  <p class="build-stamp">Version 3.8 · updated %%BUILD%% · <a href="/monitor/">Bangladesh Macroeconomic Monitor</a> · <a href="/inflation/">Bangladesh Inflation Monitor</a> · <a href="/join/">Join and subscribe</a> · <a class="owner-only" href="/owner/">Owner downloads</a> · <a href="/diag.html">Phone check</a></p>
+  <p class="build-stamp">Version 3.10 · updated %%BUILD%% · <a href="/monitor/">Bangladesh Macroeconomic Monitor</a> · <a href="/inflation/">Bangladesh Inflation Monitor</a> · <a href="/join/">Join and subscribe</a> · <a class="owner-only" href="/owner/">Owner downloads</a> · <a href="/diag.html">Phone check</a></p>
+  <div class="foot-legal"><a href="/join/">Join</a> · <a href="/terms/">Terms and conditions</a> · <a href="/refund/">Refund and cancellation</a> · <a href="/privacy/">Privacy</a> · <a href="/contact/">Contact</a></div>
 </footer>
 
 <div class="sheet" id="picker" role="dialog" aria-modal="true" aria-labelledby="picker-title" hidden>

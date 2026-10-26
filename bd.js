@@ -1437,13 +1437,13 @@ function bdMapExtra(B) {
   const OFFN = { Barisal: 'Barishal', Chittagong: 'Chattogram' };
   let areas = []; try { areas = B.div.map(d => ({ n: OFFN[d.n] || d.n, a: divArea(d.r) })); } catch (e) { areas = []; }
   const tot = areas.reduce((s, x) => s + x.a, 0);
-  const leg = areas.length ? '<div class="bd-legend">' + areas.map((x, i) => '<span><i style="background:' + DIVC[i % DIVC.length] + '"></i>' + esc(x.n) + ' <small>' + nf(x.a / 1000, 1) + 'k km² · ' + nf(x.a / tot * 100, 1) + '%</small></span>').join('') + '</div>' : '';
+  const leg = areas.length ? '<div class="bd-legend">' + areas.map((x, i) => '<span><i style="background:' + DIVC[i % DIVC.length] + '"></i>' + esc(x.n) + ' <small>' + nf(x.a / 1000, 1) + 'k km² · ' + nf(x.a / tot * 100, 1) + '%' + (BD_DIVPOP[x.n] ? ' · ' + nf(BD_DIVPOP[x.n] / 1e6, 1) + ' m people · ' + nf(BD_DIVPOP[x.n] / x.a, 0) + ' per km²' : '') + '</small></span>').join('') + '</div>' : '';
   const L = k => lastOfS(k, 'BGD'), f = (lab, v, u) => (v ? '<div class="bdf"><span>' + lab + '</span><b>' + v + '</b>' + (u ? '<small>' + u + '</small>' : '') + '</div>' : '');
   const gdp = L('gdp_usd'), gpc = L('gdp_pc'), gr = L('gdp_growth'), pv = L('poverty'), lit = L('literacy') || L('lit'), el = L('electricity') || L('elec');
   const inf = PK('infl'); let iv = null, ip = '';
   if (inf) { for (let j = inf.v.length - 1; j >= 0; j--) if (inf.v[j] != null) { iv = inf.v[j]; ip = bdLab('M', inf.k0 + j); break; } }
   const econ = f('GDP', gdp ? 'US$ ' + nf(gdp[1] > 1e6 ? gdp[1] / 1e9 : gdp[1], 1) + ' bn' : '', gdp ? String(gdp[0]) : '') + f('GDP per person', gpc ? 'US$ ' + nf(gpc[1], 0) : '', gpc ? String(gpc[0]) : '') + f('Real growth', gr ? nf(gr[1], 2) + '%' : '', gr ? String(gr[0]) : '') + f('Inflation', iv != null ? nf(iv, 2) + '%' : '', ip) + f('Poverty ($3/day)', pv ? nf(pv[1], 2) + '%' : '', pv ? String(pv[0]) : '');
-  return leg + (econ ? '<div class="bdfacts bdfacts2">' + econ + '</div>' : '');
+  return leg + (econ ? '<div class="bdfacts bdfacts2">' + econ + '</div>' : '') + bdDemog();
 }
 function divArea(rings) {
   const R = 6371.0088, rad = Math.PI / 180; let tot = 0;
@@ -2930,9 +2930,11 @@ const EARN = window.MM_EARN || {};
 function initPlans() {
   const host = $('#pl-cards');
   if (!host) return;
-  const plans = EARN.plans || [];
-  host.innerHTML = plans.map((p, i) => '<article class="plan' + (i === 1 ? ' best' : '') + '"><h3>' + esc(p.name) + '</h3><p class="pl-price"><b>' + esc(p.price) + '</b>' + (p.period ? ' <span>' + esc(p.period) + '</span>' : '') + '</p><ul>' + (p.features || []).map(f => '<li>' + esc(f) + '</li>').join('') + '</ul>' +
-    (p.link ? '<a class="btn' + (i === 1 ? ' primary' : '') + '" href="' + esc(p.link) + '" target="_blank" rel="noopener">' + (p.price === 'Free' ? 'Start reading' : 'Subscribe') + '</a>' : p.price === 'Free' ? '<button type="button" class="btn" data-go="overview">Start reading</button>' : '<span class="btn ghost" aria-disabled="true">Opening soon</span>') + '</article>').join('');
+  const plans = (EARN.plans || []).filter(p => String(p.price || '').toLowerCase() !== 'free');
+  const ph = t => '<span class="ph">' + esc(t) + '</span>';
+  const price = p => { const u = String(p.usd || '').replace('US$', '').trim(), b = String(p.bdt || '').replace('৳', '').trim(), o = String(p.price || '').trim(); if (!u && !b && !o) return ph('Offer price coming soon'); return (u ? '<b>US$ ' + esc(u) + '</b>' : o ? '<b>' + esc(o) + '</b>' : ph('US$ price coming soon')) + ' <span class="pl-or">or</span> ' + (b ? '<b>৳ ' + esc(b) + '</b>' : ph('Taka price coming soon')); };
+  host.innerHTML = plans.map((p, i) => '<article class="plan' + (i === 1 ? ' best' : '') + '"><h3>' + esc(p.name) + '</h3><p class="pl-price">' + price(p) + '</p><p class="pl-per">' + esc(p.period || '') + ', paid in advance; no automatic renewal</p><ul>' + (p.features || []).map(f => '<li>' + esc(f) + '</li>').join('') + '</ul><a class="btn' + (i === 1 ? ' primary' : '') + '" href="/join/">How to pay and join</a></article>').join('') +
+    '<p class="note">Every page is available by subscription only. Pay by bKash or Nagad now; card payment through SSLCOMMERZ is coming soon. <a href="/terms/">Terms and conditions</a> · <a href="/refund/">Refund and cancellation</a> · <a href="/privacy/">Privacy</a> · <a href="/contact/">Contact</a></p>';
   const more = [];
   if (EARN.newsletter_form) more.push('<a class="btn" href="' + esc(EARN.newsletter_form) + '" target="_blank" rel="noopener">Get the free monthly update by email</a>');
   if (EARN.donate_link) more.push('<a class="btn" href="' + esc(EARN.donate_link) + '" target="_blank" rel="noopener">Support this site with a one-off gift</a>');
@@ -3113,7 +3115,7 @@ function inflExplorer(host, below) {
   let node = null;
   const draw = () => { if (node) rerender(node); };
   const fig = figure(host, { prefix: labState.prefix, wide: true, title: 'Inflation in Bangladesh: every measure, with projections', sub: '% year on year (rates in %); tick series below; dashed lines are 12-month projections', h: 400,
-    notes: 'Headline projection: ensemble of ARIMA and SVAR (Forecast lab). Other projections: Holt’s linear exponential smoothing fitted to the last five years of each series. CPI groups exist only from April 2024 under the new 2021–22 base; BBS did not publish these groups earlier.',
+    notes: 'Headline projection: ensemble of ARIMA and SVAR (Forecast lab). Other projections: Holt’s linear exponential smoothing fitted to the last five years of each series. CPI groups: base 2005–06 from July 2013 to March 2023, base 2021–22 from April 2024; no year-on-year rate exists across the change of base, so group lines break for a year. Transport, communication, recreation and education link to combined old-base groups (approximate).',
     source: 'BBS and Bangladesh Bank; model estimates.',
     render: TH => {
       const chosen = pool.filter(p => EXPL.sel.has(p.k));
@@ -3141,6 +3143,7 @@ function inflExplorer(host, below) {
   box.innerHTML = Object.entries(groups).map(([g, ps]) => '<div class="pk-g"><b>' + esc(g) + '</b><div class="pk-row">' + ps.map(p => '<label class="pk"><input type="checkbox" data-k="' + p.k + '"' + (EXPL.sel.has(p.k) ? ' checked' : '') + '><span>' + esc(p.label) + '</span></label>').join('') + '</div></div>').join('') +
     '<div class="pk-act"><button type="button" class="btn sm" data-pk="infl">All inflation measures</button><button type="button" class="btn sm" data-pk="all">Everything</button><button type="button" class="btn sm" data-pk="none">Clear</button><label class="pk"><input type="checkbox" data-pk="proj"' + (EXPL.proj ? ' checked' : '') + '><span>Show projections</span></label></div>';
   (below || host).append(box);
+  explGranger(below || host);
   box.addEventListener('change', ev => { const t = ev.target; if (t.getAttribute('data-pk') === 'proj') { EXPL.proj = t.checked; draw(); return; } const k = t.getAttribute('data-k'); if (!k) return; if (t.checked) EXPL.sel.add(k); else EXPL.sel.delete(k); draw(); });
   box.addEventListener('click', ev => { const b = ev.target.closest('button[data-pk]'); if (!b) return; const m = b.getAttribute('data-pk'); EXPL.sel = new Set(m === 'none' ? [] : pool.filter(p => m === 'all' || p.grp !== 'Related real and financial variables').map(p => p.k)); box.querySelectorAll('input[data-k]').forEach(x => { x.checked = EXPL.sel.has(x.getAttribute('data-k')); }); draw(); });
   const H = P0, rows = [];
@@ -3429,6 +3432,7 @@ function sectorOutlook(body, c) {
       r0.fc.forEach(q => { labs.push(bdLab(p.f, p.k0 + r0.li + q.h)); hist.push(null); fcs.push(q.f); lo.push(q.lo80); hi.push(q.hi80); });
       figure(s, { wide: true, title: nm(r0) + ': history and one-year projection', sub: 'Holt projection (dashed) with its 80% range (dotted)', h: 300, source: 'Bangladesh Bank, BBS; model estimates.', render: TH => tsOption(TH, labs, [S('History', hist, { w: 2 }), S('Projection', fcs, { w: 2, dash: true }), S('80% range, lower', lo, { w: 1, dash: true }), S('80% range, upper', hi, { w: 1, dash: true })], { y1: r0.m.unit || '', dec: 2 }) });
     }
+    outlookMore(s, rows, c);
     const cl = CL_CATS.find(t => (t.bd || []).some(k => (c.keys || []).includes(k)));
     const tx = document.createElement('div'); tx.className = 'ol-grid';
     tx.innerHTML =
@@ -3835,6 +3839,154 @@ function countryFill(grid, code, specs) {
       return tsOption(TH, labels, out, { y1: same ? indU(keys[0]) : 'z-score', dec: 2 });
     });
   } catch (e) { console.warn('v38 cfill', e && e.stack ? e.stack.slice(0, 300) : e); }
+}
+
+/* ======================= v3.9 additions ======================= */
+/* Census 2022 (BBS, preliminary report, enumerated population) by division; the final report adjusts the national total to 169,828,911. */
+var BD_DIVPOP = { Dhaka: 44215107, Chattogram: 33202326, Rajshahi: 20353119, Khulna: 17416645, Rangpur: 17610956, Mymensingh: 12225498, Sylhet: 11034863, Barishal: 9100102 };
+function bdDemog() {
+  const tot = Object.values(BD_DIVPOP).reduce((a, b) => a + b, 0), pw = lastOfS('population', 'BGD'), pg = lastOfS('pop_growth', 'BGD');
+  const top = Object.entries(BD_DIVPOP).sort((a, b) => b[1] - a[1])[0];
+  const f = (lab, v, u) => '<div class="bdf"><span>' + lab + '</span><b>' + v + '</b>' + (u ? '<small>' + u + '</small>' : '') + '</div>';
+  const pwv = pw ? (pw[1] > 1e5 ? pw[1] / 1e6 : pw[1]) : null;
+  return '<div class="bdfacts bdfacts3">' + f('Population, census 2022', nf(tot / 1e6, 1) + ' m', 'enumerated; 169.8 m adjusted') + (pwv ? f('Population, World Bank', nf(pwv, 1) + ' m', String(pw[0])) : '') + (pg ? f('Population growth', nf(pg[1], 2) + '%', String(pg[0])) : '') +
+    f('Density', nf(tot / 147570, 0) + ' per km²', 'census 2022, 147,570 km²') + f('Largest division', esc(top[0]), nf(top[1] / tot * 100, 1) + '% of people') + '</div>' +
+    '<p class="src-line"><b>Sources:</b> BBS, Population and Housing Census 2022 (preliminary report, enumerated population; the final report adjusts the national total to 169.8 million); World Bank, World Development Indicators. Division areas and densities are measured from the map outlines, which total about 137,000 km² against the official 147,570 km², so the densities shown per division are slightly high.</p>';
+}
+/* Granger causality between headline inflation and related monthly variables. */
+function grangerF(y, x, p) {
+  const n = y.length; if (n < 3 * p + 24) return null;
+  const Xu = [], Xr = [], Y = [];
+  for (let t = p; t < n; t++) { const r0 = [1]; for (let j = 1; j <= p; j++) r0.push(y[t - j]); const r1 = r0.slice(); for (let j = 1; j <= p; j++) r1.push(x[t - j]); Xr.push(r0); Xu.push(r1); Y.push(y[t]); }
+  const u = ols(Xu, Y), r = ols(Xr, Y), df = Y.length - (2 * p + 1); if (!u || !r || df < 12 || !(u.sse > 0)) return null;
+  const F = ((r.sse - u.sse) / p) / (u.sse / df); return { F, p: chi2p(p * F, p), n: Y.length };
+}
+function pairM(ka, kb, maxN) {
+  const A = PK(ka), B = PK(kb); if (!A || !B || A.f !== 'M' || B.f !== 'M') return null;
+  const k0 = Math.max(A.k0, B.k0), k1 = Math.min(A.k0 + A.v.length, B.k0 + B.v.length) - 1, ys = [], xs = [];
+  for (let k = k1; k >= k0; k--) { const a = A.v[k - A.k0], b = B.v[k - B.k0]; if (a == null || b == null) { if (ys.length) break; continue; } ys.unshift(a); xs.unshift(b); if (ys.length >= (maxN || 144)) break; }
+  return ys.length >= 36 ? { y: ys, x: xs } : null;
+}
+var GR_KEYS = ['call', 'lend', 'real_lend', 'm2', 'rm', 'pcredit', 'xr', 'xr_dep', 'remit_g', 'exp_g', 'imp_g', 'res', 'food', 'nonfood'];
+function explGranger(host) {
+  try {
+    const rows = GR_KEYS.filter(k => SER(k) && PK(k) && PK(k).f === 'M').map(k => { const d = pairM('infl', k); if (!d) return null; const a3 = grangerF(d.y, d.x, 3), a6 = grangerF(d.y, d.x, 6), b3 = grangerF(d.x, d.y, 3); return a3 ? { k, n: d.y.length, a3, a6, b3 } : null; }).filter(Boolean);
+    if (!rows.length) return;
+    const nm = k => SER(k).label + (SER(k).sub ? ' (' + SER(k).sub + ')' : ''), ev = p => (p < 0.01 ? 'Strong evidence' : p < 0.05 ? 'Evidence' : p < 0.1 ? 'Weak evidence' : 'No evidence');
+    tableWrap(host, '<table><thead><tr><th>Variable</th><th class="num">Months</th><th class="num">F, 3 lags</th><th class="num">p</th><th class="num">F, 6 lags</th><th class="num">p</th><th>Does it help predict inflation?</th><th class="num">Reverse: inflation → variable, p (3 lags)</th></tr></thead><tbody>' +
+      rows.map(r => '<tr><th scope="row">' + esc(nm(r.k)) + '</th><td class="num">' + r.n + '</td><td class="num">' + nf(r.a3.F, 2) + stars(r.a3.p) + '</td><td class="num">' + fp(r.a3.p) + '</td><td class="num">' + (r.a6 ? nf(r.a6.F, 2) + stars(r.a6.p) : '–') + '</td><td class="num">' + (r.a6 ? fp(r.a6.p) : '–') + '</td><td>' + ev(Math.min(r.a3.p, r.a6 ? r.a6.p : 1)) + '</td><td class="num">' + (r.b3 ? fp(r.b3.p) : '–') + '</td></tr>').join('') + '</tbody></table>',
+      tcap('Granger causality: which related variables help predict headline inflation?'), 'Each test compares a regression of inflation on its own last 3 (or 6) months with one that also includes the variable’s last 3 (or 6) months; a small p means the variable adds predictive information. Uses the longest recent run of months in which both series exist, up to 12 years; p-values use the large-sample χ² approximation. Predictive, not proof of cause. Equations: Forecast lab, References tab, “Models explained”.');
+  } catch (e) { console.warn('v39 granger', e && e.stack ? e.stack.slice(0, 300) : e); }
+}
+/* Fill empty space inside cards with figures that belong there. */
+function sfBottom(c) {
+  const r = c.getBoundingClientRect(); if (!r.height) return 0; let b = r.top;
+  c.querySelectorAll('*').forEach(x => { if (x.children.length && x.tagName !== 'svg') return; if (x.tagName !== 'svg' && x.closest('svg')) return; const q = x.getBoundingClientRect(); if (q.height) b = Math.max(b, q.bottom); });
+  return r.bottom - (parseFloat(getComputedStyle(c).paddingBottom) || 0) - b;
+}
+function sfRows(keys) {
+  return keys.filter(k => SER(k) && PK(k)).map(k => {
+    const p = PK(k), v = p.v; let i = v.length - 1; while (i >= 0 && v[i] == null) i--; if (i < 0) return null;
+    const lag = p.f === 'M' ? 12 : p.f === 'Q' ? 4 : 1, y = v.slice(0, i + 1).filter(x => x != null), b = band312(y), m = SER(k);
+    return { lab: m.label + (m.sub ? ' (' + m.sub + ')' : ''), unit: m.unit || '', v: v[i], per: bdLab(p.f, p.k0 + i), ch: i - lag >= 0 && v[i - lag] != null ? v[i] - v[i - lag] : null, pos: !b ? '–' : b.out ? (v[i] > Math.max(b.a3, b.a12) ? 'above recent averages' : 'below recent averages') : 'within recent averages' };
+  }).filter(Boolean);
+}
+function sfLive(host, free) {
+  const all = sfRows(['infl', 'food', 'nonfood', 'call', 'lend', 'real_lend', 'm2', 'pcredit', 'res', 'xr', 'remit_g', 'exp_g', 'imp_g', 'npl']);
+  const n = Math.min(all.length, Math.floor((free - 96) / 29)); if (n < 3) return;
+  const d = document.createElement('div'); d.className = 'sf-box sf-live';
+  d.innerHTML = '<p class="sf-h">Bangladesh at a glance: latest readings</p><div class="tbl-scroll"><table class="sf-t"><thead><tr><th>Indicator</th><th class="num">Latest</th><th>Period</th><th class="num">Change on a year earlier</th><th>Signal</th></tr></thead><tbody>' +
+    all.slice(0, n).map(r => '<tr><th scope="row">' + esc(r.lab) + ' <small>' + esc(r.unit) + '</small></th><td class="num">' + nf(r.v) + '</td><td>' + esc(r.per) + '</td><td class="num">' + (r.ch == null ? '–' : (r.ch > 0 ? '+' : '') + nf(r.ch)) + '</td><td>' + esc(r.pos) + '</td></tr>').join('') +
+    '</tbody></table></div><p class="src-line"><b>Source:</b> Bangladesh Bank, Monthly Economic Trends; BBS. Signal compares the latest value with the averages of the last 3 and 12 observations.</p>';
+  host.append(d); if (sfBottom(host) < 0) d.remove();
+}
+function sfFig(c, free) {
+  const node = c.querySelector('.chart'), inst = node && window.echarts ? echarts.getInstanceByDom(node) : null; if (!inst) return;
+  const o = inst.getOption(), xa = (o.xAxis || [])[0] || {}, ya = (o.yAxis || [])[0] || {};
+  const ser = (o.series || []).filter(s => s && (s.type === 'line' || s.type === 'bar') && !/projection|range|band|added|lower|upper/i.test(s.name || ''));
+  if (!ser.length) return;
+  const val = d => { const v = Array.isArray(d) ? d[1] : d && typeof d === 'object' ? d.value : d; return v == null || v === '' || !isFinite(+v) ? null : +v; };
+  let rows = [], head = 'Key figures from the chart above';
+  if (xa.type === 'category' && Array.isArray(xa.data)) {
+    rows = ser.slice(0, 8).map(s => { const vs = (s.data || []).map(val), idx = vs.map((v, i) => (v == null ? -1 : i)).filter(i => i >= 0); if (!idx.length) return null; const li = idx[idx.length - 1], xs = idx.map(i => vs[i]), lab = xa.data[li];
+      return '<tr><th scope="row">' + esc(s.name || '') + '</th><td class="num">' + nf(vs[li]) + '</td><td>' + esc(String(lab && lab.value != null ? lab.value : lab)) + '</td><td class="num">' + nf(Math.min(...xs)) + '</td><td class="num">' + nf(Math.max(...xs)) + '</td><td class="num">' + nf(xs.reduce((a, b) => a + b, 0) / xs.length) + '</td></tr>'; }).filter(Boolean);
+    if (!rows.length) return;
+    rows.unshift('<tr><th>Series</th><th class="num">Latest</th><th>Period</th><th class="num">Lowest</th><th class="num">Highest</th><th class="num">Average</th></tr>');
+  } else if (ya.type === 'category' && Array.isArray(ya.data)) {
+    const vs = (ser[0].data || []).map(val), items = ya.data.map((c2, i) => [String(c2 && c2.value != null ? c2.value : c2), vs[i]]).filter(q => q[1] != null).sort((a, b) => b[1] - a[1]);
+    if (items.length < 3) return; const med = items[Math.floor(items.length / 2)][1]; head = 'Ranking of the bars above';
+    rows = ['<tr><th>Item</th><th class="num">Value</th><th class="num">Against the middle value</th></tr>'].concat(items.map(q => '<tr><th scope="row">' + esc(q[0]) + '</th><td class="num">' + nf(q[1]) + '</td><td class="num">' + (q[1] - med > 0 ? '+' : '') + nf(q[1] - med) + '</td></tr>'));
+  } else return;
+  const n = Math.min(rows.length, Math.floor((free - 70) / 27)); if (n < 2) return;
+  const d = document.createElement('div'); d.className = 'sf-box';
+  d.innerHTML = '<p class="sf-h">' + head + '</p><div class="tbl-scroll"><table class="sf-t"><tbody>' + rows.slice(0, n).join('') + '</tbody></table></div><p class="src-line"><b>Source:</b> as for the chart above.</p>';
+  c.append(d); if (sfBottom(c) < 0) d.remove();
+}
+function sfSpark(host, free) {
+  const pri = ['infl', 'food', 'call', 'lend', 'm2', 'pcredit', 'res', 'xr', 'remit_g', 'exp_g', 'imp_g', 'nonfood', 'real_lend', 'npl', 'rm', 'mcap'], ks = [...new Set(pri.concat(Object.keys((BD && BD.series) || {})))].filter(k => SER(k) && PK(k) && PK(k).v.filter(x => x != null).length >= 6), W = host.getBoundingClientRect().width || 600, per = Math.max(2, Math.min(4, Math.floor(W / 210))), rows = Math.floor((free - 60) / 112);
+  if (rows < 1) return; const use = ks.slice(0, rows * per); if (use.length < per) return;
+  const pal = ['#2B6CB0', '#C05621', '#2F855A', '#6B46C1', '#B83280', '#2C7A7B'];
+  const cell = (k, j) => { const p = PK(k), m = SER(k), n = p.f === 'M' ? 36 : p.f === 'Q' ? 12 : 10, v = []; for (let i = p.v.length - 1; i >= 0 && v.length < n; i--) if (p.v[i] != null) v.unshift([i, p.v[i]]); if (v.length < 3) return '';
+    const lo = Math.min(...v.map(q => q[1])), hi = Math.max(...v.map(q => q[1])), sp = hi - lo || 1, X = i => 4 + (i / (v.length - 1)) * 192, Y = x => 54 - ((x - lo) / sp) * 46, c = pal[j % pal.length], L = v[v.length - 1];
+    return '<div class="spk"><b>' + esc(m.label + (m.sub ? ' (' + m.sub + ')' : '')) + '</b><svg viewBox="0 0 200 60" role="img" aria-label="' + esc(m.label) + ', last ' + v.length + ' observations"><polyline fill="none" stroke="' + c + '" stroke-width="2" points="' + v.map((q, i) => X(i).toFixed(1) + ',' + Y(q[1]).toFixed(1)).join(' ') + '"/><circle cx="' + X(v.length - 1).toFixed(1) + '" cy="' + Y(L[1]).toFixed(1) + '" r="3" fill="' + c + '"/></svg><small>' + nf(L[1]) + ' ' + esc(m.unit || '') + ' · ' + esc(bdLab(p.f, p.k0 + L[0])) + ' · range ' + nf(lo) + ' to ' + nf(hi) + '</small></div>'; };
+  const d = document.createElement('div'); d.className = 'sf-box sf-spark';
+  d.innerHTML = '<p class="sf-h">Trends over the last three years</p><div class="spk-grid" style="grid-template-columns:repeat(' + per + ',minmax(0,1fr))">' + use.map(cell).join('') + '</div><p class="src-line"><b>Source:</b> Bangladesh Bank, Monthly Economic Trends; BBS. Last 36 months, 12 quarters or 10 years; dot = latest value.</p>';
+  host.append(d); if (sfBottom(host) < 0) { d.remove(); return; }
+  let R = rows; const grid0 = d.querySelector('.spk-grid'), rowH = grid0.getBoundingClientRect().height / Math.ceil(use.length / per) || 90;
+  for (let it = 0; it < 6; it++) { const fr = sfBottom(host); if (fr < rowH + 20 || ks.length <= R * per) break; R++; grid0.innerHTML = ks.slice(0, R * per).map(cell).join(''); if (sfBottom(host) < 12) { R--; grid0.innerHTML = ks.slice(0, R * per).map(cell).join(''); break; } }
+}
+function spaceFill(reset) {
+  const V = document.querySelector('.view.on'); if (!V) return;
+  if (reset) V.querySelectorAll('.sf-box').forEach(x => x.remove());
+  const ls0 = V.querySelector('#live-spot'), ls = ls0 ? ([...ls0.children].filter(x => x.offsetParent && x.getBoundingClientRect().height > 200).sort((x, y) => y.getBoundingClientRect().height - x.getBoundingClientRect().height)[0] || ls0) : null;
+  if (ls && !ls0.querySelector('.sf-live')) { const fr = sfBottom(ls); if (fr > 190) sfLive(ls, fr); }
+  if (ls && ls0.querySelector('.sf-live') && !ls0.querySelector('.sf-spark')) { const fr2 = sfBottom(ls); if (fr2 > 170) sfSpark(ls, fr2); }
+  V.querySelectorAll('figure.fig, .chart-card').forEach(c => { if (c.querySelector('.sf-box') || c.closest('#live-spot')) return; const fr = sfBottom(c); if (fr > 130) sfFig(c, fr); });
+}
+(function sfInit() {
+  let t = null; const go = (reset, ms) => { clearTimeout(t); t = setTimeout(() => { try { spaceFill(reset); } catch (e) { console.warn('v39 fill', e); } }, ms); };
+  window.addEventListener('hashchange', () => go(false, 2600)); window.addEventListener('load', () => go(false, 3200)); window.addEventListener('resize', () => go(true, 900));
+  document.addEventListener('click', e => { if (e.target.closest && e.target.closest('.view button, .view [role=tab]')) go(false, 1500); }, true);
+  const watch = () => { const ls = document.getElementById('live-spot'); if (ls) new MutationObserver(m => { if (m.some(r => [].some.call(r.addedNodes, x => x.nodeType === 1 && !x.classList.contains('sf-box')))) go(false, 700); }).observe(ls, { childList: true }); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch); else watch();
+  setTimeout(() => go(false, 0), 4000);
+})();
+/* Deeper sector outlooks: distribution, model accuracy, equations, estimates, links with inflation, scenarios and risks. */
+var SRISK = {
+  prices: ['A weaker Taka raises import prices with a lag of a few months.', 'Floods or a poor harvest push up rice and vegetable prices.', 'Government changes to fuel, electricity and gas prices.'],
+  real: ['Weak private investment and energy shortages limit growth.', 'Slower demand for garments in Europe and the United States.', 'Political uncertainty delays projects and investment.'],
+  money: ['Rising non-performing loans limit banks’ ability to lend.', 'Tight liquidity in weaker banks.', 'Government borrowing crowding out private credit.'],
+  rates: ['Further policy tightening if inflation stays high.', 'Loosening before inflation is under control.', 'Stress in weaker banks lifting deposit rates.'],
+  ext: ['Lower remittances if Gulf economies slow.', 'Export competition and the loss of LDC trade preferences after graduation.', 'Import demand rebounding faster than exports.'],
+  fiscal: ['Revenue shortfalls against budget targets.', 'Rising interest payments on domestic debt.', 'Subsidy costs if world energy prices rise.'],
+  cap: ['Low investor confidence and governance concerns.', 'Regulatory changes such as price floors.', 'Few new large listings.']
+};
+function outlookMore(s, rows, c) {
+  try {
+    const ms = [['holt', 'Holt'], ['ar1', 'AR(1)'], ['trend', 'Linear trend'], ['naive', 'No change']], nm = r => r.m.label + (r.m.sub ? ' (' + r.m.sub + ')' : '');
+    const acc = rows.map(r => { const y = r.p.v.slice(0, r.li + 1).filter(v => v != null).slice(-120), k = r.p.f === 'M' ? 12 : r.p.f === 'Q' ? 6 : 5, o = {}; ms.forEach(([id]) => { o[id] = wxBack(y, id, k); }); return { r, y, o, hb: y.length >= 8 ? holtBest(y) : null }; });
+    const r0 = rows[0], g = grid(s), y0 = acc[0].y, per = r0.p.f === 'M' ? 120 : r0.p.f === 'Q' ? 40 : 25, shown = acc.slice(0, 5);
+    figure(g, { ts: false, title: 'Distribution: ' + nm(r0), sub: 'How often each range of values occurred over the last ' + Math.min(per, y0.length) + ' observations; red = the range holding the latest value', h: 300, source: 'Bangladesh Bank, BBS.', render: TH => fillHist(TH, { name: nm(r0), vals: y0.slice(-per) }) });
+    figure(g, { ts: false, title: 'How accurate is each model?', sub: 'Root mean squared error of one-step-ahead forecasts made with past data only; lower is better', h: 300, source: 'Model estimates.', render: TH => ({ animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 10, top: 34, bottom: 8, containLabel: true }, legend: { top: 0, textStyle: { color: TH.muted, fontSize: 10 } }, tooltip: { trigger: 'axis', confine: true },
+      xAxis: { type: 'category', data: shown.map(a => nm(a.r).slice(0, 26)), axisLabel: { color: TH.muted, fontSize: 10, interval: 0, rotate: shown.length > 3 ? 20 : 0 } }, yAxis: valAxis(TH, 'RMSE'),
+      series: ms.map(([id, t], j) => ({ name: t, type: 'bar', data: shown.map(a => (a.o[id] ? +a.o[id].rmse.toFixed(3) : null)), itemStyle: { color: XPAL[j] }, label: { show: true, position: 'top', fontSize: 9, color: TH.muted, formatter: q => nf(q.value, 2) } })) }) });
+    const md = mdDocs().find(d => /^Holt/.test(d.name)), eqb = document.createElement('div'); eqb.className = 'ol-eq';
+    eqb.innerHTML = '<h3>The projection model</h3><p>Holt’s linear exponential smoothing keeps a level and a trend and updates both as new data arrive. These equations generate the projections and their 80% range; the symbols are explained in the Forecast lab, References tab, “Models explained”.</p>' + (md ? md.eqs.join('') : '');
+    s.append(eqb);
+    tableWrap(s, '<table><thead><tr><th>Series</th><th class="num">α (level weight)</th><th class="num">β (trend weight)</th><th class="num">Level now</th><th class="num">Trend per period</th>' + ms.map(([, t]) => '<th class="num">RMSE: ' + t + '</th>').join('') + '<th>Most accurate</th></tr></thead><tbody>' +
+      acc.map(a => { const best = ms.filter(([id]) => a.o[id]).sort((p, q) => a.o[p[0]].rmse - a.o[q[0]].rmse)[0]; return '<tr><th scope="row">' + esc(nm(a.r)) + '</th><td class="num">' + (a.hb ? nf(a.hb.a, 2) : '–') + '</td><td class="num">' + (a.hb ? nf(a.hb.b, 2) : '–') + '</td><td class="num">' + (a.hb ? nf(a.hb.l) : '–') + '</td><td class="num">' + (a.hb ? nf(a.hb.t, 3) : '–') + '</td>' + ms.map(([id]) => '<td class="num">' + (a.o[id] ? nf(a.o[id].rmse) : '–') + '</td>').join('') + '<td>' + (best ? best[1] : '–') + '</td></tr>'; }).join('') + '</tbody></table>',
+      tcap('Model estimates and forecast accuracy: ' + c.name.toLowerCase()), 'α and β are chosen to minimise one-step errors; a high α means recent data dominate. RMSE: back-tests over the last 12 months, 6 quarters or 5 years, each forecast made only with data available at the time.');
+    if (c.id !== 'prices') {
+      const ar = rows.filter(r => r.p.f === 'M' && r.k !== 'infl').map(r => { const d = pairM('infl', r.k); if (!d) return null; let best = null;
+        for (let L = 0; L <= 12; L++) { const xs = d.x.slice(0, d.x.length - L), ys = d.y.slice(L); if (xs.length < 24) break; const mx = wxAvg(xs), my = wxAvg(ys); let sxy = 0, sxx = 0, syy = 0; xs.forEach((v, i) => { sxy += (v - mx) * (ys[i] - my); sxx += (v - mx) * (v - mx); syy += (ys[i] - my) * (ys[i] - my); }); const rr = sxx && syy ? sxy / Math.sqrt(sxx * syy) : 0; if (!best || Math.abs(rr) > Math.abs(best.r)) best = { L, r: rr }; }
+        return best ? { r, n: d.y.length, best, gq: grangerF(d.y, d.x, 3) } : null; }).filter(Boolean);
+      if (ar.length) tableWrap(s, '<table><thead><tr><th>Series</th><th class="num">Months</th><th class="num">Strongest correlation with inflation</th><th class="num">At a lead of</th><th class="num">Granger p (3 lags)</th><th>Reading</th></tr></thead><tbody>' + ar.map(a => '<tr><th scope="row">' + esc(nm(a.r)) + '</th><td class="num">' + a.n + '</td><td class="num">' + nf(a.best.r, 2) + '</td><td class="num">' + a.best.L + ' months</td><td class="num">' + (a.gq ? fp(a.gq.p) + stars(a.gq.p) : '–') + '</td><td>' + (a.gq && a.gq.p < 0.05 ? 'Helps predict inflation' : 'No clear predictive link') + '</td></tr>').join('') + '</tbody></table>',
+        tcap('Links with headline inflation: ' + c.name.toLowerCase()), 'Correlation of the series with inflation that many months later (lead 0 = same month). A Granger p below 0.05 means the series’ past improves forecasts of inflation. Association, not proof of cause.');
+    }
+    const rk = document.createElement('div'); rk.className = 'card ol-risk';
+    rk.innerHTML = '<h3>Scenarios and risks</h3><ul class="ol-list"><li>Upside scenario: the upper end of each 80% range in the outlook table; downside scenario: the lower end. Outcomes outside the range are expected about 2 times in 10.</li>' + (SRISK[c.id] || []).map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>';
+    s.append(rk);
+  } catch (e) { console.warn('v39 outlook', e && e.stack ? e.stack.slice(0, 300) : e); }
 }
 
 return { extraPlan, countryFill, initCL, routeCL, initSecurity, worldGrowth2, initPlans, renderAds, initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo, initLearnX, initFAQ };

@@ -22,35 +22,28 @@
     "ad_slot_bottom": "",
     "plans": [
       {
-        "name": "Free",
-        "price": "Free",
-        "period": "",
-        "features": [
-          "Every chart, map, table and analysis",
-          "Ads shown at the side and bottom"
-        ],
-        "link": ""
-      },
-      {
-        "name": "Supporter",
-        "price": "US$ 3",
+        "name": "Monthly",
+        "usd": "",
+        "bdt": "",
         "period": "a month",
         "features": [
+          "Every page, chart, map, table and model",
           "No ads",
           "Monthly email brief from the editor",
-          "Early access to new pages"
+          "Access for one person"
         ],
         "link": ""
       },
       {
-        "name": "Professional",
-        "price": "US$ 30",
+        "name": "Yearly",
+        "usd": "",
+        "bdt": "",
         "period": "a year",
         "features": [
-          "No ads",
-          "Monthly email brief from the editor",
+          "Everything in Monthly",
           "Data tables on request (CSV) within two working days",
-          "Priority answers to your questions"
+          "Priority answers to your questions",
+          "Access for one person"
         ],
         "link": ""
       }
@@ -58,5 +51,21 @@
     "donate_link": "",
     "newsletter_form": "",
     "advertise_form": ""
+  },
+  "contact": {
+    "business": "",
+    "person": "",
+    "address": "",
+    "phone": "",
+    "email": "",
+    "whatsapp": "",
+    "hours": ""
+  },
+  "pay": {
+    "bkash": "",
+    "nagad": "",
+    "form": "",
+    "card_link": "",
+    "approval_hours": "24"
   }
 }

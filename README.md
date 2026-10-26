@@ -88,3 +88,19 @@ Firestore rules:
 - Country pages: time range 5, 10, 15, 20, 25 years or All, a custom number of years, and Auto cycling.
 - Monitor and Inflation pages: vertical value labels on line charts, sized for the screen.
 - Phones: nothing wider than the screen (menus, maps and grids shrink to fit).
+
+## Version 3.9 (26 October 2026)
+- Type hierarchy: a centred site title (largest) on every page, then page headline, sections, sub-sections and body text in descending sizes.
+- Empty space inside cards is filled: the front-page live card gets "Bangladesh at a glance" (latest readings) and three-year trend lines sized to the space; other cards get key figures from their chart.
+- Inflation: food and non-food inflation from July 2006 (published rates on each base); CPI groups from July 2013 (2005–06 base) linked to the 2021–22 base, with the year after the change of base left blank; Granger-causality table for related variables.
+- Bangladesh map: population and density by division (BBS Census 2022, preliminary report) and a demography strip.
+- Sector outlooks: distribution chart, model-accuracy chart, Holt equations, model estimates and back-tests, links with inflation, scenarios and risks.
+- Country pages: seconds between automatic changes and a Blink switch on the time-range bar.
+- Monitor and Inflation pages: labels on two-axis line charts (matched by colour) and bar charts; "+ Add a series" on line charts (search over all monthly series).
+
+## Version 3.10 (26 October 2026)
+- Subscription only: the Free plan is removed; Monthly and Yearly plans show prices in US$ and Taka, or a shaded "Offer price coming soon" while blank.
+- Join page rewritten: bKash and Nagad payment steps, payment confirmation form, card payment through SSLCOMMERZ (when approved), signing in.
+- New public pages for payment-gateway approval: /terms/ (Terms and conditions), /refund/ (Refund and cancellation), /contact/ (Contact), /privacy/ (Privacy notice). Missing details show as shaded placeholders.
+- Owner editor on /owner/ (opens only on a device that has used the owner link): edit contact details, prices and payment numbers, then download an updated config.json and upload it to GitHub.
+- Settings: new "contact" and "pay" sections in config.json.

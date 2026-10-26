@@ -945,9 +945,10 @@ function initCountries() {
   });
   const applyCR = v => { cRange = String(v); store.set('mm.range', cRange); syncRange(); resetCardRanges();
     for (const [node, rec] of charts) if ($('#c-sections').contains(node)) { rec.dirty = true; if (rec.visible) applyChart(node, rec); } };
+  const crSecs = () => { const i = $('#c-range-s'); const v = i ? Math.round(+i.value) : 6; return (v >= 2 && v <= 120 ? v : 6) * 1000; };
   let crT = null; const CR_SEQ = ['5', '10', '15', '20', '25', 'all'];
   const crAuto = on => { if (crT) { clearInterval(crT); crT = null; } const ab = $('#c-range-auto'); if (ab) { ab.setAttribute('aria-pressed', on ? 'true' : 'false'); ab.textContent = on ? '■ Stop' : '▶ Auto'; }
-    if (on) crT = setInterval(() => { const cs = $('#c-sections'); if (!cs || !cs.offsetParent) { crAuto(false); return; } if (document.hidden) return; applyCR(CR_SEQ[(CR_SEQ.indexOf(String(cRange)) + 1) % CR_SEQ.length]); }, 5000); };
+    if (on) crT = setInterval(() => { const cs = $('#c-sections'); if (!cs || !cs.offsetParent) { crAuto(false); return; } if (document.hidden) return; applyCR(CR_SEQ[(CR_SEQ.indexOf(String(cRange)) + 1) % CR_SEQ.length]); }, crSecs()); };
   $('#c-range').addEventListener('click', e => {
     const b = e.target.closest('button[data-r]'); if (!b) return;
     crAuto(false); applyCR(b.getAttribute('data-r'));
@@ -956,6 +957,10 @@ function initCountries() {
   if (crn) crn.addEventListener('change', () => { const n = Math.round(+crn.value); if (n >= 1 && n <= 80) { crAuto(false); applyCR(n); } });
   const cra = $('#c-range-auto');
   if (cra) cra.addEventListener('click', () => crAuto(!crT));
+  const crs = $('#c-range-s'); if (crs) crs.addEventListener('change', () => { if (crT) crAuto(true); });
+  const crb = $('#c-range-blink');
+  if (crb) { const sync = () => crb.setAttribute('aria-pressed', document.documentElement.classList.contains('no-blink') ? 'false' : 'true'); sync();
+    crb.addEventListener('click', () => { const tg = $('#blink-tg'); if (tg) tg.click(); else { document.documentElement.classList.toggle('no-blink'); try { localStorage.setItem('mm.blink', JSON.stringify(!document.documentElement.classList.contains('no-blink'))); } catch (e) { /* private mode */ } } sync(); }); }
   $('#c-dl').addEventListener('click', () => downloadCountry(curCountry));
   $('#c-ai-btn').addEventListener('click', runAI);
   $('#c-ai-stop').addEventListener('click', () => { if (aiCtl) aiCtl.abort(); });
