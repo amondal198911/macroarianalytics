@@ -818,8 +818,12 @@ OUT = {
 try:
     _old = json.loads((ROOT / 'bd_models.json').read_text(encoding='utf-8')) if (ROOT / 'bd_models.json').exists() else {}
     if isinstance(OUT.get('dsge'), dict) and 'bayes' not in OUT['dsge'] and 'bayes' in (_old.get('dsge') or {}): OUT['dsge']['bayes'] = _old['dsge']['bayes']
+    if 'models2' not in OUT and 'models2' in _old: OUT['models2'] = _old['models2']
 except Exception as _e:
     print('could not carry over Bayesian results:', _e)
 js = json.dumps(OUT, separators=(',', ':'), ensure_ascii=False, allow_nan=False)
 Path(A.out).write_text(js, encoding='utf-8')
+# model library (batch 1): Keynesian, VECM, factor model, SARIMAX, CGE
+import subprocess, sys
+subprocess.run([sys.executable, str(Path(__file__).resolve().parent / 'models_build.py')], check=False)
 print('wrote', A.out, len(js), 'bytes;', len(series_out), 'series;', len(AR), 'ARIMA;', 'VAR p =', p, 'sample', OUT['var']['sample'])

@@ -104,3 +104,40 @@ Firestore rules:
 - New public pages for payment-gateway approval: /terms/ (Terms and conditions), /refund/ (Refund and cancellation), /contact/ (Contact), /privacy/ (Privacy notice). Missing details show as shaded placeholders.
 - Owner editor on /owner/ (opens only on a device that has used the owner link): edit contact details, prices and payment numbers, then download an updated config.json and upload it to GitHub.
 - Settings: new "contact" and "pay" sections in config.json.
+
+## Version 3.11 (26 October 2026)
+- Forecast lab, new "Model library" tab: comparative overview of 11 model families in three groups (structural and policy simulation, time series and data-driven, theoretical foundations).
+- Five new models estimated on Bangladesh data, each with equations, symbols, data and method, results tables, four charts, scenarios, reading of results, merits, assumptions, limitations, future development and APA references:
+  - Structural macroeconometric (Keynesian) model: consumption (2SLS), investment and import equations; fiscal and export multipliers.
+  - VECM of imports, exports and remittances: unit-root and Johansen tests, long-run relation, adjustment speeds, impulse responses, forecasts.
+  - Dynamic factor model of 17 monthly indicators, GDP nowcast (bridge equation) and FAVAR of a call-rate shock.
+  - SARIMAX of inflation with exchange-rate and call-rate drivers, compared with ARIMA (Diebold–Mariano), with scenarios.
+  - 1-2-3 CGE model: tariff, export-price, remittance, import-price and LDC-graduation scenarios, with elasticity sensitivity.
+- New file scripts/models_build.py, run automatically at the end of bd_build.py; results stored in bd_models.json ("models2").
+- Next: IS-LM-BP, AD-AS, Solow–Swan and Ramsey–Cass–Koopmans.
+
+## Version 3.12 (27 October 2026)
+- New course page at /course/: "Data, APIs and AI engineering for economists", 10 modules in four levels plus a capstone:
+  Python; Excel vs Python vs SQL; APIs and webhooks; Docker; production Gen-AI architecture; RAG and hybrid search;
+  AI agents; fine-tuning with LoRA/QLoRA; seven ways to make an LLM faster; capstone "Bangladesh Macro Copilot".
+- Each module: learning outcomes, notes from beginner to advanced, worked example on the site's real data, common mistakes,
+  three exercises with solutions, a quick check, and further reading.
+- Working labs on real data: hybrid search over 6,723 catalogue series (BM25 + LSA, reciprocal rank fusion, reranking);
+  a rule-based agent with a visible trace and a 12-question evaluation set; a fine-tuning dataset builder (JSONL download)
+  with a LoRA calculator; a GPU memory calculator.
+- Due list on the page: what needs a server, a GPU or an account.
+- New files: course.html (page template) and course_build.py (run automatically at the end of build_page.py).
+- "Course" link added to the top navigation and the footer.
+
+## Version 3.13 (27 October 2026)
+- Course deepened from beginner to doctoral (PhD) depth: every module now has a "Doctoral depth" section (formal theory,
+  derivations with worked numbers, research frontier, open problems), a fourth doctoral exercise, two doctoral quiz
+  questions and seminal papers with DOI or arXiv links.
+- New module 2, "Python II: the ecosystem": files and standard library, Flask/Django/FastAPI, Tkinter/PyQt/Kivy,
+  automation and scraping, data science and machine learning, debugging and testing, with a real forecasting experiment
+  on Bangladesh inflation (rolling-origin evaluation, Diebold-Mariano tests, a direction classifier).
+- Capstone now has MSc and PhD tracks (research design, McNemar tests, reproducibility); milestones renumbered.
+- Fix: course_build.py now needs only NumPy and pandas (the GitHub workflow installs only pandas); version 3.12 used
+  scikit-learn, which is not installed there, so the course page would not have been built online.
+- Note: bd_build.py and models_build.py are not run by the GitHub workflow; model results are estimated locally and
+  shipped in bd_models.json.
