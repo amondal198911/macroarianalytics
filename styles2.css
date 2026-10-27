@@ -767,3 +767,23 @@ html:not(.owner) .owner-only{display:none!important}
 /* ---------- v3.12: Course link in the top navigation ---------- */
 .views a.views-a{display:inline-block;padding:8px 10px;font-size:14px;border-radius:8px;text-decoration:none;color:inherit;white-space:nowrap}
 .views a.views-a:hover{background:var(--hover);color:var(--ink)}
+
+/* ---------- v3.14: Forecast comparison ---------- */
+.fc5-ctl{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:flex-end;margin:12px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
+.fc5-ctl label{display:flex;flex-direction:column;gap:3px;font-size:.8rem;color:var(--muted)}
+.fc5-ctl select{font:inherit;font-size:.88rem;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--ink);max-width:100%}
+.fc5-ms{display:flex;flex-wrap:wrap;gap:6px;width:100%}
+.fc5-ms .fc5-chip{flex-direction:row;align-items:center;gap:6px;border:1px solid var(--line);border-left:4px solid var(--c);border-radius:999px;padding:3px 10px;font-size:.8rem;color:var(--ink);cursor:pointer}
+.fc5-methods{margin-top:18px}.fc5-methods h3{margin:14px 0 6px}
+
+/* ---------- v3.16: model checks, transmission chain, theory simulators ---------- */
+.mtm-chain{margin:12px 0;padding:10px 12px;border:1px solid var(--line);border-radius:12px}
+.mtm-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0}
+.mtm-box{border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-weight:600;font-size:.88rem;max-width:230px}
+.mtm-box small{display:block;font-weight:400;color:var(--muted)}.mtm-box.start{border-color:#2F6FED}.mtm-box.end{border-color:#E5484D}
+.mtm-arrow{display:flex;flex-direction:column;align-items:center;color:#9CA3AF;font-size:.72rem;min-width:72px}.mtm-arrow span{font-size:1.4rem;line-height:1}
+.mtm-arrow.on{color:#12A594}.mtm-arrow.weak{color:#C28A00}
+.ml-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0}
+.ml-kpis div{border:1px solid var(--line);border-radius:10px;padding:8px 10px}.ml-kpis span{display:block;font-size:.78rem;color:var(--muted)}.ml-kpis b{font-size:1.05rem}
+.ml-sl label{min-width:190px;flex:1 1 190px}.ml-sl input[type=range]{width:100%}
+.ml-checks{margin-top:18px;padding-top:6px;border-top:1px dashed var(--line)}.fc5-five{margin-top:14px}

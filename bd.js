@@ -33,7 +33,7 @@ const CHUNKS = [
   { id: 'catalog', name: 'Data catalogue' }
 ];
 const GLANCE = ['infl', 'food', 'nonfood', 'gdp_q', 'iip', 'm2', 'pcredit', 'npl', 'call', 'lend', 'real_lend', 'xr', 'res', 'cover', 'remit_g', 'exp_g', 'govcredit', 'tax_g', 'mcap'];
-const LAB_TABS = [['overview', 'Projections'], ['data', 'Data and tests'], ['arima', 'ARIMA / SARIMA'], ['var', 'SVAR'], ['robust', 'Robustness and placebo'], ['dsge', 'DSGE'], ['world', 'World analysis'], ['models', 'Model library'], ['refs', 'References']];
+const LAB_TABS = [['overview', 'Projections'], ['data', 'Data and tests'], ['arima', 'ARIMA / SARIMA'], ['var', 'SVAR'], ['robust', 'Robustness and placebo'], ['dsge', 'DSGE'], ['world', 'World analysis'], ['nowcast', 'Nowcasting'], ['fc5', 'Forecast comparison'], ['rc', 'Reality check'], ['models', 'Model library'], ['refs', 'References']];
 const STD = {
   infl: { lo: 2, hi: 6, txt: '2–6%', src: 'Reserve Bank of India target band (4% ± 2%), a common emerging-market benchmark' },
   gdp: { lo: 0, txt: 'above 0%', src: 'Below zero the economy is contracting' },
@@ -712,7 +712,7 @@ function renderLab(keep) {
   FIGN = 0; TABN = 0; labState.prefix = 'L';
   TSRC = labState.tab === 'world' ? 'World Bank; model estimates.' : labState.tab === 'dsge' ? 'Model simulation.' : 'Bangladesh Bank, BBS; model estimates.';
   $$('#lab-tabs [data-lab]').forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-lab') === labState.tab ? 'true' : 'false'));
-  ({ overview: labOverview, data: labData, arima: labArima, var: labVar, robust: labRobust, dsge: labDsge, world: b => { worldExplorer(b); labWorld(b); }, refs: b => { modelDocs(b); labRefs(b); }, models: labModels })[labState.tab in { overview: 1, data: 1, arima: 1, var: 1, robust: 1, dsge: 1, world: 1, refs: 1, models: 1 } ? labState.tab : 'overview'](body);
+  ({ overview: b => { labOverview(b); fc5Five(b, 'overview'); }, data: labData, arima: b => { labArima(b); fc5Five(b, 'arima'); }, var: b => { labVar(b); fc5Five(b, 'var'); }, robust: labRobust, dsge: b => { labDsge(b); dsgeChecks(b); fc5Five(b, 'dsge'); }, world: b => { worldExplorer(b); labWorld(b); }, refs: b => { modelDocs(b); labRefs(b); }, models: labModels, fc5: labFc5, nowcast: labNowcast, rc: labRc })[labState.tab in { overview: 1, data: 1, arima: 1, var: 1, robust: 1, dsge: 1, world: 1, refs: 1, models: 1, fc5: 1, nowcast: 1, rc: 1 } ? labState.tab : 'overview'](body);
   if (keep) window.scrollTo(0, y);
 }
 function sel(key, opts, cur, label) { return '<label class="field"><span>' + esc(label) + '</span><select data-lset="' + key + '">' + opts.map(o => '<option value="' + o[0] + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('') + '</select></label>'; }
@@ -3991,7 +3991,7 @@ function outlookMore(s, rows, c) {
 
 /* ======================= v3.11: Model library ======================= */
 var ML_GROUPS = [
-  ['Structural and policy simulation', [['dsge', 'DSGE (New Keynesian)'], ['cge', 'CGE (1-2-3 model)'], ['keynes', 'Structural macroeconometric (Keynesian)']]],
+  ['Structural and policy simulation', [['dsge', 'DSGE (New Keynesian)'], ['cge', 'CGE (1-2-3 model)'], ['keynes', 'Structural macroeconometric (Keynesian)'], ['mtm', 'Monetary transmission mechanism']]],
   ['Time series and data-driven', [['var', 'VAR and SVAR'], ['vecm', 'VECM'], ['dfm', 'Dynamic factor model and FAVAR'], ['sarimax', 'ARIMA and SARIMAX']]],
   ['Theoretical foundations', [['islm', 'IS-LM-BP (Mundell–Fleming)'], ['adas', 'AD-AS'], ['solow', 'Solow–Swan growth'], ['rck', 'Ramsey–Cass–Koopmans']]]
 ];
@@ -4000,6 +4000,7 @@ var ML_CMP = [
   ['DSGE', 'Structural', 'Policy simulation and shock analysis', 'Micro-founded; resists the Lucas critique', 'Complex; results depend on assumed structure', 'dsge'],
   ['CGE', 'Structural', 'Trade, tax and price policy', 'Detailed sector and price effects', 'Static; calibrated rather than estimated', 'cge'],
   ['Keynesian macroeconometric', 'Structural', 'Multipliers and policy scenarios', 'Transparent equations estimated on data', 'Equations can break when policy changes', 'keynes'],
+  ['Monetary transmission (VAR evidence)', 'Applied', 'How policy-rate changes reach credit, the Taka and inflation', 'Tests every link on Bangladesh data', 'Identification by ordering; administered rates', 'mtm'],
   ['VAR / SVAR', 'Time series', 'Forecasting and shock transmission', 'Few assumptions; captures feedback', 'Many parameters; identification by ordering', 'var'],
   ['VECM', 'Time series', 'Long-run equilibrium plus short-run dynamics', 'Uses information in levels', 'Needs cointegration; sensitive to lag choice', 'vecm'],
   ['DFM / FAVAR', 'Time series', 'Nowcasting and large data sets', 'Summarises many series in a few factors', 'Factors are hard to interpret', 'dfm'],
@@ -4034,7 +4035,7 @@ function mlCoef(host, rows, cap, note) {
 function labModels(body) {
   const s = sec(body, 'Model library', 'Twelve families of macroeconomic models, each applied to Bangladesh with the same depth as the DSGE tab: what the model is, its equations, the data and method, results, scenarios, how to read them, merits, limitations and references.', 'models');
   tableWrap(s, '<table><thead><tr><th>Model</th><th>Family</th><th>Core objective</th><th>Strengths</th><th>Major limitation</th><th>On this site</th></tr></thead><tbody>' +
-    ML_CMP.map(r => { const ready = ['dsge', 'var', 'sarimax', 'cge', 'keynes', 'vecm', 'dfm'].includes(r[5]); return '<tr><th scope="row">' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td><td>' + esc(r[2]) + '</td><td>' + esc(r[3]) + '</td><td>' + esc(r[4]) + '</td><td>' + (ready ? '<button type="button" class="ml-go" data-m="' + r[5] + '">Open</button>' : 'Next update') + '</td></tr>'; }).join('') + '</tbody></table>',
+    ML_CMP.map(r => { const ready = true; return '<tr><th scope="row">' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td><td>' + esc(r[2]) + '</td><td>' + esc(r[3]) + '</td><td>' + esc(r[4]) + '</td><td>' + (ready ? '<button type="button" class="ml-go" data-m="' + r[5] + '">Open</button>' : 'Next update') + '</td></tr>'; }).join('') + '</tbody></table>',
     tcap('Comparative overview of core model families'), 'Structural models start from economic theory; time-series models start from the data; theoretical models explain mechanisms. Central banks use several together: theory to frame, data to discipline, simulation to explore policy.');
   const nav = document.createElement('div'); nav.className = 'ml-nav';
   nav.innerHTML = ML_GROUPS.map(([g, items]) => '<div class="ml-grp"><span>' + esc(g) + '</span>' + items.map(([id, t]) => '<button type="button" data-m="' + id + '" aria-pressed="' + (ML_STATE.m === id) + '">' + esc(t) + '</button>').join('') + '</div>').join('');
@@ -4048,14 +4049,14 @@ function labModels(body) {
 function mlRender(host, id) {
   const M = (BD && BD.models2) || {};
   try {
-    if (id === 'dsge' || id === 'var') return mlLink(host, id);
-    if (id === 'sarimax') return mlSarimax(host, M.sarimax);
+    if (id === 'dsge' || id === 'var') { mlLink(host, id); fc5Five(host, id); return; }
+    if (id === 'sarimax') { mlSarimax(host, M.sarimax); mlChecks(host, 'sarimax', M); fc5Five(host, 'sarimax'); return; }
+    if (id === 'mtm') { if (M.mtm) mlMtm(host, M.mtm); else host.innerHTML = '<p class="note">The transmission results are not in the current data build.</p>'; return; }
+    if ({ islm: 1, adas: 1, solow: 1, rck: 1 }[id]) { if (!M.theory) { host.innerHTML = '<p class="note">The calibration for this model is not in the current data build.</p>'; return; } ({ islm: mlIslm, adas: mlAdas, solow: mlSolow, rck: mlRck })[id](host, M.theory); return; }
     if ({ cge: 1, keynes: 1, vecm: 1, dfm: 1 }[id]) {
       if (!M[id]) { host.innerHTML = '<p class="note">This model\u2019s results are not in the current data build. They are produced by scripts/models_build.py during the site build.</p>'; return; }
-      return ({ cge: mlCge, keynes: mlKeynes, vecm: mlVecm, dfm: mlDfm })[id](host, M[id]);
+      ({ cge: mlCge, keynes: mlKeynes, vecm: mlVecm, dfm: mlDfm })[id](host, M[id]); mlChecks(host, id, M); fc5Five(host, id); return;
     }
-    const t = { islm: 'IS-LM-BP (Mundell–Fleming)', adas: 'AD-AS', solow: 'Solow–Swan growth', rck: 'Ramsey–Cass–Koopmans' }[id];
-    host.innerHTML = '<div class="card"><h3>' + esc(t) + ': in the next update</h3><p>This theoretical model is being built to the same standard: equations, calibration to Bangladesh data, interactive policy and shock experiments, charts, interpretation, merits, limitations and references.</p></div>';
   } catch (e) { console.warn('v311 model', id, e && e.stack ? e.stack.slice(0, 300) : e); host.innerHTML = '<p class="note">This model could not be drawn.</p>'; }
 }
 function mlLink(host, id) {
@@ -4192,6 +4193,777 @@ function mlCge(host, G) {
   mlText(s, 'Reading the results', '<ul class="ol-list"><li><b>LDC graduation</b> (export prices 5% lower): the Taka depreciates by ' + nf(ldc.R, 1) + '% in real terms, imports fall ' + nf(-ldc.M, 1) + '%, and absorption falls ' + nf(-ldc.Q, 2) + '%.</li><li><b>Remittances</b> 2% of GDP lower: a ' + nf(rem.R, 1) + '% real depreciation pushes exports up ' + nf(rem.E, 1) + '% and imports down ' + nf(-rem.M, 1) + '%; absorption falls ' + nf(-rem.Q, 2) + '%, the largest welfare loss among these scenarios after an import-price shock.</li><li><b>Halving tariffs</b> raises both exports (+' + nf(tar.E, 1) + '%) and imports (+' + nf(tar.M, 1) + '%) with a small welfare gain, but tariff revenue falls ' + nf(-tar.rev, 1) + '%: a fiscal cost to plan for.</li><li>Results scale with the elasticities: the sensitivity chart shows how much they depend on Ω and σ, which are not estimated here.</li></ul>');
   mlBoxes(s, 'Captures economy-wide price effects that partial models miss; shows winners, losers and the exchange-rate channel; standard tool for trade and tax policy.', 'Full employment and fixed total output; competitive markets; one representative sector; elasticities taken from the literature; comparative statics (no time path).', 'Very aggregated (one sector, one household); results depend on assumed elasticities; no money, no unemployment, no dynamics.', 'Build a multi-sector model from a Bangladesh social accounting matrix, with garments, agriculture and services, households by income group, and a dynamic version for LDC graduation.');
   mlRefs(s, [['Armington, P. S. (1969). A theory of demand for products distinguished by place of production. Staff Papers (International Monetary Fund), 16(1), 159\u2013178.', 'https://doi.org/10.2307/3866403'], ['Dervis, K., de Melo, J., & Robinson, S. (1982). General equilibrium models for development policy. Cambridge University Press.', ''], ['Devarajan, S., Go, D. S., Lewis, J. D., Robinson, S., & Sinko, P. (1997). Simple general equilibrium modeling. In J. F. Francois & K. A. Reinert (Eds.), Applied methods for trade policy analysis: A handbook. Cambridge University Press.', ''], ['Lofgren, H., Harris, R. L., & Robinson, S. (2002). A standard computable general equilibrium (CGE) model in GAMS. International Food Policy Research Institute.', '']]);
+}
+
+/* ======================= v3.14: Forecast comparison ======================= */
+var FC5S = { v: 'infl', f: 'FY', h: 5, ms: null, band: 'ens', hist: 10 };
+var FC5_COL = { rw: '#9CA3AF', ar: '#2F6FED', arima: '#E5484D', ets: '#12A594', theta: '#F5A524', mean: '#8E4EC6', var: '#0091FF', vecm: '#AD7F58', sarimax: '#D6409F', ens: '#111827' };
+var FC5_ORDER = ['ens', 'ar', 'arima', 'ets', 'theta', 'rw', 'mean', 'var', 'vecm', 'sarimax'];
+function fc5Per(k, src, out) {
+  if (out === src) return k;
+  if (src === 'M') return out === 'Q' ? Math.floor(k / 3) : out === 'FY' ? Math.floor(k / 12) + (k % 12 >= 6 ? 1 : 0) : Math.floor(k / 12);
+  if (src === 'Q') return out === 'FY' ? Math.floor(k / 4) + (k % 4 >= 2 ? 1 : 0) : Math.floor(k / 4);
+  return k;
+}
+function fc5Need(src, out) { return src === out ? 1 : src === 'M' ? (out === 'Q' ? 3 : 12) : 4; }
+function fc5Lab(id, out) { return out === 'M' ? Math.floor(id / 12) + '-' + String(id % 12 + 1).padStart(2, '0') : out === 'Q' ? Math.floor(id / 4) + '-Q' + (id % 4 + 1) : out === 'FY' ? 'FY' + id : String(id); }
+function fc5Agg(pairs, src, out, rule) {
+  const m = new Map(), need = fc5Need(src, out);
+  pairs.forEach(([k, v, isF]) => { if (v == null) return; const id = fc5Per(k, src, out), e = m.get(id) || { s: 0, n: 0, last: null, f: 0 }; e.s += v; e.n++; e.last = v; if (isF) e.f++; m.set(id, e); });
+  const r = []; m.forEach((e, id) => { if (e.n === need) r.push([id, rule === 'sum' ? e.s : rule === 'last' ? e.last : e.s / e.n, e.f]); });
+  return r.sort((a, b) => a[0] - b[0]);
+}
+function fc5Hist(key, V) {
+  const p = PK(key); if (!p) return [];
+  const out = []; for (let j = 0; j < p.v.length; j++) if (p.v[j] != null && p.k0 + j <= V.k_last) out.push([p.k0 + j, p.v[j], false]);
+  return out;
+}
+function fc5Path(V, mid, field) {
+  const m = V.models[mid]; if (!m) return [];
+  return m[field].map((v, j) => [V.k_last + 1 + j, v, true]);
+}
+function labFc5(body) {
+  const F = (BD && BD.models2 && BD.models2.fc5) || null;
+  const s = sec(body, 'Forecast comparison: every model, five years ahead', 'Monthly, quarterly, fiscal-year and calendar-year forecasts from up to ten models, compared on one chart, with back-test accuracy, failure tests, robustness, heterogeneity, simulation and step-by-step derivations.', 'fc5');
+  if (!F) { s.insertAdjacentHTML('beforeend', '<p class="note">Forecast results are not in this data build.</p>'); return; }
+  const keys = Object.keys(F.vars);
+  if (!F.vars[FC5S.v]) FC5S.v = keys[0];
+  const ctl = document.createElement('div'); ctl.className = 'fc5-ctl'; s.append(ctl);
+  const out = document.createElement('div'); s.append(out);
+  const draw = () => {
+    const V = F.vars[FC5S.v], src = V.freq, freqs = src === 'M' ? [['M', 'Monthly'], ['Q', 'Quarterly'], ['FY', 'Fiscal year'], ['CY', 'Calendar year']] : src === 'Q' ? [['Q', 'Quarterly'], ['FY', 'Fiscal year'], ['CY', 'Calendar year']] : [['FY', 'Fiscal year']];
+    if (!freqs.some(x => x[0] === FC5S.f)) FC5S.f = freqs[freqs.length > 2 ? 2 : 0][0];
+    const avail = FC5_ORDER.filter(m => V.models[m]);
+    if (!FC5S.ms || !FC5S.ms.some(m => V.models[m])) FC5S.ms = avail.filter(m => ['ens', 'ar', 'arima', 'ets', 'theta', 'var', 'vecm'].includes(m));
+    FC5S.ms = FC5S.ms.filter(m => V.models[m]); if (!V.models[FC5S.band]) FC5S.band = 'ens';
+    ctl.innerHTML = '<label>Variable <select data-k="v">' + keys.map(k => '<option value="' + k + '"' + (k === FC5S.v ? ' selected' : '') + '>' + esc(F.vars[k].label) + (F.vars[k].freq !== 'M' ? ' (' + (F.vars[k].freq === 'Q' ? 'quarterly' : 'fiscal year') + ')' : '') + '</option>').join('') + '</select></label>' +
+      '<label>Frequency <select data-k="f">' + freqs.map(([a, b]) => '<option value="' + a + '"' + (a === FC5S.f ? ' selected' : '') + '>' + b + '</option>').join('') + '</select></label>' +
+      '<label>Horizon <select data-k="h">' + [1, 2, 3, 4, 5].map(h => '<option value="' + h + '"' + (h === FC5S.h ? ' selected' : '') + '>' + h + ' year' + (h > 1 ? 's' : '') + '</option>').join('') + '</select></label>' +
+      '<label>History <select data-k="hist">' + [3, 5, 10, 15].map(h => '<option value="' + h + '"' + (h === FC5S.hist ? ' selected' : '') + '>' + h + ' years</option>').join('') + '</select></label>' +
+      '<label>Range for <select data-k="band"><option value="">none</option>' + avail.map(m => '<option value="' + m + '"' + (m === FC5S.band ? ' selected' : '') + '>' + esc(F.names[m]) + '</option>').join('') + '</select></label>' +
+      '<div class="fc5-ms" role="group" aria-label="Models">' + avail.map(m => '<label class="fc5-chip" style="--c:' + FC5_COL[m] + '"><input type="checkbox" data-m="' + m + '"' + (FC5S.ms.includes(m) ? ' checked' : '') + '> ' + esc(F.names[m]) + '</label>').join('') + '</div>';
+    try { disposeIn(out); } catch (e) { /* none */ }
+    out.innerHTML = '';
+    fc5Render(out, F, V);
+  };
+  ctl.addEventListener('change', e => {
+    const t = e.target;
+    if (t.dataset.m) { const on = new Set(FC5S.ms); t.checked ? on.add(t.dataset.m) : on.delete(t.dataset.m); FC5S.ms = FC5_ORDER.filter(m => on.has(m)); }
+    else if (t.dataset.k) { const k = t.dataset.k; FC5S[k] = (k === 'h' || k === 'hist') ? +t.value : t.value; if (k === 'v') FC5S.ms = null; }
+    draw();
+  });
+  draw();
+  fc5Methods(s);
+}
+function fc5Render(out, F, V) {
+  const src = V.freq, of = FC5S.f, rule = V.agg, dec = /US\$|Tk crore/.test(V.unit) && !/%/.test(V.unit) ? 0 : 2;
+  const per = { M: 12, Q: 4, FY: 1, CY: 1 }[of], nF = per * FC5S.h, nH = per * FC5S.hist;
+  const hist = fc5Hist(FC5S.v, V), hAgg = fc5Agg(hist, src, of, rule).slice(-nH);
+  const ser_ = {}, labsF = new Set();
+  FC5S.ms.forEach(m => {
+    const a = fc5Agg(hist.concat(fc5Path(V, m, 'mean')), src, of, rule).filter(x => x[2] > 0).slice(0, nF);
+    ser_[m] = a; a.forEach(x => labsF.add(x[0]));
+  });
+  let band = null;
+  if (FC5S.band && V.models[FC5S.band]) {
+    band = {};
+    ['lo80', 'hi80', 'lo95', 'hi95'].forEach(fl => { band[fl] = new Map(fc5Agg(hist.concat(fc5Path(V, FC5S.band, fl)), src, of, rule).filter(x => x[2] > 0).slice(0, nF).map(x => [x[0], x[1]])); });
+    band.lo80.forEach((v, id) => labsF.add(id));
+  }
+  const hIds = hAgg.map(x => x[0]), lastH = hIds[hIds.length - 1], fIds = Array.from(labsF).filter(id => lastH == null || id > lastH).sort((a, b) => a - b);
+  const allIds = hIds.concat(fIds), labels = allIds.map(id => fc5Lab(id, of)), hMap = new Map(hAgg.map(x => [x[0], x[1]]));
+  const mk = (map, conn) => allIds.map(id => map.has(id) ? map.get(id) : (conn && id === lastH ? hMap.get(id) : null));
+  const series = [S('Actual: ' + V.label, allIds.map(id => hMap.has(id) ? hMap.get(id) : null), { w: 2.4, color: '#111827' })];
+  FC5S.ms.forEach(m => { const mp = new Map(ser_[m].map(x => [x[0], x[1]])); series.push(S(F.names[m], mk(mp, true), { w: m === 'ens' ? 2.6 : 1.7, dash: m !== 'ens', color: FC5_COL[m] })); });
+  if (band) [['lo95', '95% lower'], ['lo80', '80% lower'], ['hi80', '80% upper'], ['hi95', '95% upper']].forEach(([fl, nm]) => series.push(S(F.names[FC5S.band] + ', ' + nm, mk(band[fl], true), { w: fl.includes('95') ? 0.9 : 1.2, dash: true, color: FC5_COL[FC5S.band] })));
+  const ofName = { M: 'monthly', Q: 'quarterly', FY: 'fiscal-year', CY: 'calendar-year' }[of], aggTxt = of === src ? '' : (rule === 'sum' ? ' (sum of ' + (src === 'M' ? 'months' : 'quarters') + ')' : rule === 'last' ? ' (end of period)' : ' (average of ' + (src === 'M' ? 'months' : 'quarters') + ')');
+  const g = grid(out);
+  figure(g, { wide: true, title: V.label + ': ' + ofName + ' forecasts, ' + FC5S.h + ' year' + (FC5S.h > 1 ? 's' : '') + ' ahead', sub: V.unit + aggTxt + '. Forecast periods that still contain actual ' + (src === 'M' ? 'months' : 'quarters') + ' combine actual and forecast values.', h: 380, source: 'Bangladesh Bank; BBS; model estimates (data to ' + fc5Lab(V.k_last, src) + ').', render: TH => tsOption(TH, labels, series, { y1: V.unit, dec: dec }) });
+  // forecast table
+  const rows = fIds.map(id => [fc5Lab(id, of)].concat(FC5S.ms.map(m => { const x = ser_[m].find(z => z[0] === id); return x ? x[1] : null; })));
+  tableWrap(out, '<table><thead><tr><th>Period</th>' + FC5S.ms.map(m => '<th class="num">' + esc(F.names[m]) + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr><th scope="row">' + esc(r[0]) + '</th>' + r.slice(1).map(v => '<td class="num">' + (v == null ? '–' : nf(v, dec)) + '</td>').join('') + '</tr>').join('') + '</tbody></table>', tcap('Forecast values, ' + ofName), V.unit + aggTxt + '. The first forecast period may include actual data.');
+  // accuracy and optimal model
+  const bt = V.bt, ms = Object.keys(bt.rmse), hs = bt.h, uh = src === 'M' ? 'months' : src === 'Q' ? 'quarters' : 'years', U = h => h + ' ' + (h === 1 ? uh.slice(0, -1) : uh);
+  const best = hs.map((h, i) => ms.filter(m => bt.rmse[m][i] != null).sort((a, b) => bt.rmse[a][i] - bt.rmse[b][i])[0]);
+  const rank = {}; ms.forEach(m => { const rr = hs.map((h, i) => { const ord = ms.filter(x => bt.rmse[x][i] != null).sort((a, b) => bt.rmse[a][i] - bt.rmse[b][i]); return ord.indexOf(m) + 1; }).filter(x => x > 0); rank[m] = rr.length ? rr.reduce((a, b) => a + b, 0) / rr.length : null; });
+  const mid = Math.floor(hs.length / 2);
+  tableWrap(out, '<table><thead><tr><th>Model</th>' + hs.map(h => '<th class="num">RMSE, ' + U(h) + '</th>').join('') + '<th class="num">Average rank</th><th class="num">80% range covers</th><th class="num">DM p vs random walk</th><th class="num">Failed fits</th><th class="num">Ensemble weight</th></tr></thead><tbody>' +
+    ms.map(m => '<tr><th scope="row">' + esc(F.names[m]) + '</th>' + hs.map((h, i) => '<td class="num"' + (best[i] === m ? ' style="font-weight:700"' : '') + '>' + (bt.rmse[m][i] == null ? '–' : nf(bt.rmse[m][i], dec === 0 ? 0 : 3)) + '</td>').join('') + '<td class="num">' + (rank[m] == null ? '–' : nf(rank[m], 1)) + '</td><td class="num">' + (bt.cov80[m][mid] == null ? '–' : nf(bt.cov80[m][mid] * 100, 0) + '%') + '</td><td class="num">' + (m === 'rw' ? '–' : (bt.dm[m] && bt.dm[m][mid] && bt.dm[m][mid][1] != null ? fp(bt.dm[m][mid][1]) : '–')) + '</td><td class="num">' + (bt.fail[m] || 0) + ' / ' + bt.origins + '</td><td class="num">' + (V.weights[m] != null ? nf(V.weights[m] * 100, 0) + '%' : '–') + '</td></tr>').join('') + '</tbody></table>',
+    tcap('Back-test accuracy: forecasts made at ' + bt.origins + ' past dates using only data available then'), 'Bold: most accurate model at each horizon. Coverage and the Diebold–Mariano test are shown at ' + hs[mid] + ' ' + uh + '; an 80% range should cover about 80% of outcomes. Failed fits: estimation did not converge or the forecast left the historical range by more than twice its width; these are excluded from the scores. Ensemble weights are proportional to 1/MSE at ' + hs[mid] + ' ' + uh + '.');
+  const order = ms.filter(m => rank[m] != null).sort((a, b) => rank[a] - rank[b]);
+  const shortB = best[0], midB = best[mid], longB = best[best.length - 1], bands95 = V.models.ens ? [V.models.ens.lo95[V.H - 1], V.models.ens.hi95[V.H - 1]] : null;
+  out.insertAdjacentHTML('beforeend', '<div class="card"><h3>Optimal accuracy and suitability</h3><ul class="ol-list"><li>Most accurate at ' + U(hs[0]) + ': <b>' + esc(F.names[shortB]) + '</b>; at ' + U(hs[mid]) + ': <b>' + esc(F.names[midB]) + '</b>; at ' + U(hs[hs.length - 1]) + ': <b>' + esc(F.names[longB]) + '</b>. Best average rank across horizons: <b>' + esc(F.names[order[0]]) + '</b>.</li>' +
+    '<li>Back-tests reach ' + hs[hs.length - 1] + ' ' + uh + ' at most: the history is too short to validate five-year forecasts directly, so beyond that horizon the forecasts rest on each model’s structure. Models that converge to a long-run mean (AR, historical mean, ensemble) and models that hold the last level (random walk, ARIMA with a unit root) bracket the plausible range.</li>' +
+    (bands95 ? '<li>The ensemble’s 95% range at the five-year horizon is ' + nf(bands95[0], dec) + ' to ' + nf(bands95[1], dec) + ' ' + esc(V.unit) + ': treat point forecasts that far ahead as central scenarios, not predictions.</li>' : '') +
+    (Object.entries(bt.fail).filter(([m, n]) => n > 2).length ? '<li>Unreliable estimation: ' + Object.entries(bt.fail).filter(([m, n]) => n > 2).map(([m, n]) => esc(F.names[m]) + ' failed at ' + n + ' of ' + bt.origins + ' dates').join('; ') + '. Prefer models without failures for this variable.</li>' : '<li>No model failed more than twice in the back-test.</li>') +
+    '<li>Suitability: use <b>' + esc(F.names[shortB]) + '</b> for the next ' + hs[0] + '–' + hs[Math.min(1, hs.length - 1)] + ' ' + uh + ', <b>' + esc(F.names[midB]) + '</b> around ' + hs[mid] + ' ' + uh + ', and the <b>ensemble</b> for multi-year planning, because combining forecasts reduces the risk of relying on one wrong model (Bates & Granger, 1969).</li></ul></div>');
+  // failure tests
+  const D_ = V.diag, ok = (p, good) => p == null ? '–' : (p > 0.05 ? (good || 'pass') : 'fails at 5%');
+  const drows = [['Ljung–Box: no autocorrelation left in ARIMA residuals', D_.ljungbox_p, ok(D_.ljungbox_p)], ['ARCH-LM: no volatility clustering', D_.arch_p, ok(D_.arch_p)], ['Jarque–Bera: normal residuals', D_.jb_p, D_.jb_p == null ? '–' : (D_.jb_p > 0.05 ? 'pass' : 'non-normal: rely on simulated ranges')], ['OLS-CUSUM: stable parameters', D_.cusum && D_.cusum[1], ok(D_.cusum && D_.cusum[1], 'stable')]];
+  Object.entries(D_.chow || {}).forEach(([lab, v]) => drows.push(['Chow break test: ' + lab, v[1], v[1] == null ? 'too few observations' : (v[1] > 0.05 ? 'no break' : 'break detected')]));
+  const nconv = Object.entries(D_.converged || {}).filter(([m, c]) => !c).map(([m]) => F.names[m]);
+  tableWrap(out, '<table><thead><tr><th>Model failure test</th><th class="num">p-value</th><th>Verdict</th></tr></thead><tbody>' + drows.map(r => '<tr><th scope="row">' + esc(r[0]) + '</th><td class="num">' + fp(r[1]) + '</td><td>' + esc(r[2]) + '</td></tr>').join('') + '<tr><th scope="row">Full-sample estimation converged</th><td class="num">–</td><td>' + (nconv.length ? 'not for ' + esc(nconv.join(', ')) : 'all models') + '</td></tr></tbody></table>', tcap('Model failure tests'), 'ARIMA order ' + JSON.stringify(V.spec.arima[0]) + (V.spec.arima[1][3] ? ' × ' + JSON.stringify(V.spec.arima[1]) : '') + '; the CUSUM and Chow tests use an AR(' + D_.ar_p + ') regression on the ' + esc(D_.transform.replace(' for the AR test regression', '')) + '.');
+  // robustness
+  const R_ = V.robust || {};
+  let rb = '';
+  if (R_.subsample) rb += R_.subsample.h.map((h, i) => '<tr><th scope="row">ARIMA, ' + h + ' ' + uh + ' ahead</th><td class="num">' + nf(R_.subsample.full[i], dec) + '</td><td class="num">' + nf(R_.subsample.pre2020[i], dec) + '</td><td class="num">' + nf(R_.subsample.pre2020[i] - R_.subsample.full[i], dec) + '</td></tr>').join('');
+  if (rb) tableWrap(out, '<table><thead><tr><th>Forecast</th><th class="num">Parameters from full sample</th><th class="num">Parameters from data to 2019</th><th class="num">Difference</th></tr></thead><tbody>' + rb + '</tbody></table>', tcap('Robustness: parameter stability'), (R_.orders ? 'Neighbouring ARIMA orders (' + R_.orders.n + ' specifications) give ' + nf(R_.orders.h12_min, dec) + ' to ' + nf(R_.orders.h12_max, dec) + ' one year ahead and ' + nf(R_.orders.end_min, dec) + ' to ' + nf(R_.orders.end_max, dec) + ' at the final horizon.' : ''));
+  // heterogeneity
+  const Hh = V.het || {};
+  if (Hh.rows && Hh.rows.length) tableWrap(out, '<table><thead><tr><th>Sub-period</th><th class="num">Observations</th><th class="num">Mean</th><th class="num">Std. dev.</th><th class="num">Persistence (lag-1 correlation)</th></tr></thead><tbody>' + Hh.rows.map(r => '<tr><th scope="row">' + esc(r[0]) + '</th><td class="num">' + r[1] + '</td><td class="num">' + nf(r[2], 2) + '</td><td class="num">' + nf(r[3], 2) + '</td><td class="num">' + nf(r[4], 2) + '</td></tr>').join('') + '</tbody></table>', tcap('Heterogeneity across sub-periods'), 'Measured on the ' + esc(Hh.measure) + '. Levene test of equal variances p = ' + fp(Hh.levene_p) + '; Kruskal–Wallis test of equal distributions p = ' + fp(Hh.kruskal_p) + '. ' + (Hh.kruskal_p != null && Hh.kruskal_p < 0.05 ? 'The series behaves differently across periods: a single model fitted to the whole sample averages over regimes.' : 'No significant difference across periods.'));
+  // simulation
+  const sim = V.sim || {}, sl = sim.fy || [];
+  const g2 = grid(out);
+  figure(g2, { ts: false, title: 'Back-test error by forecast horizon', sub: 'Root mean squared error of each model, ' + V.unit + '; lower is better', h: 300, source: 'Model back-tests (rolling origin).', render: TH => ({ animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 10, top: 34, bottom: 8, containLabel: true }, legend: { top: 0, type: 'scroll', textStyle: { color: TH.muted, fontSize: 10 } }, tooltip: { trigger: 'axis', confine: true }, xAxis: { type: 'category', data: hs.map(U), axisLabel: { color: TH.muted, fontSize: 10 } }, yAxis: valAxis(TH, 'RMSE'), series: ms.map(m => ({ name: F.names[m], type: 'line', data: bt.rmse[m], symbolSize: 6, lineStyle: { width: m === 'rw' ? 1.4 : 2, type: m === 'rw' ? 'dashed' : 'solid', color: FC5_COL[m] }, itemStyle: { color: FC5_COL[m] } })) }) });
+  if (sl.length) {
+    figure(g2, { title: 'Simulation: fiscal-year fan from 1,000 ARIMA paths', sub: V.unit + aggTxt.replace('months', 'months') + '; 5th–95th percentiles', h: 300, source: 'Model simulation (Monte Carlo).', render: TH => tsOption(TH, sl.map(r => r[0]), [S('5th percentile', sl.map(r => r[1]), { w: 1, dash: true, color: '#9CA3AF' }), S('25th percentile', sl.map(r => r[2]), { w: 1.4, dash: true, color: '#6B7280' }), S('Median', sl.map(r => r[3]), { w: 2.4, color: '#E5484D' }), S('75th percentile', sl.map(r => r[4]), { w: 1.4, dash: true, color: '#6B7280' }), S('95th percentile', sl.map(r => r[5]), { w: 1, dash: true, color: '#9CA3AF' })], { y1: V.unit, dec: dec }) });
+    tableWrap(out, '<table><thead><tr><th>Fiscal year</th><th class="num">5th</th><th class="num">25th</th><th class="num">Median</th><th class="num">75th</th><th class="num">95th</th><th class="num">Actual months included</th></tr></thead><tbody>' + sl.map(r => '<tr><th scope="row">' + esc(r[0]) + '</th>' + r.slice(1, 6).map(v => '<td class="num">' + nf(v, dec) + '</td>').join('') + '<td class="num">' + r[6] + '</td></tr>').join('') + '</tbody></table>', tcap('Simulated distribution by fiscal year'), 'Shocks drawn from the estimated ARIMA error distribution; parameter uncertainty is not included, so true uncertainty is larger.');
+  }
+}
+function fc5Methods(host) {
+  const { i, n, o, sub, sup, fr, r } = MX, t = i('t'), T = i('T'), h = i('h');
+  const d = document.createElement('div'); d.className = 'fc5-methods';
+  d.innerHTML = '<h3>How every forecast is derived, step by step</h3>' +
+    '<p><b>1. Random walk with drift (benchmark).</b> Each month’s change is the average past change plus noise, so the forecast extends the last value along the average change, and uncertainty grows with the square root of the horizon.</p>' +
+    EQN(r(sub(mlHat(i('y')), r(T, o('+'), h, o('|'), T)), o('='), sub(i('y'), T), o('+'), h, mlHat(i('μ')), o(','), o('&#8195;'), i('Var'), o('('), sub(i('e'), h), o(')'), o('='), h, sup(i('σ'), n('2'))), '(1)') +
+    '<p><b>2. Autoregression AR(p).</b> Step 1: regress the series on its own p lags (p chosen by the BIC). Step 2: forecast recursively, replacing unknown future values by their forecasts. Step 3: write the model in moving-average form with weights ψ to get the error variance. A stationary AR converges to its long-run mean c/(1 − Σφ).</p>' +
+    EQN(r(sub(mlHat(i('y')), r(T, o('+'), h)), o('='), i('c'), o('+'), mlSum(r(i('i'), o('='), n('1')), i('p')), sub(i('φ'), i('i')), sub(mlHat(i('y')), r(T, o('+'), h, o('−'), i('i'))), o(','), o('&#8195;'), i('Var'), o('('), sub(i('e'), h), o(')'), o('='), sup(i('σ'), n('2')), mlSum(r(i('j'), o('='), n('0')), r(h, o('−'), n('1'))), sup(sub(i('ψ'), i('j')), n('2'))), '(2)') +
+    '<p><b>3. ARIMA.</b> The site’s specification for each series φ(L)(1 − L)<sup>d</sup>y<sub>t</sub> = θ(L)ε<sub>t</sub> is estimated by maximum likelihood with the Kalman filter, which also produces exact forecast variances. With d = 1 and no drift the forecast settles at a constant and its variance grows without limit.</p>' +
+    EQN(r(i('φ'), o('('), i('L'), o(')'), sup(o('(1 − L)'), i('d')), sub(i('y'), t), o('='), i('θ'), o('('), i('L'), o(')'), sub(i('ε'), t)), '(3)') +
+    '<p><b>4. Exponential smoothing with a damped trend, ETS(A,Ad,N).</b> A level and a slope are updated each period by the forecast error; the damping factor φ &lt; 1 makes the trend fade, so long-run forecasts flatten.</p>' +
+    EQN(r(sub(i('ℓ'), t), o('='), sub(i('ℓ'), r(t, o('−'), n('1'))), o('+'), i('φ'), sub(i('b'), r(t, o('−'), n('1'))), o('+'), i('α'), sub(i('ε'), t), o(','), o('&#8195;'), sub(i('b'), t), o('='), i('φ'), sub(i('b'), r(t, o('−'), n('1'))), o('+'), i('β'), sub(i('ε'), t), o(','), o('&#8195;'), sub(mlHat(i('y')), r(T, o('+'), h)), o('='), sub(i('ℓ'), T), o('+'), o('('), i('φ'), o('+'), o('…'), o('+'), sup(i('φ'), h), o(')'), sub(i('b'), T)), '(4)') +
+    '<p><b>5. Theta method.</b> Combines a fitted linear trend with simple exponential smoothing ℓ<sub>t</sub> = αy<sub>t</sub> + (1 − α)ℓ<sub>t−1</sub>; Hyndman and Billah (2003) show the standard version equals smoothing with a drift of half the trend slope. Seasonal series are deseasonalised first.</p>' +
+    '<p><b>6. VAR.</b> Inflation, money growth, the call rate and Taka depreciation are forecast jointly from 12 lags of all four; the forecast-error covariance accumulates the moving-average matrices Φ<sub>i</sub>.</p>' +
+    EQN(r(sub(i('𝐲'), t), o('='), i('𝐜'), o('+'), mlSum(r(i('i'), o('='), n('1')), i('p')), sub(i('𝐀'), i('i')), sub(i('𝐲'), r(t, o('−'), i('i'))), o('+'), sub(i('𝐮'), t), o(','), o('&#8195;'), sub(i('𝚺'), r(i('y'), o('('), h, o(')'))), o('='), mlSum(r(i('i'), o('='), n('0')), r(h, o('−'), n('1'))), sub(i('𝚽'), i('i')), sub(i('𝚺'), i('u')), sup(sub(i('𝚽'), i('i')), o('′'))), '(5)') +
+    '<p><b>7. VECM.</b> Imports, exports and remittances (logs) are forecast with their long-run relation and adjustment speeds from the Model library; forecasts respect the cointegrating relation.</p>' +
+    '<p><b>8. SARIMAX.</b> Inflation regressed on Taka depreciation (three months earlier) and the call rate (six months earlier) with ARMA errors; drivers already observed are used, later ones are held at their last values.</p>' +
+    '<p><b>9. Ensemble.</b> A weighted average of the models with weights proportional to the inverse of each model’s back-test mean squared error; its variance adds the disagreement between models to their average variance.</p>' +
+    EQN(r(sub(mlHat(i('y')), i('ens')), o('='), mlSum(i('m'), null), sub(i('w'), i('m')), sub(mlHat(i('y')), i('m')), o(','), o('&#8195;'), sub(i('w'), i('m')), o('∝'), fr(n('1'), sub(i('MSE'), i('m'))), o(','), o('&#8195;'), sup(sub(i('σ'), i('ens')), n('2')), o('='), mlSum(i('m'), null), sub(i('w'), i('m')), o('['), sup(sub(i('σ'), i('m')), n('2')), o('+'), o('('), sub(mlHat(i('y')), i('m')), o('−'), sub(mlHat(i('y')), i('ens')), sup(o(')'), n('2')), o(']')), '(6)') +
+    '<p><b>10. From months to quarters and years.</b> Rates and prices are averaged over the period, flows (exports, imports, remittances) are summed, and stocks (reserves) take the period-end value; periods that are partly observed combine actual and forecast months. Ranges for aggregated periods add up the monthly bounds and are approximate; the simulation section gives exact fiscal-year distributions for the ARIMA model.</p>' +
+    '<p><b>11. Validation and failure tests.</b> Rolling-origin back-tests (Tashman, 2000) re-estimate every model at each past date and score its forecasts by RMSE, MAE, bias, the coverage of its 80% range (Christoffersen, 1998) and the Diebold–Mariano test against the random walk with a HAC variance (Diebold & Mariano, 1995; Harvey, Leybourne & Newbold, 1997). Failure tests: Ljung–Box (1978), ARCH-LM (Engle, 1982), Jarque–Bera (1980), the OLS-CUSUM stability test (Ploberger & Krämer, 1992) and Chow (1960) break tests. Heterogeneity: Levene and Kruskal–Wallis (1952) tests across sub-periods. Simulation: 1,000 Monte Carlo paths from the estimated ARIMA model.</p>' +
+    '<h3>References</h3><ol class="md-refs">' + [['Assimakopoulos, V., & Nikolopoulos, K. (2000). The theta model: A decomposition approach to forecasting. International Journal of Forecasting, 16(4), 521–530.', 'https://doi.org/10.1016/S0169-2070(00)00066-2'], ['Bates, J. M., & Granger, C. W. J. (1969). The combination of forecasts. Operational Research Quarterly, 20(4), 451–468.', 'https://doi.org/10.2307/3008764'], ['Box, G. E. P., Jenkins, G. M., Reinsel, G. C., & Ljung, G. M. (2015). Time series analysis: Forecasting and control (5th ed.). Wiley.', ''], ['Chow, G. C. (1960). Tests of equality between sets of coefficients in two linear regressions. Econometrica, 28(3), 591–605.', 'https://doi.org/10.2307/1910133'], ['Christoffersen, P. F. (1998). Evaluating interval forecasts. International Economic Review, 39(4), 841–862.', 'https://doi.org/10.2307/2527341'], ['Diebold, F. X., & Mariano, R. S. (1995). Comparing predictive accuracy. Journal of Business & Economic Statistics, 13(3), 253–263.', 'https://doi.org/10.1080/07350015.1995.10524599'], ['Engle, R. F. (1982). Autoregressive conditional heteroscedasticity with estimates of the variance of United Kingdom inflation. Econometrica, 50(4), 987–1007.', 'https://doi.org/10.2307/1912773'], ['Harvey, D., Leybourne, S., & Newbold, P. (1997). Testing the equality of prediction mean squared errors. International Journal of Forecasting, 13(2), 281–291.', 'https://doi.org/10.1016/S0169-2070(96)00719-4'], ['Hyndman, R. J., & Billah, B. (2003). Unmasking the Theta method. International Journal of Forecasting, 19(2), 287–290.', 'https://doi.org/10.1016/S0169-2070(01)00143-1'], ['Hyndman, R. J., Koehler, A. B., Ord, J. K., & Snyder, R. D. (2008). Forecasting with exponential smoothing: The state space approach. Springer.', 'https://doi.org/10.1007/978-3-540-71918-2'], ['Jarque, C. M., & Bera, A. K. (1980). Efficient tests for normality, homoscedasticity and serial independence of regression residuals. Economics Letters, 6(3), 255–259.', 'https://doi.org/10.1016/0165-1765(80)90024-5'], ['Kruskal, W. H., & Wallis, W. A. (1952). Use of ranks in one-criterion variance analysis. Journal of the American Statistical Association, 47(260), 583–621.', 'https://doi.org/10.1080/01621459.1952.10483441'], ['Ljung, G. M., & Box, G. E. P. (1978). On a measure of lack of fit in time series models. Biometrika, 65(2), 297–303.', 'https://doi.org/10.1093/biomet/65.2.297'], ['Lütkepohl, H. (2005). New introduction to multiple time series analysis. Springer.', 'https://doi.org/10.1007/978-3-540-27752-1'], ['Makridakis, S., Spiliotis, E., & Assimakopoulos, V. (2020). The M4 Competition: 100,000 time series and 61 forecasting methods. International Journal of Forecasting, 36(1), 54–74.', 'https://doi.org/10.1016/j.ijforecast.2019.04.014'], ['Ploberger, W., & Krämer, W. (1992). The CUSUM test with OLS residuals. Econometrica, 60(2), 271–285.', 'https://doi.org/10.2307/2951597'], ['Tashman, L. J. (2000). Out-of-sample tests of forecasting accuracy: An analysis and review. International Journal of Forecasting, 16(4), 437–450.', 'https://doi.org/10.1016/S0169-2070(00)00065-0']].map(([tx, u]) => '<li>' + esc(tx) + (u ? ' <a href="' + esc(u) + '" target="_blank" rel="noopener noreferrer">' + esc(u) + '</a>' : '') + '</li>').join('') + '</ol><p class="note">References written from memory; check them through their DOI links.</p>';
+  host.append(d);
+}
+
+/* ======================= v3.15: Reality check ======================= */
+var RCS = { v: 'infl', o: 2024 * 12 + 11, s: 2010 * 12, h: 0, ms: ['ens', 'ar', 'holt', 'theta', 'rw', 'arima'], band: 'ar' };
+var RC_LOG = { xr: 1, res: 1, remit: 1, exp: 1, imp: 1 }, RC_SEAS = { remit: 1, exp: 1, imp: 1 };
+var RC_VARS = ['infl', 'food', 'nonfood', 'xr', 'res', 'remit', 'exp', 'imp', 'm2', 'pcredit', 'call'];
+var RC_NAMES = { rw: 'No change (random walk)', rwd: 'Random walk with drift', mean: 'Training-period mean', ar: 'Autoregression (AR, BIC)', holt: 'Damped-trend exponential smoothing', theta: 'Theta method', snaive: 'Seasonal naive', arima: 'ARIMA (site specification)', ens: 'Ensemble (average of the others)' };
+var RC_COL = { rw: '#9CA3AF', rwd: '#6B7280', mean: '#8E4EC6', ar: '#2F6FED', holt: '#12A594', theta: '#F5A524', snaive: '#AD7F58', arima: '#E5484D', ens: '#111827' };
+function rcRng(seed) { let a = seed >>> 0; return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function rcSolve(A, b) {
+  const n = b.length, M = A.map((r, i) => r.concat([b[i]]));
+  for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r; [M[c], M[p]] = [M[p], M[c]]; const d = M[c][c]; if (Math.abs(d) < 1e-12) return null; for (let r = 0; r < n; r++) if (r !== c) { const f = M[r][c] / d; for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; } }
+  return M.map((r, i) => r[n] / r[i]);
+}
+function rcAR(x, p, start) {
+  const rows = [], ys = []; for (let t = start; t < x.length; t++) { const r = [1]; for (let i = 1; i <= p; i++) r.push(x[t - i]); rows.push(r); ys.push(x[t]); }
+  const k = p + 1, XtX = Array.from({ length: k }, () => new Array(k).fill(0)), Xty = new Array(k).fill(0);
+  rows.forEach((r, j) => { for (let a = 0; a < k; a++) { Xty[a] += r[a] * ys[j]; for (let b = 0; b < k; b++) XtX[a][b] += r[a] * r[b]; } });
+  const be = rcSolve(XtX, Xty); if (!be) return null;
+  const res = rows.map((r, j) => ys[j] - r.reduce((s, v, a) => s + v * be[a], 0)), n = res.length, s2 = res.reduce((s, e) => s + e * e, 0) / n;
+  return { be, res, s2, bic: n * Math.log(s2) + k * Math.log(n), p };
+}
+function rcQuant(arr, q) { const a = arr.slice().sort((x, y) => x - y), i = (a.length - 1) * q, lo = Math.floor(i); return a[lo] + (a[Math.min(lo + 1, a.length - 1)] - a[lo]) * (i - lo); }
+function rcBands(paths, H) {
+  const out = { lo80: [], hi80: [], lo95: [], hi95: [] };
+  for (let h = 0; h < H; h++) { const c = paths.map(p => p[h]); out.lo80.push(rcQuant(c, 0.1)); out.hi80.push(rcQuant(c, 0.9)); out.lo95.push(rcQuant(c, 0.025)); out.hi95.push(rcQuant(c, 0.975)); }
+  return out;
+}
+/* each model works on a working series w and returns forecasts of w; rebuild() maps w back to the original units */
+function rcModels(y, key, H, which) {
+  const lg = !!RC_LOG[key], seas = !!RC_SEAS[key], z = lg ? y.map(Math.log) : y.slice(), n = z.length, rng = rcRng(7), B = 300;
+  let w, rebuild;
+  if (seas) { w = []; for (let t = 12; t < n; t++) w.push(z[t] - z[t - 12]); rebuild = wf => { const zz = z.slice(); wf.forEach((v, h) => zz.push(v + zz[n + h - 12])); return zz.slice(n).map(Math.exp); }; }
+  else if (lg) { w = []; for (let t = 1; t < n; t++) w.push(z[t] - z[t - 1]); rebuild = wf => { let c = z[n - 1]; return wf.map(v => Math.exp(c += v)); }; }
+  else { w = z.slice(); rebuild = wf => wf.slice(); }
+  const out = {}, m = w.length, simB = (step) => { const paths = []; for (let b = 0; b < B; b++) paths.push(rebuild(step())); return rcBands(paths, H); };
+  const pick = arr => arr[Math.floor(rng() * arr.length)];
+  if (which.includes('ar') && m > 40) {
+    let best = null; const pm = Math.min(12, Math.floor(m / 6));
+    for (let p = 1; p <= pm; p++) { const f = rcAR(w, p, pm); if (f && (!best || f.bic < best.bic)) best = f; }
+    if (best) {
+      const run = shock => { const ww = w.slice(), f = []; for (let h = 0; h < H; h++) { let v = best.be[0]; for (let i = 1; i <= best.p; i++) v += best.be[i] * ww[ww.length - i]; if (shock) v += pick(best.res); ww.push(v); f.push(v); } return f; };
+      out.ar = Object.assign({ mean: rebuild(run(false)), note: 'AR(' + best.p + ')' }, simB(() => run(true)));
+    }
+  }
+  if (which.includes('holt') && m > 30) {
+    let best = null;
+    for (const a of [0.1, 0.2, 0.3, 0.5, 0.7, 0.9]) for (const b of [0.01, 0.05, 0.1, 0.2]) for (const ph of [0.8, 0.9, 0.98]) {
+      let l = w[0], bb = w[1] - w[0], sse = 0; const e = [];
+      for (let t = 1; t < m; t++) { const f = l + ph * bb, er = w[t] - f; e.push(er); sse += er * er; const l2 = f + a * er; bb = ph * bb + b * er; l = l2; }
+      if (!best || sse < best.sse) best = { a, b, ph, l, bb, sse, e };
+    }
+    const run = shock => { let l = best.l, bb = best.bb; const f = []; for (let h = 0; h < H; h++) { const fc = l + best.ph * bb, er = shock ? pick(best.e) : 0, v = fc + er; f.push(v); l = fc + best.a * er; bb = best.ph * bb + best.b * er; } return f; };
+    out.holt = Object.assign({ mean: rebuild(run(false)), note: 'α ' + best.a + ', β ' + best.b + ', φ ' + best.ph }, simB(() => run(true)));
+  }
+  if (which.includes('theta') && m > 30) {
+    const tb = w.map((v, i) => i), tm = (m - 1) / 2, wm = w.reduce((s, v) => s + v, 0) / m;
+    const slope = tb.reduce((s, t, i) => s + (t - tm) * (w[i] - wm), 0) / tb.reduce((s, t) => s + (t - tm) ** 2, 0);
+    let best = null;
+    for (const a of [0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9]) { let l = w[0], sse = 0; const e = []; for (let t = 1; t < m; t++) { const er = w[t] - l; e.push(er); sse += er * er; l += a * er; } if (!best || sse < best.sse) best = { a, l, sse, e }; }
+    const run = shock => { let l = best.l; const f = []; for (let h = 0; h < H; h++) { const er = shock ? pick(best.e) : 0, v = l + slope / 2 * (h + 1) + er; f.push(v); l += best.a * er; } return f; };
+    out.theta = Object.assign({ mean: rebuild(run(false)), note: 'α ' + best.a + ', drift ' + nf(slope / 2, 4) }, simB(() => run(true)));
+  }
+  if (which.includes('rw') || which.includes('rwd')) {
+    const d = []; for (let t = 1; t < n; t++) d.push(z[t] - z[t - 1]); const mu = d.reduce((s, v) => s + v, 0) / d.length, sd = Math.sqrt(d.reduce((s, v) => s + (v - mu) ** 2, 0) / (d.length - 1));
+    const back = v => lg ? Math.exp(v) : v, mk = dr => { const o = { mean: [], lo80: [], hi80: [], lo95: [], hi95: [] }; for (let h = 1; h <= H; h++) { const c = z[n - 1] + dr * h, s = sd * Math.sqrt(h); o.mean.push(back(c)); o.lo80.push(back(c - 1.2816 * s)); o.hi80.push(back(c + 1.2816 * s)); o.lo95.push(back(c - 1.96 * s)); o.hi95.push(back(c + 1.96 * s)); } return o; };
+    if (which.includes('rw')) out.rw = mk(0); if (which.includes('rwd')) out.rwd = mk(mu);
+  }
+  if (which.includes('mean') && !lg) { const mu = y.reduce((s, v) => s + v, 0) / n, sd = Math.sqrt(y.reduce((s, v) => s + (v - mu) ** 2, 0) / (n - 1)); out.mean = { mean: new Array(H).fill(mu), lo80: new Array(H).fill(mu - 1.2816 * sd), hi80: new Array(H).fill(mu + 1.2816 * sd), lo95: new Array(H).fill(mu - 1.96 * sd), hi95: new Array(H).fill(mu + 1.96 * sd) }; }
+  if (which.includes('snaive') && seas && n > 24) { const o = { mean: [] }; for (let h = 1; h <= H; h++) o.mean.push(y[n - 12 * Math.ceil(h / 12) + ((h - 1) % 12)]); out.snaive = o; }
+  return out;
+}
+function rcData(key) {
+  const p = PK(key); if (!p) return null;
+  const ks = [], v = []; for (let j = 0; j < p.v.length; j++) if (p.v[j] != null) { ks.push(p.k0 + j); v.push(p.v[j]); }
+  return { ks, v, map: new Map(ks.map((k, i) => [k, v[i]])) };
+}
+function rcRun(key, o, s, H, which) {
+  const D_ = rcData(key); if (!D_) return null;
+  const tr = []; for (let k = s; k <= o; k++) { if (!D_.map.has(k)) { const a = D_.ks.filter(q => q < k).pop(), b = D_.ks.find(q => q > k); if (a == null || b == null || b - a > 4) return { err: 'The training window has a gap in the data at ' + fc5Lab(k, 'M') + '.' }; tr.push(D_.map.get(a) + (D_.map.get(b) - D_.map.get(a)) * (k - a) / (b - a)); } else tr.push(D_.map.get(k)); }
+  if (tr.length < 48) return { err: 'Choose a training window of at least four years.' };
+  const last = D_.ks[D_.ks.length - 1], Hev = H ? Math.min(H, last - o) : last - o; if (Hev < 1) return { err: 'No actual data after this origin yet.' };
+  const Hf = Math.max(Hev, 12);
+  const mods = rcModels(tr, key, Hf, which);
+  const A = (BD.models2 && BD.models2.rc_arima || {})[key];
+  if (which.includes('arima') && A && s <= A.start && o >= A.k0 && o - A.k0 < A.fc.length && A.fc[o - A.k0]) {
+    const i = o - A.k0; mods.arima = { mean: A.fc[i].slice(0, Hf), lo80: A.lo80[i].slice(0, Hf), hi80: A.hi80[i].slice(0, Hf), note: 'estimated on data from ' + fc5Lab(A.start, 'M') };
+  }
+  const base = Object.keys(mods);
+  if (which.includes('ens') && base.length > 1) { const L = mods[base[0]].mean.length; mods.ens = { mean: Array.from({ length: L }, (_, h) => base.reduce((s_, m) => s_ + mods[m].mean[h], 0) / base.length) }; }
+  const act = Array.from({ length: Hev }, (_, h) => D_.map.has(o + 1 + h) ? D_.map.get(o + 1 + h) : null), y0 = tr[tr.length - 1];
+  const stats_ = {}, rwm = mods.rw ? mods.rw.mean : null;
+  Object.entries(mods).forEach(([m, f]) => {
+    const e = [], pe = [], ae = [], sm = [], dir = []; let c80 = 0, c95 = 0, nb = 0, nb95 = 0, mx = null;
+    act.forEach((a, h) => {
+      if (a == null || f.mean[h] == null) return; const er = a - f.mean[h]; e.push(er); ae.push(Math.abs(er));
+      if (Math.abs(a) > 1e-9) pe.push(er / Math.abs(a) * 100); sm.push(2 * Math.abs(er) / (Math.abs(a) + Math.abs(f.mean[h]) || 1) * 100);
+      dir.push(Math.sign(f.mean[h] - y0) === Math.sign(a - y0)); if (!mx || Math.abs(er) > Math.abs(mx[1])) mx = [o + 1 + h, er];
+      if (f.lo80 && f.lo80[h] != null) { nb++; if (a >= f.lo80[h] && a <= f.hi80[h]) c80++; } if (f.lo95 && f.lo95[h] != null) { nb95++; if (a >= f.lo95[h] && a <= f.hi95[h]) c95++; }
+    });
+    if (!e.length) return;
+    const avg = a => a.reduce((s_, v) => s_ + v, 0) / a.length, rmse = Math.sqrt(avg(e.map(v => v * v)));
+    let u2 = null; if (rwm) { const er = act.map((a, h) => a == null ? null : a - rwm[h]).filter(v => v != null); const r0 = Math.sqrt(avg(er.map(v => v * v))); u2 = r0 > 0 ? rmse / r0 : null; }
+    const lastH = act.length - 1 - [...act].reverse().findIndex(a => a != null);
+    stats_[m] = { n: e.length, me: avg(e), mpe: pe.length ? avg(pe) : null, mae: avg(ae), mape: pe.length ? avg(pe.map(Math.abs)) : null, smape: avg(sm), rmse, u2, mx, dir: avg(dir.map(Number)) * 100, c80: nb ? c80 / nb * 100 : null, c95: nb95 ? c95 / nb95 * 100 : null, endDev: act[lastH] - f.mean[lastH], endPct: Math.abs(act[lastH]) > 1e-9 ? (act[lastH] - f.mean[lastH]) / Math.abs(act[lastH]) * 100 : null, endK: o + 1 + lastH };
+  });
+  return { D: D_, tr, o, s, Hev, act, mods, stats: stats_, y0 };
+}
+function labRc(body) {
+  const s = sec(body, 'Reality check: how forecasts compared with what actually happened', 'Pick a forecast origin and a training window; every model is estimated on that window only, and its forecasts are compared month by month with the data published afterwards.', 'rc');
+  const ctl = document.createElement('div'); ctl.className = 'fc5-ctl'; s.append(ctl);
+  const out = document.createElement('div'); s.append(out);
+  const draw = () => {
+    const D_ = rcData(RCS.v); if (!D_) return;
+    const last = D_.ks[D_.ks.length - 1], first = D_.ks[0];
+    if (RCS.o >= last) RCS.o = last - 1; if (RCS.o < first + 60) RCS.o = first + 60;
+    if (RCS.s < first) RCS.s = first; if (RCS.s > RCS.o - 48) RCS.s = Math.max(first, RCS.o - 48);
+    const origins = []; for (let k = Math.max(first + 60, 2015 * 12); k < last; k++) origins.push(k);
+    const starts = []; for (let yy = Math.floor(first / 12); yy * 12 <= RCS.o - 48; yy++) starts.push(Math.max(yy * 12, first));
+    const avail = ['ens', 'ar', 'holt', 'theta', 'rw', 'rwd', 'arima'].concat(RC_LOG[RCS.v] ? [] : ['mean']).concat(RC_SEAS[RCS.v] ? ['snaive'] : []);
+    ctl.innerHTML = '<label>Variable <select data-k="v">' + RC_VARS.map(k => '<option value="' + k + '"' + (k === RCS.v ? ' selected' : '') + '>' + esc((BD.series[k] || {}).label || k) + '</option>').join('') + '</select></label>' +
+      '<label>Forecast origin (last month used) <select data-k="o">' + origins.map(k => '<option value="' + k + '"' + (k === RCS.o ? ' selected' : '') + '>' + fc5Lab(k, 'M') + '</option>').join('') + '</select></label>' +
+      '<label>Training data from <select data-k="s">' + [...new Set(starts)].map(k => '<option value="' + k + '"' + (k === RCS.s ? ' selected' : '') + '>' + fc5Lab(k, 'M') + '</option>').join('') + '</select></label>' +
+      '<label>Months compared <select data-k="h">' + [[0, 'All published so far'], [6, '6'], [12, '12'], [18, '18'], [24, '24']].map(([a, b]) => '<option value="' + a + '"' + (a === RCS.h ? ' selected' : '') + '>' + b + '</option>').join('') + '</select></label>' +
+      '<label>Range for <select data-k="band"><option value="">none</option>' + avail.filter(m => m !== 'ens' && m !== 'snaive').map(m => '<option value="' + m + '"' + (m === RCS.band ? ' selected' : '') + '>' + esc(RC_NAMES[m]) + '</option>').join('') + '</select></label>' +
+      '<div class="fc5-ms">' + avail.map(m => '<label class="fc5-chip" style="--c:' + RC_COL[m] + '"><input type="checkbox" data-m="' + m + '"' + (RCS.ms.includes(m) ? ' checked' : '') + '> ' + esc(RC_NAMES[m]) + '</label>').join('') + '</div>';
+    try { disposeIn(out); } catch (e) { /* none */ }
+    out.innerHTML = '';
+    const which = RCS.ms.filter(m => avail.includes(m)).concat(RCS.band && !RCS.ms.includes(RCS.band) ? [RCS.band] : []).concat(['rw']);
+    const R = rcRun(RCS.v, RCS.o, RCS.s, RCS.h, which);
+    if (!R || R.err) { out.innerHTML = '<p class="note">' + esc(R ? R.err : 'No data.') + '</p>'; return; }
+    rcRender(out, R);
+  };
+  ctl.addEventListener('change', e => {
+    const t = e.target;
+    if (t.dataset.m) { const on = new Set(RCS.ms); t.checked ? on.add(t.dataset.m) : on.delete(t.dataset.m); RCS.ms = [...on]; }
+    else if (t.dataset.k) { const k = t.dataset.k; RCS[k] = (k === 'v' || k === 'band') ? t.value : +t.value; }
+    draw();
+  });
+  draw();
+  rcMethods(s);
+}
+function rcRender(out, R) {
+  const key = RCS.v, se = BD.series[key] || {}, unit = se.unit || '', dec = /US\$|Tk crore/.test(unit) ? 0 : 2, shown = RCS.ms.filter(m => R.mods[m]);
+  const pre = R.D.ks.filter(k => k > RCS.o - 24 && k <= RCS.o), evk = Array.from({ length: R.Hev }, (_, h) => RCS.o + 1 + h), all = pre.concat(evk), labels = all.map(k => fc5Lab(k, 'M'));
+  const actual = all.map(k => R.D.map.has(k) ? R.D.map.get(k) : null), at = k => k - RCS.o - 1;
+  const series = [S('Actual: ' + (se.label || key), actual, { w: 2.6, color: '#111827' })];
+  shown.forEach(m => series.push(S(RC_NAMES[m], all.map(k => k === RCS.o ? R.D.map.get(k) : (k > RCS.o ? R.mods[m].mean[at(k)] : null)), { w: m === 'ens' ? 2.4 : 1.7, dash: m !== 'ens', color: RC_COL[m] })));
+  const B_ = RCS.band && R.mods[RCS.band];
+  if (B_ && B_.lo80) [['lo80', '80% lower', 1.2], ['hi80', '80% upper', 1.2]].concat(B_.lo95 ? [['lo95', '95% lower', 0.8], ['hi95', '95% upper', 0.8]] : []).forEach(([fl, nm, wd]) => series.push(S(RC_NAMES[RCS.band] + ', ' + nm, all.map(k => k > RCS.o ? B_[fl][at(k)] : (k === RCS.o ? R.D.map.get(k) : null)), { w: wd, dash: true, color: RC_COL[RCS.band] })));
+  const g = grid(out);
+  figure(g, { wide: true, title: (se.label || key) + ': forecasts made in ' + fc5Lab(RCS.o, 'M') + ' against the data published since', sub: unit + '. Models estimated on ' + fc5Lab(RCS.s, 'M') + ' to ' + fc5Lab(RCS.o, 'M') + ' only; nothing after the origin is used.', h: 380, source: 'Bangladesh Bank; BBS; model estimates.', render: TH => tsOption(TH, labels, series, { y1: unit, dec }) });
+  const st = R.stats, ms = Object.keys(st).filter(m => shown.includes(m) || m === 'rw'), best = ms.slice().sort((a, b) => st[a].rmse - st[b].rmse)[0];
+  const f2 = (v, d) => v == null || !isFinite(v) ? '–' : nf(v, d), sg = v => v == null || !isFinite(v) ? '–' : (v > 0 ? '+' : '') + nf(v, dec === 0 ? 0 : 2);
+  tableWrap(out, '<table><thead><tr><th>Model</th><th class="num">Months</th><th class="num">Mean error (bias)</th><th class="num">Mean % error</th><th class="num">MAE</th><th class="num">MAPE, %</th><th class="num">sMAPE, %</th><th class="num">RMSE</th><th class="num">Theil U (vs no change)</th><th class="num">Direction right</th><th class="num">Inside 80% range</th><th class="num">Inside 95% range</th><th class="num">Largest miss</th><th class="num">Last month: deviation (%)</th></tr></thead><tbody>' +
+    ms.map(m => { const x = st[m]; return '<tr><th scope="row">' + esc(RC_NAMES[m]) + (R.mods[m].note ? '<br><small class="note">' + esc(R.mods[m].note) + '</small>' : '') + '</th><td class="num">' + x.n + '</td><td class="num">' + sg(x.me) + '</td><td class="num">' + (x.mpe == null ? '–' : (x.mpe > 0 ? '+' : '') + nf(x.mpe, 1) + '%') + '</td><td class="num">' + f2(x.mae, dec === 0 ? 0 : 2) + '</td><td class="num">' + f2(x.mape, 1) + '</td><td class="num">' + f2(x.smape, 1) + '</td><td class="num"' + (m === best ? ' style="font-weight:700"' : '') + '>' + f2(x.rmse, dec === 0 ? 0 : 3) + '</td><td class="num">' + f2(x.u2, 2) + '</td><td class="num">' + nf(x.dir, 0) + '%</td><td class="num">' + (x.c80 == null ? '–' : nf(x.c80, 0) + '%') + '</td><td class="num">' + (x.c95 == null ? '–' : nf(x.c95, 0) + '%') + '</td><td class="num">' + sg(x.mx[1]) + ' (' + fc5Lab(x.mx[0], 'M') + ')</td><td class="num">' + sg(x.endDev) + (x.endPct == null ? '' : ' (' + (x.endPct > 0 ? '+' : '') + nf(x.endPct, 1) + '%)') + '</td></tr>'; }).join('') + '</tbody></table>',
+    tcap('Deviation summary: actual minus forecast'), 'Positive errors mean the actual value was above the forecast (the model under-predicted). Bold: lowest RMSE. Theil U below 1 means better than assuming no change. Direction right: share of months in which the model got the direction of change from the origin value right. MAPE is unreliable when actual values are near zero; sMAPE is bounded.');
+  // monthly deviations
+  tableWrap(out, '<table><thead><tr><th>Month</th><th class="num">Actual</th>' + shown.map(m => '<th class="num">' + esc(RC_NAMES[m]) + '</th><th class="num">Deviation (%)</th>').join('') + '</tr></thead><tbody>' +
+    evk.map((k, h) => { const a = R.act[h]; return '<tr><th scope="row">' + fc5Lab(k, 'M') + '</th><td class="num">' + (a == null ? '–' : nf(a, dec)) + '</td>' + shown.map(m => { const f = R.mods[m].mean[h], d = a == null ? null : a - f; return '<td class="num">' + nf(f, dec) + '</td><td class="num">' + (d == null ? '–' : sg(d) + (Math.abs(a) > 1e-9 ? ' (' + (d > 0 ? '+' : '') + nf(d / Math.abs(a) * 100, 1) + '%)' : '')) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>',
+    tcap('Month by month: forecast, actual and deviation'), unit + '. Deviation = actual − forecast; percentage of the actual value in brackets.');
+  // annual summary: calendar and fiscal years
+  const rule = { res: 'last', remit: 'sum', exp: 'sum', imp: 'sum' }[key] || 'mean', ann = [];
+  ['CY', 'FY'].forEach(fr => {
+    const hist = R.D.ks.filter(k => k <= RCS.o).map(k => [k, R.D.map.get(k), false]), act_ = R.D.ks.map(k => [k, R.D.map.get(k), k > RCS.o]);
+    const aAgg = new Map(fc5Agg(act_, 'M', fr, rule).filter(x => x[2] > 0).map(x => [x[0], x[1]]));
+    shown.forEach(m => {
+      const fp_ = hist.concat(R.mods[m].mean.map((v, h) => [RCS.o + 1 + h, v, true]));
+      fc5Agg(fp_, 'M', fr, rule).filter(x => x[2] > 0 && aAgg.has(x[0])).forEach(x => ann.push([fr, x[0], m, x[1], aAgg.get(x[0]), x[2]]));
+    });
+  });
+  if (ann.length) {
+    const ids = [...new Set(ann.map(r => r[0] + ':' + r[1]))];
+    tableWrap(out, '<table><thead><tr><th>Period</th><th class="num">Actual</th>' + shown.map(m => '<th class="num">' + esc(RC_NAMES[m]) + '</th>').join('') + '</tr></thead><tbody>' +
+      ids.map(id => { const [fr, pid] = id.split(':'), rr = ann.filter(r => r[0] === fr && String(r[1]) === pid), a = rr[0][4]; return '<tr><th scope="row">' + (fr === 'FY' ? 'FY' + pid : 'Calendar ' + pid) + '<br><small class="note">' + rr[0][5] + ' forecast months</small></th><td class="num">' + nf(a, dec) + '</td>' + shown.map(m => { const x = rr.find(r => r[2] === m); if (!x) return '<td class="num">–</td>'; const d = a - x[3]; return '<td class="num">' + nf(x[3], dec) + '<br><small>' + sg(d) + (Math.abs(a) > 1e-9 ? ' (' + (d > 0 ? '+' : '') + nf(d / Math.abs(a) * 100, 1) + '%)' : '') + '</small></td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>',
+      tcap('Annual summary: forecast against actual for each completed year'), (rule === 'sum' ? 'Annual totals' : rule === 'last' ? 'End-of-year values' : 'Annual averages') + ' (' + unit + '). Years partly before the origin combine actual months with forecasts. Under each forecast: deviation (actual − forecast) and its percentage of the actual value.');
+  }
+  // robustness: other training windows and other origins
+  const rob = [], wins = [2010, 2015, 2018, 2020].map(y_ => y_ * 12).filter(k => k <= RCS.o - 48 && k >= R.D.ks[0]);
+  const runs = wins.map(k => ['Training from ' + fc5Lab(k, 'M') + ', origin ' + fc5Lab(RCS.o, 'M'), RCS.o, k]).concat([-6, -3, 3].map(d => ['Training from ' + fc5Lab(RCS.s, 'M') + ', origin ' + fc5Lab(RCS.o + d, 'M'), RCS.o + d, RCS.s]));
+  runs.forEach(([lab, o_, s_]) => { if (o_ >= R.D.ks[R.D.ks.length - 1] || s_ > o_ - 48) return; const Rr = rcRun(RCS.v, o_, s_, RCS.h || 12, shown.filter(m => m !== 'arima').concat(['rw'])); if (Rr && !Rr.err) rob.push([lab, Rr.stats]); });
+  if (rob.length) {
+    const rm = shown.filter(m => m !== 'arima');
+    tableWrap(out, '<table><thead><tr><th>Setting</th>' + rm.map(m => '<th class="num">' + esc(RC_NAMES[m]) + '</th>').join('') + '<th>Best</th></tr></thead><tbody>' + rob.map(([lab, st_]) => { const b_ = rm.filter(m => st_[m]).sort((a, b) => st_[a].rmse - st_[b].rmse)[0]; return '<tr><th scope="row">' + esc(lab) + '</th>' + rm.map(m => '<td class="num"' + (m === b_ ? ' style="font-weight:700"' : '') + '>' + (st_[m] ? nf(st_[m].rmse, dec === 0 ? 0 : 3) + '<br><small>' + (st_[m].mape == null ? '' : 'MAPE ' + nf(st_[m].mape, 1) + '%') + '</small>' : '–') + '</td>').join('') + '<td>' + esc(RC_NAMES[b_] || '–') + '</td></tr>'; }).join('') + '</tbody></table>',
+      tcap('Robustness: the same check with other training windows and origins'), 'RMSE (and MAPE) over ' + (RCS.h || 12) + ' months after each origin. A model whose rank changes from row to row is fragile; one that stays near the top is robust.');
+    var robBest = {}; rob.forEach(([, st_]) => { const b_ = rm.filter(m => st_[m]).sort((a, b) => st_[a].rmse - st_[b].rmse)[0]; if (b_) robBest[b_] = (robBest[b_] || 0) + 1; });
+  }
+  // plain-language summary
+  const x = st[best], e = st.ens, rw = st.rw;
+  const lines = ['Over ' + x.n + ' months after ' + fc5Lab(RCS.o, 'M') + ', the most accurate model was <b>' + esc(RC_NAMES[best]) + '</b> (RMSE ' + nf(x.rmse, dec === 0 ? 0 : 3) + ' ' + esc(unit) + (x.mape != null ? ', average absolute miss ' + nf(x.mape, 1) + '% of the actual value' : '') + ').',
+    'It ' + (x.me > 0 ? '<b>under-predicted</b>' : x.me < 0 ? '<b>over-predicted</b>' : 'had no average bias') + (x.me !== 0 ? ' on average by ' + nf(Math.abs(x.me), 2) + ' ' + esc(unit) + (x.mpe != null ? ' (' + nf(Math.abs(x.mpe), 2) + '% of the actual values)' : '') : '') + '; its largest miss was ' + sg(x.mx[1]) + ' in ' + fc5Lab(x.mx[0], 'M') + '.',
+    rw && best !== 'rw' ? 'Against simply assuming no change, it ' + (x.u2 != null && x.u2 < 1 ? 'reduced the error by ' + nf((1 - x.u2) * 100, 0) + '% (Theil U ' + nf(x.u2, 2) + ').' : 'did not do better (Theil U ' + nf(x.u2, 2) + ').') : 'Assuming no change was the best forecast in this period: the series barely moved, or moved in ways no model anticipated.',
+    e ? 'The ensemble average missed by ' + nf(e.rmse, dec === 0 ? 0 : 3) + ' (RMSE) and was ' + (e.rmse <= x.rmse * 1.1 ? 'close to the best model, a reminder that combining models is a safe default.' : 'worse than the best model in this period.') : '',
+    (R.mods[RCS.band] && st[RCS.band] && st[RCS.band].c80 != null) ? 'The ' + esc(RC_NAMES[RCS.band]) + ' 80% range contained ' + nf(st[RCS.band].c80, 0) + '% of outcomes' + (st[RCS.band].c80 < 60 ? ': too narrow, so uncertainty was understated.' : st[RCS.band].c80 > 95 ? ': wider than needed.' : ': well calibrated.') : '',
+    typeof robBest !== 'undefined' && Object.keys(robBest).length ? 'Robustness: across ' + rob.length + ' alternative windows and origins, the most frequent winner was <b>' + esc(RC_NAMES[Object.entries(robBest).sort((a, b) => b[1] - a[1])[0][0]]) + '</b>' + (Object.keys(robBest).length > 2 ? '; winners changed with the setting, so no single model dominates.' : '.') : ''].filter(Boolean);
+  out.insertAdjacentHTML('beforeend', '<div class="card"><h3>Summary: reality against the forecasts</h3><ul class="ol-list">' + lines.map(l => '<li>' + l + '</li>').join('') + '</ul></div>');
+}
+function rcMethods(host) {
+  const d = document.createElement('div'); d.className = 'fc5-methods';
+  d.innerHTML = '<h3>How the reality check works</h3><p>For the chosen origin, every model is estimated only on the training window (the origin month is its last observation), forecasts are made for the following months, and they are compared with the values published since. Error e<sub>t</sub> = actual − forecast; percentage error p<sub>t</sub> = 100·e<sub>t</sub>/|actual|.</p>' +
+    '<p>Mean error (bias) = average of e<sub>t</sub>; MAE = average of |e<sub>t</sub>|; RMSE = √(average of e<sub>t</sub>²); MAPE = average of |p<sub>t</sub>|; sMAPE = average of 200·|e<sub>t</sub>|/(|actual| + |forecast|); Theil’s U = RMSE of the model ÷ RMSE of the no-change forecast; direction accuracy = share of months where the forecast and the outcome moved the same way from the origin value; coverage = share of outcomes inside the model’s 80% or 95% range.</p>' +
+    '<p>Models: AR (order by BIC, on levels for rates, monthly log changes for the exchange rate and reserves, and year-on-year log changes for exports, imports and remittances, which removes seasonality); damped-trend exponential smoothing and the Theta method on the same working series, with parameters chosen by minimising in-sample one-step errors; random walks; the training-period mean; seasonal naive; ARIMA with the site’s specification (estimated in the build on the full history from its start, so it appears only when the training window starts there). Ranges come from 300 bootstrap paths that resample each model’s own past errors (no normality assumed), except the random walks and ARIMA (analytical).</p>' +
+    '<p class="note">Data are the latest published vintage: later revisions are already included, so this is a pseudo-out-of-sample test; with real-time data, errors would usually be somewhat larger.</p>';
+  host.append(d);
+}
+
+/* ======================= v3.15: Nowcasting ======================= */
+var NCS = { v: 'm2' };
+var NC_COL = { 'Naive (last published value)': '#9CA3AF', 'Naive (last published quarter)': '#9CA3AF', 'Own-lag autoregression': '#2F6FED', 'Best single-indicator bridge': '#F5A524', 'Pooled: all indicator combinations': '#111827', 'Selected: top-5 combinations': '#E5484D', 'Factor-augmented bridge (2 principal components)': '#12A594', 'Mixed-frequency dynamic factor model': '#8E4EC6', 'Ridge regression (all indicators)': '#0091FF', 'Lasso (all indicators)': '#AD7F58', 'U-MIDAS (best indicator, three monthly values)': '#D6409F' };
+var NC_LEVEL = { 'Naive (last published value)': 1, 'Naive (last published quarter)': 1, 'Own-lag autoregression': 2, 'Best single-indicator bridge': 3, 'Pooled: all indicator combinations': 4, 'Selected: top-5 combinations': 4, 'Factor-augmented bridge (2 principal components)': 5, 'Mixed-frequency dynamic factor model': 6, 'U-MIDAS (best indicator, three monthly values)': 6, 'Ridge regression (all indicators)': 7, 'Lasso (all indicators)': 7 };
+function ncScores(host, sc, unit, n, from, dec) {
+  const names = Object.keys(sc).sort((a, b) => sc[a][0] - sc[b][0]), ar = sc['Own-lag autoregression'], best = names[0];
+  tableWrap(host, '<table><thead><tr><th>Method</th><th class="num">Level</th><th class="num">RMSE</th><th class="num">MAE</th><th class="num">Bias</th><th class="num">Gain over own-lag model</th><th class="num">Tests</th></tr></thead><tbody>' +
+    names.map(m => '<tr><th scope="row">' + esc(m) + '</th><td class="num">' + (NC_LEVEL[m] || '–') + '</td><td class="num"' + (m === best ? ' style="font-weight:700"' : '') + '>' + nf(sc[m][0], dec) + '</td><td class="num">' + nf(sc[m][1], dec) + '</td><td class="num">' + nf(sc[m][2], dec) + '</td><td class="num">' + (ar && m !== 'Own-lag autoregression' ? (ar[0] > sc[m][0] ? '+' : '') + nf((1 - sc[m][0] / ar[0]) * 100, 0) + '%' : '–') + '</td><td class="num">' + sc[m][3] + '</td></tr>').join('') + '</tbody></table>',
+    tcap('Pseudo-real-time validation'), unit + '. Scored on ' + n + ' periods from ' + esc(from) + ' (combinations were ranked on the preceding period, so “top-5” is a genuine out-of-sample choice); the factor model is re-estimated at 12 past dates. Gain = reduction in RMSE relative to the own-lag model.');
+  return best;
+}
+function labNowcast(body) {
+  const N = (BD && BD.models2 && BD.models2.nowcast) || null;
+  const s = sec(body, 'Nowcasting: estimating the present before it is published', 'Seven levels of methods, from the last published value to a mixed-frequency dynamic factor model, applied to every indicator and to quarterly GDP, with every combination of faster-published indicators tested.', 'nowcast');
+  if (!N) { s.insertAdjacentHTML('beforeend', '<p class="note">Nowcasting results are not in this data build.</p>'); return; }
+  s.insertAdjacentHTML('beforeend', '<p>Bangladesh’s statistics arrive on different dates: inflation is the first monthly release, money and credit come about two months later, tax revenue and industrial production later still, and GDP a quarter or more after the quarter ends. This uneven edge of the data (the “ragged edge”) is what nowcasting exploits: indicators already published for a month carry information about indicators that are not yet out.</p>');
+  // publication calendar
+  const rg = N.ragged, g0 = grid(s);
+  figure(g0, { ts: false, title: 'Publication calendar: months behind the latest release', sub: 'Latest data: ' + N.kmax + '. Each bar shows how many months an indicator lags the fastest release', h: Math.max(300, rg.length * 18), source: 'Bangladesh Bank; BBS; site data.', render: TH => ({ animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 30, top: 10, bottom: 8, containLabel: true }, tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, confine: true }, xAxis: { type: 'value', name: 'months behind', axisLabel: { color: TH.muted, fontSize: 10 }, minInterval: 1 }, yAxis: { type: 'category', inverse: true, data: rg.map(r => r[1] + ' (' + r[2] + ')'), axisLabel: { color: TH.muted, fontSize: 10 } }, series: [{ type: 'bar', data: rg.map(r => ({ value: r[3], itemStyle: { color: ['#12A594', '#2F6FED', '#F5A524', '#E5484D'][Math.min(r[3], 3)] } })), barMaxWidth: 12, label: { show: true, position: 'right', fontSize: 9, color: TH.muted } }] }) });
+  const dl = (N.dfm && N.dfm.loadings) || [];
+  if (dl.length) figure(g0, { ts: false, title: 'Dynamic factor model: how strongly each indicator loads on the common factor', sub: 'Loadings on the single monthly factor (standardised data); GDP enters through its quarterly aggregation', h: Math.max(300, dl.length * 18), source: 'Model estimates (Kalman filter, EM algorithm).', render: TH => ({ animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 30, top: 10, bottom: 8, containLabel: true }, tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, confine: true }, xAxis: { type: 'value', axisLabel: { color: TH.muted, fontSize: 10 } }, yAxis: { type: 'category', inverse: true, data: dl.map(r => (rg.find(x => x[0] === r[0]) || [0, r[0]])[1]), axisLabel: { color: TH.muted, fontSize: 10 } }, series: [{ type: 'bar', data: dl.map(r => ({ value: r[1], itemStyle: { color: r[1] >= 0 ? '#2F6FED' : '#E5484D' } })), barMaxWidth: 12, label: { show: true, position: 'right', fontSize: 9, color: TH.muted, formatter: q => nf(q.value, 2) } }] }) });
+  // the ladder
+  tableWrap(s, '<table><thead><tr><th class="num">Level</th><th>Method</th><th>What it uses</th><th>Strength</th><th>Weakness</th></tr></thead><tbody>' + [
+    [1, 'Naive', 'The last published value', 'Unbeatable for very persistent series', 'Ignores all new information'],
+    [2, 'Own-lag autoregression', 'The indicator’s own recent values', 'Captures momentum and mean reversion', 'Ignores other indicators'],
+    [3, 'Bridge equation', 'One faster-published indicator plus the own lag', 'Simple, interpretable link (Baffigi et al., 2004)', 'Relies on one indicator'],
+    [4, 'Combinations', 'Every subset of 1–3 faster indicators, pooled or with the top five selected', 'Robust; avoids betting on one indicator (Kuzin et al., 2013)', 'Many models; selection can overfit'],
+    [5, 'Factor-augmented bridge', 'Principal components of all faster indicators', 'Summarises many indicators (Stock & Watson, 2002)', 'Factors are statistical, not economic'],
+    [6, 'Mixed-frequency dynamic factor model and MIDAS', 'All monthly indicators and quarterly GDP in one state-space model; MIDAS uses each month separately', 'Handles the ragged edge and mixed frequencies exactly (Bańbura & Modugno, 2014; Foroni et al., 2015)', 'Heavier to estimate; one factor may be too few'],
+    [7, 'Machine learning', 'Ridge and lasso on all indicators, penalty chosen on earlier data', 'Handles many correlated predictors (Babii et al., 2022)', 'Linear; tuning needs care']].map(r => '<tr><td class="num">' + r[0] + '</td><th scope="row">' + esc(r[1]) + '</th><td>' + esc(r[2]) + '</td><td>' + esc(r[3]) + '</td><td>' + esc(r[4]) + '</td></tr>').join('') + '</tbody></table>', tcap('From simplest to most advanced'), 'Every method is validated in pseudo-real time: at each past month, data are cut to reproduce today’s publication pattern, models are estimated only on what would have been available, and the nowcast is compared with the value later published.');
+  // target selector
+  const tk = Object.keys(N.targets).concat(['gdp']);
+  const ctl = document.createElement('div'); ctl.className = 'fc5-ctl'; s.append(ctl);
+  const out = document.createElement('div'); s.append(out);
+  const draw = () => {
+    ctl.innerHTML = '<label>Indicator to nowcast <select data-k="v">' + tk.map(k => '<option value="' + k + '"' + (k === NCS.v ? ' selected' : '') + '>' + esc(k === 'gdp' ? 'Real GDP growth (quarterly)' : N.targets[k].label) + '</option>').join('') + '</select></label>';
+    try { disposeIn(out); } catch (e) { /* none */ }
+    out.innerHTML = '';
+    if (NCS.v === 'gdp') ncGdp(out, N); else ncTarget(out, N, NCS.v);
+  };
+  ctl.addEventListener('change', e => { if (e.target.dataset.k) { NCS.v = e.target.value; draw(); } });
+  draw();
+  ncLit(s);
+}
+function ncTarget(out, N, y) {
+  const T = N.targets[y], dec = 3;
+  if (!T.by_j.length) { out.innerHTML = '<p class="note">' + esc(T.label) + ' has too short a history (it starts in 2023) for the nowcasting ladder; it is used only as information in the factor model.</p>'; return; }
+  if (!T.gap) out.insertAdjacentHTML('beforeend', '<div class="card"><p><b>' + esc(T.label) + ' is among the first indicators published</b> (latest: ' + esc(T.end) + '). No other indicator is available earlier for the same month, so nowcasting it reduces to forecasting one month ahead; the table compares the naive and own-lag methods for that task.</p></div>');
+  T.by_j.forEach(b => {
+    if (T.gap) out.insertAdjacentHTML('beforeend', '<h3>Nowcast for ' + esc(b.month) + ' (' + b.j + ' month' + (b.j > 1 ? 's' : '') + ' after the latest release, ' + esc(T.end) + ')</h3><p class="note">Indicators already published for ' + esc(b.month) + ': ' + (b.usable.length ? esc(b.usable.map(u => u[1]).join(', ')) : 'none') + '. Combinations tested: ' + b.n_combos + '.</p>');
+    const best = ncScores(out, b.scores, T.unit, b.n_test, b.test_from || '', dec);
+    const now = b.now || {}, nk = Object.keys(now);
+    if (nk.length) {
+      const p = PK(y === 'imp_g' || y === 'res_g' ? null : y), hist = [];
+      if (p) { for (let j = Math.max(0, p.v.length - 24); j < p.v.length; j++) if (p.v[j] != null) hist.push([p.k0 + j, p.v[j]]); }
+      tableWrap(out, '<table><thead><tr><th>Method</th><th class="num">Nowcast for ' + esc(b.month) + '</th><th class="num">Validation RMSE</th></tr></thead><tbody>' + nk.sort((a, c) => ((b.scores[a] || [9e9])[0]) - ((b.scores[c] || [9e9])[0])).map(m => '<tr><th scope="row">' + esc(m) + (m === best ? ' <small>(most accurate in validation)</small>' : '') + '</th><td class="num"' + (m === best ? ' style="font-weight:700"' : '') + '>' + nf(now[m], 2) + '</td><td class="num">' + (b.scores[m] ? nf(b.scores[m][0], dec) : '–') + '</td></tr>').join('') + '</tbody></table>', tcap('Current nowcasts'), T.unit + '. Nowcasts sorted from the most to the least accurate method in validation.');
+      if (hist.length) {
+        const g = grid(out), labs = hist.map(h => fc5Lab(h[0], 'M')).concat([b.month]);
+        figure(g, { wide: true, title: T.label + ': latest data and nowcasts for ' + b.month, sub: T.unit + '; the last point shows each method’s nowcast', h: 320, source: 'Bangladesh Bank; BBS; model estimates.', render: TH => tsOption(TH, labs, [S('Published', hist.map(h => h[1]).concat([null]), { w: 2.4, color: '#111827' })].concat(nk.map(m => S(m, hist.map((h, i) => i === hist.length - 1 ? h[1] : null).concat([now[m]]), { w: m === best ? 2.4 : 1.4, dash: m !== best, color: NC_COL[m] || '#6B7280' }))), { y1: T.unit, dec: 2 }) });
+      }
+    }
+    if (b.top && b.top.length) tableWrap(out, '<table><thead><tr><th class="num">Rank</th><th>Indicators in the bridge equation</th><th class="num">RMSE, ranking period</th><th class="num">RMSE, test period</th></tr></thead><tbody>' + b.top.map((r, i) => '<tr><td class="num">' + (i + 1) + '</td><td>' + esc(r[0].join(' + ')) + '</td><td class="num">' + nf(r[1], dec) + '</td><td class="num">' + nf(r[2], dec) + '</td></tr>').join('') + '</tbody></table>', tcap('Best indicator combinations'), 'Each bridge equation adds the own lag. Ranked on the earlier half of the validation window; the test-period RMSE shows whether the ranking held up. When it does not, pooling all combinations is safer than selecting a few (Kuzin, Marcellino & Schumacher, 2013).');
+  });
+}
+function ncGdp(out, N) {
+  const G = N.gdp; if (!G) { out.innerHTML = '<p class="note">GDP nowcasts are not in this build.</p>'; return; }
+  out.insertAdjacentHTML('beforeend', '<p>The latest published quarter is <b>' + esc(G.last[0]) + '</b> (real GDP growth ' + nf(G.last[1], 2) + '% year on year). Monthly indicators are averaged over each quarter; months not yet published are filled with the latest value (standard bridge practice), and the factor model fills them with Kalman-filter estimates.</p>');
+  const best = ncScores(out, G.scores, '% y/y', G.n_test, G.test_from, 2);
+  const qs = Object.keys(G.now), meths = [...new Set(qs.flatMap(q => Object.keys(G.now[q].now)))];
+  tableWrap(out, '<table><thead><tr><th>Method</th>' + qs.map(q => '<th class="num">' + esc(q) + '</th>').join('') + '</tr></thead><tbody>' + meths.map(m => '<tr><th scope="row">' + esc(m) + (m === best ? ' <small>(most accurate)</small>' : '') + '</th>' + qs.map(q => '<td class="num"' + (m === best ? ' style="font-weight:700"' : '') + '>' + (G.now[q].now[m] == null ? '–' : nf(G.now[q].now[m], 2)) + '</td>').join('') + '</tr>').join('') + '</tbody></table>', tcap('GDP nowcasts by method'), '% year on year. ' + qs.map(q => esc(q) + ': months of data available for the main indicators — ' + Object.entries(G.now[q].months).map(([k, v]) => esc(k) + ' ' + v + '/3').join(', ')).join('. ') + '.');
+  const p = PK('gdp_q');
+  if (p) {
+    const hist = []; for (let j = Math.max(0, p.v.length - 16); j < p.v.length; j++) if (p.v[j] != null) hist.push([p.k0 + j, p.v[j]]);
+    const labs = hist.map(h => fc5Lab(h[0], 'Q')).concat(qs), g = grid(out);
+    figure(g, { wide: true, title: 'Quarterly GDP growth: published and nowcast', sub: '% year on year; nowcasts for the quarters not yet published', h: 320, source: 'BBS; model estimates.', render: TH => tsOption(TH, labs, [S('Published', hist.map(h => h[1]).concat(qs.map(() => null)), { w: 2.4, color: '#111827' })].concat(meths.map(m => S(m, hist.map((h, i) => i === hist.length - 1 ? h[1] : null).concat(qs.map(q => G.now[q].now[m] == null ? null : G.now[q].now[m])), { w: m === best ? 2.4 : 1.4, dash: m !== best, color: NC_COL[m] || '#6B7280' }))), { y1: '% y/y', dec: 2 }) });
+  }
+  tableWrap(out, '<table><thead><tr><th class="num">Rank</th><th>Indicators</th><th class="num">RMSE, ranking</th><th class="num">RMSE, test</th></tr></thead><tbody>' + G.top.map((r, i) => '<tr><td class="num">' + (i + 1) + '</td><td>' + esc(r[0].join(' + ')) + '</td><td class="num">' + nf(r[1], 2) + '</td><td class="num">' + nf(r[2], 2) + '</td></tr>').join('') + '</tbody></table>', tcap('Best indicator combinations for GDP'), G.n_combos + ' bridge equations with one or two of the eight best single indicators. The GDP series starts in 2015, so validation uses only ' + G.n_test + ' quarters: treat differences between methods as indicative.');
+}
+function ncLit(host) {
+  const d = document.createElement('div'); d.className = 'fc5-methods';
+  const refs = [
+    ['Foundations', 'Nowcasting means predicting the present, the very recent past and the very near future. Giannone, Reichlin and Small showed at the Federal Reserve that a factor model updated with each data release tracks GDP as well as professional forecasters, and that each release’s “news” can be measured.', ['Giannone, D., Reichlin, L., & Small, D. (2008). Nowcasting: The real-time informational content of macroeconomic data. Journal of Monetary Economics, 55(4), 665–676.', 'Bańbura, M., Giannone, D., Modugno, M., & Reichlin, L. (2013). Now-casting and the real-time data flow. In G. Elliott & A. Timmermann (Eds.), Handbook of Economic Forecasting (Vol. 2A, pp. 195–237). Elsevier.', 'Bok, B., Caratelli, D., Giannone, D., Sbordone, A. M., & Tambalotti, A. (2018). Macroeconomic nowcasting and forecasting with big data. Annual Review of Economics, 10, 615–643.']],
+    ['Bridge equations', 'Monthly indicators are aggregated to the quarter and “bridged” to GDP; missing months are forecast first. Simple, transparent and still used by central banks as a benchmark.', ['Baffigi, A., Golinelli, R., & Parigi, G. (2004). Bridge models to forecast the euro area GDP. International Journal of Forecasting, 20(3), 447–460.', 'Diron, M. (2008). Short-term forecasts of euro area real GDP growth: An assessment of real-time performance based on vintage data. Journal of Forecasting, 27(5), 371–390.']],
+    ['Mixed-data sampling (MIDAS)', 'Regress a low-frequency variable directly on high-frequency lags, with a parsimonious lag polynomial or, when the frequency gap is small (months to quarters), unrestricted lags (U-MIDAS).', ['Ghysels, E., Sinko, A., & Valkanov, R. (2007). MIDAS regressions: Further results and new directions. Econometric Reviews, 26(1), 53–90.', 'Clements, M. P., & Galvão, A. B. (2008). Macroeconomic forecasting with mixed-frequency data: Forecasting output growth in the United States. Journal of Business & Economic Statistics, 26(4), 546–554.', 'Foroni, C., Marcellino, M., & Schumacher, C. (2015). Unrestricted mixed data sampling (MIDAS): MIDAS regressions with unrestricted lag polynomials. Journal of the Royal Statistical Society: Series A, 178(1), 57–82.', 'Andreou, E., Ghysels, E., & Kourtellos, A. (2013). Should macroeconomic forecasters use daily financial data and how? Journal of Business & Economic Statistics, 31(2), 240–251.']],
+    ['Dynamic factor models and the ragged edge', 'A few common factors drive many indicators; the Kalman filter fills missing observations at the end of the sample, and quarterly variables enter through a monthly aggregation constraint. Estimation by principal components, two-step methods or the EM algorithm (used here).', ['Stock, J. H., & Watson, M. W. (2002). Forecasting using principal components from a large number of predictors. Journal of the American Statistical Association, 97(460), 1167–1179.', 'Mariano, R. S., & Murasawa, Y. (2003). A new coincident index of business cycles based on monthly and quarterly series. Journal of Applied Econometrics, 18(4), 427–443.', 'Doz, C., Giannone, D., & Reichlin, L. (2011). A two-step estimator for large approximate dynamic factor models based on Kalman filtering. Journal of Econometrics, 164(1), 188–205.', 'Bańbura, M., & Modugno, M. (2014). Maximum likelihood estimation of factor models on datasets with arbitrary pattern of missing data. Journal of Applied Econometrics, 29(1), 133–160.', 'Camacho, M., & Perez-Quiros, G. (2010). Introducing the euro-sting: Short-term indicator of euro area growth. Journal of Applied Econometrics, 25(4), 663–694.', 'Marcellino, M., & Schumacher, C. (2010). Factor MIDAS for nowcasting and forecasting with ragged-edge data: A model comparison for German GDP. Oxford Bulletin of Economics and Statistics, 72(4), 518–550.']],
+    ['Mixed-frequency VARs', 'A VAR in which the quarterly variable is a latent monthly series; compared with MIDAS, it models feedback between all variables.', ['Kuzin, V., Marcellino, M., & Schumacher, C. (2011). MIDAS vs. mixed-frequency VAR: Nowcasting GDP in the euro area. International Journal of Forecasting, 27(2), 529–542.', 'Schorfheide, F., & Song, D. (2015). Real-time forecasting with a mixed-frequency VAR. Journal of Business & Economic Statistics, 33(3), 366–380.']],
+    ['Pooling, selection and combination', 'With many candidate indicators, averaging many small models is usually as good as or better than selecting one, because selection overfits; this site tests both.', ['Bates, J. M., & Granger, C. W. J. (1969). The combination of forecasts. Operational Research Quarterly, 20(4), 451–468.', 'Stock, J. H., & Watson, M. W. (2004). Combination forecasts of output growth in a seven-country data set. Journal of Forecasting, 23(6), 405–430.', 'Timmermann, A. (2006). Forecast combinations. In G. Elliott, C. W. J. Granger, & A. Timmermann (Eds.), Handbook of Economic Forecasting (Vol. 1, pp. 135–196). Elsevier.', 'Kuzin, V., Marcellino, M., & Schumacher, C. (2013). Pooling versus model selection for nowcasting GDP with many predictors: Empirical evidence for six industrialized countries. Journal of Applied Econometrics, 28(3), 392–411.']],
+    ['Machine learning', 'Penalised regressions, trees and neural networks can extract signal from very many predictors; in real-time tests they help modestly, mostly through shrinkage.', ['Richardson, A., van Florenstein Mulder, T., & Vehbi, T. (2021). Nowcasting GDP using machine-learning algorithms: A real-time assessment. International Journal of Forecasting, 37(2), 941–948.', 'Babii, A., Ghysels, E., & Striaukas, J. (2022). Machine learning time series regressions with an application to nowcasting. Journal of Business & Economic Statistics, 40(3), 1094–1106.']],
+    ['Nowcasting inflation', 'Weekly or daily prices (fuel, food) and survey data improve current-month inflation estimates; where such data are absent, as in this data set, inflation is itself the earliest release.', ['Modugno, M. (2013). Now-casting inflation using high frequency data. International Journal of Forecasting, 29(4), 664–675.', 'Knotek, E. S., & Zaman, S. (2017). Nowcasting U.S. headline and core inflation. Journal of Money, Credit and Banking, 49(5), 931–968.', 'Breitung, J., & Roling, C. (2015). Forecasting inflation rates using daily data: A nonparametric MIDAS approach. Journal of Forecasting, 34(7), 588–603.']],
+    ['Emerging and developing economies', 'Shorter, noisier and more revised series; factor models still help, but gains are smaller and validation samples short, as here.', ['Dahlhaus, T., Guénette, J.-D., & Vasishtha, G. (2017). Nowcasting BRIC+M in real time. International Journal of Forecasting, 33(4), 775–788.', 'Modugno, M., Soybilgen, B., & Yazgan, E. (2016). Nowcasting Turkish GDP and news decomposition. International Journal of Forecasting, 32(4), 1369–1384.', 'Luciani, M., Pundit, M., Ramayandi, A., & Veronese, G. (2018). Nowcasting Indonesia. Empirical Economics, 55(2), 597–619.']],
+    ['Real-time data', 'Published data are revised; tests on today’s data (pseudo-real time, as here) flatter accuracy compared with genuine real-time vintages.', ['Croushore, D. (2011). Frontiers of real-time data analysis. Journal of Economic Literature, 49(1), 72–100.']]];
+  d.innerHTML = '<h3>Literature review</h3><p>A structured review of the research this tab implements, drawn from peer-reviewed journals ranked Q1 or Q2 in economics and econometrics (check current rankings), and from the standard handbooks.</p>' +
+    refs.map(([h, txt, rs]) => '<h4>' + esc(h) + '</h4><p>' + esc(txt) + '</p><ol class="md-refs">' + rs.map(r => '<li>' + esc(r) + '</li>').join('') + '</ol>').join('') +
+    '<h4>What this site adds, and its limits</h4><p>Applied to Bangladesh, the ladder shows where nowcasting pays: the factor model and indicator combinations beat the own-lag benchmark for reserves, deposit and lending rates, export growth, tax revenue and money, while very persistent series (private credit, the call rate) are best left at their last value. Limits: validation uses today’s data rather than real-time vintages (Croushore, 2011); test samples are short (18 months, and 6 quarters for GDP); there are no weekly price or survey data, which the literature finds most useful for inflation; and the factor model uses a single factor.</p><p class="note">References written from memory: check volumes and pages through the journals’ sites.</p>';
+  host.append(d);
+}
+
+/* ======================= v3.16: five-year blocks, model checks, monetary transmission ======================= */
+function fc5Five(host, where) {
+  const F = (BD && BD.models2 && BD.models2.fc5) || null; if (!F) return;
+  if (where === 'dsge') {
+    host.insertAdjacentHTML('beforeend', '<div class="card"><h3>Five-year horizon</h3><p>The DSGE model is a structural model: it produces scenario paths (how inflation, output and the policy rate respond to demand, cost-push and policy shocks), not unconditional forecasts. Twenty-quarter (five-year) scenario paths using its estimated parameters are in the Model library’s <a href="#lab~models" data-mlgo="adas">AD-AS simulator</a>; five-year statistical forecasts of inflation and the policy rate from ten models are in the <a href="#lab~fc5">Forecast comparison</a> tab.</p></div>');
+    host.querySelector('[data-mlgo]').addEventListener('click', e => { ML_STATE.m = 'adas'; const b = document.querySelector('.ml-nav [data-m="adas"]'); if (b) { e.preventDefault(); b.click(); b.scrollIntoView({ behavior: RM ? 'auto' : 'smooth' }); } });
+    return;
+  }
+  const sets = { arima: [['infl', 'food', 'nonfood', 'xr', 'res', 'remit', 'exp', 'm2', 'pcredit', 'call'], ['arima']], overview: [['infl', 'xr', 'res', 'remit', 'exp', 'imp', 'm2', 'pcredit', 'call', 'gdp_q', 'gdp_fy'], ['ens']], var: [['infl', 'm2', 'call'], ['var', 'ens']], vecm: [['imp', 'exp', 'remit'], ['vecm', 'ens']], sarimax: [['infl'], ['sarimax', 'ens']], dfm: [['gdp_q', 'gdp_fy'], ['ens', 'ar', 'mean']] }[where];
+  if (!sets) return;
+  const rows = []; let ids = new Set();
+  sets[0].forEach(k => { const V = F.vars[k]; if (!V) return; const hist = fc5Hist(k, V); sets[1].forEach(m => { if (!V.models[m]) return; const a = fc5Agg(hist.concat(fc5Path(V, m, 'mean')), V.freq, 'FY', V.agg).filter(x => x[2] > 0).slice(0, 6); a.forEach(x => ids.add(x[0])); rows.push([V.label + (V.freq === 'Q' ? ' (quarterly)' : ''), F.names[m], V.unit, new Map(a.map(x => [x[0], x[1]])), /US\$/.test(V.unit) ? 0 : 2]); }); });
+  if (!rows.length) return;
+  ids = [...ids].sort((a, b) => a - b).slice(0, 6);
+  const d = document.createElement('div'); d.className = 'fc5-five'; host.append(d);
+  tableWrap(d, '<table><thead><tr><th>Indicator</th><th>Model</th>' + ids.map(i => '<th class="num">FY' + i + '</th>').join('') + '</tr></thead><tbody>' + rows.map(r => '<tr><th scope="row">' + esc(r[0]) + '<br><small class="note">' + esc(r[2]) + '</small></th><td>' + esc(r[1]) + '</td>' + ids.map(i => '<td class="num">' + (r[3].has(i) ? nf(r[3].get(i), r[4]) : '–') + '</td>').join('') + '</tr>').join('') + '</tbody></table>',
+    tcap('Five-year horizon by fiscal year'), 'Fiscal-year averages (sums for flows; end of year for reserves); the first year combines published and forecast months. Monthly and quarterly paths, 80% and 95% ranges, back-test accuracy and failure tests for these and nine other models are in the <a href="#lab~fc5">Forecast comparison</a> tab.');
+}
+function mlChecks(host, id, M) {
+  const C = (M.checks || {})[id]; if (!C) return;
+  const s = document.createElement('div'); s.className = 'ml-checks'; host.append(s);
+  s.insertAdjacentHTML('beforeend', '<h3>Model checks: robustness, heterogeneity, simulation, validation and failure tests</h3>');
+  const pv = p => p == null ? '–' : fp(p), verdict = (p, good, bad) => p == null ? '–' : (p > 0.05 ? good : bad);
+  const pts = [];
+  if (id === 'keynes') {
+    tableWrap(s, '<table><thead><tr><th>Equation</th><th class="num">Ljung–Box p</th><th class="num">Jarque–Bera p</th><th class="num">Breusch–Pagan p</th><th class="num">Chow test at ' + esc(C.break) + ': F (p)</th></tr></thead><tbody>' + Object.entries(C.tests).map(([k, v]) => '<tr><th scope="row">' + esc(k) + '</th><td class="num">' + pv(v.lb_p) + '</td><td class="num">' + pv(v.jb_p) + '</td><td class="num">' + pv(v.bp_p) + '</td><td class="num">' + (v.chow[0] == null ? '–' : nf(v.chow[0], 2) + ' (' + fp(v.chow[1]) + ')') + '</td></tr>').join('') + '</tbody></table>', tcap('Failure tests'), 'p below 0.05 flags a problem: autocorrelated (Ljung–Box), non-normal (Jarque–Bera) or heteroskedastic (Breusch–Pagan) residuals, or a structural break (Chow).');
+    tableWrap(s, '<table><thead><tr><th>Period</th><th class="num">Years</th><th class="num">Short-run MPC</th><th class="num">Persistence</th><th class="num">Long-run MPC</th></tr></thead><tbody>' + C.sub.map(r => '<tr><th scope="row">' + esc(r[0]) + '</th><td class="num">' + r[1] + '</td><td class="num">' + nf(r[2], 2) + '</td><td class="num">' + nf(r[3], 2) + '</td><td class="num">' + nf(r[4], 2) + '</td></tr>').join('') + '</tbody></table>', tcap('Heterogeneity: the consumption function by period'), 'Least squares on each sub-period.');
+    tableWrap(s, '<table><thead><tr><th>Multiplier</th><th class="num">5th percentile</th><th class="num">Median</th><th class="num">95th percentile</th></tr></thead><tbody><tr><th scope="row">Impact (year 1)</th>' + C.sim.impact.map(v => '<td class="num">' + nf(v, 2) + '</td>').join('') + '</tr><tr><th scope="row">Sustained, year 5</th>' + C.sim.year5.map(v => '<td class="num">' + nf(v, 2) + '</td>').join('') + '</tr></tbody></table>', tcap('Simulation: multiplier uncertainty'), C.sim.n + ' replications of a pairs bootstrap: years are resampled with replacement and all three equations re-estimated each time.');
+    const fails = Object.entries(C.tests).filter(([k, v]) => (v.lb_p != null && v.lb_p < 0.05) || (v.jb_p != null && v.jb_p < 0.05) || (v.bp_p != null && v.bp_p < 0.05)).map(([k]) => k);
+    pts.push(fails.length ? 'Residual problems in: ' + fails.join(', ') + '; standard errors use corrections (2SLS, Newey–West) but small-sample inference stays fragile.' : 'Residual tests pass for all three equations.');
+    pts.push('No significant break at ' + C.break + ' in ' + Object.values(C.tests).filter(v => v.chow[1] != null && v.chow[1] > 0.05).length + ' of 3 equations; the long-run MPC nevertheless rose from ' + nf(C.sub[0][4], 2) + ' to ' + nf(C.sub[1][4], 2) + '.');
+    pts.push('The impact multiplier is tightly estimated (90% range ' + nf(C.sim.impact[0], 2) + '–' + nf(C.sim.impact[2], 2) + '); the five-year multiplier is not (' + nf(C.sim.year5[0], 2) + '–' + nf(C.sim.year5[2], 2) + '), because it compounds the uncertain long-run MPC.');
+  }
+  if (id === 'vecm') {
+    tableWrap(s, '<table><thead><tr><th class="num">Lags in levels</th><th class="num">Cointegrating relations (5%)</th><th class="num">Elasticity of imports to exports</th><th class="num">to remittances</th></tr></thead><tbody>' + C.lags.map(r => '<tr><td class="num">' + r[0] + '</td><td class="num">' + r[1] + '</td><td class="num">' + nf(r[2], 2) + '</td><td class="num">' + nf(r[3], 2) + '</td></tr>').join('') + '</tbody></table>', tcap('Robustness: lag length'), 'Elasticities from a VECM with one relation, whatever the test says.');
+    tableWrap(s, '<table><thead><tr><th>Deterministic terms</th><th class="num">Relations found</th><th class="num">Trace, r = 0</th><th class="num">5% critical value</th></tr></thead><tbody>' + C.det.map(r => '<tr><th scope="row">' + esc(r[0]) + '</th><td class="num">' + r[1] + '</td><td class="num">' + nf(r[2], 2) + '</td><td class="num">' + nf(r[3], 2) + '</td></tr>').join('') + '</tbody></table>', tcap('Robustness: deterministic terms'), 'Sub-sample to ' + esc(C.sub.to) + ': ' + C.sub.rank + ' relation(s), elasticity to exports ' + nf(C.sub.el_exp, 2) + ', to remittances ' + nf(C.sub.el_rem, 2) + '. Residual tests (12 lags): Portmanteau p = ' + fp(C.white_p) + ', normality p = ' + fp(C.normal_p) + '.');
+    pts.push('The single long-run relation is found with 2–4 lags but not with 6 or 12, and the count changes with the deterministic terms: cointegration here is sensitive to specification, as is common in short samples.');
+    pts.push('The export elasticity stays near one (' + C.lags.map(r => nf(r[2], 2)).join(', ') + ' across lag lengths): the most robust finding.');
+    pts.push('Failure tests: ' + (C.white_p < 0.05 ? 'residual autocorrelation remains' : 'no residual autocorrelation') + ' and ' + (C.normal_p < 0.05 ? 'residuals are not normal' : 'residuals look normal') + ', so confidence bands from the model are approximate.');
+  }
+  if (id === 'sarimax') {
+    tableWrap(s, '<table><thead><tr><th class="num">Depreciation lag (months)</th><th class="num">Call-rate lag</th><th class="num">Depreciation coef. (p)</th><th class="num">Call-rate coef. (p)</th><th class="num">AIC</th></tr></thead><tbody>' + C.grid.map(r => '<tr><td class="num">' + r[0] + '</td><td class="num">' + r[1] + '</td><td class="num">' + nf(r[2], 4) + ' (' + fp(r[3]) + ')</td><td class="num">' + nf(r[4], 4) + ' (' + fp(r[5]) + ')</td><td class="num">' + nf(r[6], 1) + '</td></tr>').join('') + '</tbody></table>', tcap('Robustness: driver lags'), 'Each row re-estimates the model. AIC values are comparable only between rows with the same sample length.');
+    tableWrap(s, '<table><thead><tr><th>Sample</th><th class="num">Months</th><th class="num">Depreciation coef. (p)</th><th class="num">Call-rate coef. (p)</th></tr></thead><tbody>' + C.sub.map(r => '<tr><th scope="row">' + esc(r[0]) + '</th><td class="num">' + r[1] + '</td><td class="num">' + nf(r[2], 4) + ' (' + fp(r[3]) + ')</td><td class="num">' + nf(r[4], 4) + ' (' + fp(r[5]) + ')</td></tr>').join('') + '</tbody></table>', tcap('Heterogeneity: before and after 2020'), 'ARCH-LM test on the full-sample residuals: p = ' + fp(C.arch_p) + (C.arch_p > 0.05 ? ' (no volatility clustering).' : ' (volatility clustering).'));
+    const sig = C.grid.filter(r => r[3] < 0.05);
+    pts.push(sig.length ? 'Depreciation becomes significant with a ' + [...new Set(sig.map(r => r[0]))].join(' or ') + '-month lag (' + sig.length + ' of ' + C.grid.length + ' specifications): the exchange-rate channel is real but its timing matters.' : 'No specification makes depreciation significant.');
+    pts.push('The drivers’ effects differ before and after 2020, consistent with the regime changes of 2022–2024.');
+  }
+  if (id === 'dfm') {
+    tableWrap(s, '<table><thead><tr><th class="num">Factors</th><th class="num">In-sample R²</th><th class="num">Out-of-sample RMSE</th><th class="num">AR(1) benchmark RMSE</th></tr></thead><tbody>' + C.factors.map(r => '<tr><td class="num">' + r[0] + '</td><td class="num">' + nf(r[1], 2) + '</td><td class="num">' + nf(r[2], 2) + '</td><td class="num">' + nf(r[3], 2) + '</td></tr>').join('') + '</tbody></table>', tcap('Robustness and validation: number of factors (GDP bridge equation)'), 'Out-of-sample: the last 12 quarters, each forecast re-estimated on earlier data. Residual tests for the bridge equation: Ljung–Box p = ' + fp(C.bridge_tests.lb_p) + ', Jarque–Bera p = ' + fp(C.bridge_tests.jb_p) + '.');
+    const fv = BD.models2.dfm && BD.models2.dfm.favar && BD.models2.dfm.favar.resp && BD.models2.dfm.favar.resp.infl;
+    if (fv && C.infl_band) { const g = grid(s); figure(g, { ts: false, title: 'Simulation: inflation response to a call-rate shock with a 90% band', sub: 'FAVAR, percentage points; band from 300 Monte Carlo draws of the VAR coefficients', h: 280, source: 'Model estimates.', render: TH => tsOption(TH, fv.map((_, j) => String(j)), [S('Response', fv, { w: 2.4, color: '#E5484D' }), S('90% lower', C.infl_band.lo, { w: 1, dash: true, color: '#E5484D' }), S('90% upper', C.infl_band.hi, { w: 1, dash: true, color: '#E5484D' })], { y1: 'pp', dec: 3 }) }); figure(g, { ts: false, title: 'Heterogeneity: stability of the factors', sub: 'Tucker congruence of loadings estimated on ' + C.halves[0] + '–' + C.halves[1] + ' and ' + C.halves[2] + '–' + C.halves[3] + '; 0.95 or more means the same factor', h: 280, source: 'Model estimates.', render: TH => ({ animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 10, top: 24, bottom: 8, containLabel: true }, xAxis: { type: 'category', data: ['Factor 1', 'Factor 2'], axisLabel: { color: TH.muted } }, yAxis: Object.assign(valAxis(TH, 'congruence'), { max: 1 }), series: [{ type: 'bar', data: C.tucker, itemStyle: { color: '#12A594' }, barMaxWidth: 40, label: { show: true, position: 'top', formatter: q => nf(q.value, 2), color: TH.muted } }] }) }); }
+    const best = C.factors.slice().sort((a, b) => a[2] - b[2])[0];
+    pts.push('More factors raise in-sample fit (R² ' + nf(C.factors[0][1], 2) + ' to ' + nf(C.factors[C.factors.length - 1][1], 2) + ') but not out-of-sample accuracy: the best is ' + best[0] + ' factor(s) with RMSE ' + nf(best[2], 2) + ' against ' + nf(best[3], 2) + ' for AR(1). Short quarterly GDP history limits what factors can add.');
+    pts.push('Loadings shift between the two halves of the sample (congruence ' + C.tucker.map(v => nf(v, 2)).join(' and ') + '), so the factors’ meaning is not stable: heterogeneity over time.');
+  }
+  if (id === 'cge') {
+    tableWrap(s, '<table><thead><tr><th>Scenario</th><th class="num">Real exchange rate</th><th class="num">Exports</th><th class="num">Imports</th><th class="num">Absorption</th></tr></thead><tbody>' + C.mc.map(r => '<tr><th scope="row">' + esc(r[0]) + '</th>' + r.slice(1).map(q => '<td class="num">' + nf(q[1], 2) + '<br><small>' + nf(q[0], 2) + ' to ' + nf(q[2], 2) + '</small></td>').join('') + '</tr>').join('') + '</tbody></table>', tcap('Simulation: Monte Carlo over elasticities and the tariff'), C.n + ' draws: Ω uniform on ' + C.ranges.omega.join('–') + ', σ on ' + C.ranges.sigma.join('–') + ', tariff on ' + C.ranges.tariff.map(v => nf(v * 100, 0) + '%').join('–') + '. Median, with the 5th–95th percentile range below. Calibration check: the base year is reproduced to within ' + C.calib_err + ' (exact).');
+    pts.push('Signs are robust across all plausible elasticities for most scenarios; magnitudes are not: the ranges show how much the answer depends on Ω and σ, which are not estimated for Bangladesh.');
+    pts.push('Validation: calibration reproduces the base year exactly by construction; the model is not tested against history, which is the main limitation of calibrated CGE models.');
+  }
+  if (pts.length) s.insertAdjacentHTML('beforeend', '<div class="card"><h3>What the checks show</h3><ul class="ol-list">' + pts.map(p => '<li>' + esc(p) + '</li>').join('') + '</ul></div>');
+}
+function mlMtm(host, T) {
+  const { i, n, o, sub, sup, fr, r } = MX, t = i('t');
+  const s = sec(host, 'The monetary transmission mechanism in Bangladesh', 'How a change in the call money rate travels to lending rates, credit, the exchange rate and inflation: a five-variable VAR, ' + T.sample.join(' to ') + ' (' + T.n + ' months), with tests of every link.', 'ml-mtm');
+  mlText(s, 'What it is', '<p>Monetary policy works through channels (Mishkin, 1995): the <b>interest-rate channel</b> (policy and money-market rates pass into lending rates, which change spending), the <b>credit channel</b> (the supply of bank loans; Bernanke & Gertler, 1995), the <b>exchange-rate channel</b> (rates move the Taka, which moves import prices), and expectations. In low-income economies these channels are often weak because financial markets are shallow and rates are administered (Mishra, Montiel & Spilimbergo, 2012). Bangladesh Bank steers the call money rate; lending rates were capped at 9% from 2020 to 2023, and the exchange rate has been heavily managed, both of which can block transmission.</p>');
+  const L = (a, b) => T.granger.find(g => g[0] === a && g[1] === b) || [a, b, null, null];
+  const box = (txt, cls) => '<div class="mtm-box ' + (cls || '') + '">' + txt + '</div>';
+  const arrow = g => { const p = g[3]; return '<div class="mtm-arrow' + (p != null && p < 0.05 ? ' on' : p != null && p < 0.1 ? ' weak' : '') + '"><span>→</span><small>Granger p ' + (p == null ? '–' : fp(p)) + '</small></div>'; };
+  s.insertAdjacentHTML('beforeend', '<div class="mtm-chain"><div class="mtm-row">' + box('Call money rate', 'start') + arrow(L('Call money rate', 'Lending rate')) + box('Lending rate<br><small>pass-through: ' + nf(T.lend_pt.impact, 2) + ' on impact, ' + nf(T.lend_pt.long_run, 2) + ' long run</small>') + arrow(L('Lending rate', 'Private credit growth')) + box('Private credit') + arrow(L('Private credit growth', 'Inflation')) + box('Inflation', 'end') + '</div><div class="mtm-row">' + box('Call money rate', 'start') + arrow(L('Call money rate', 'Taka depreciation')) + box('Taka exchange rate') + arrow(L('Taka depreciation', 'Inflation')) + box('Inflation<br><small>pass-through: ' + nf(T.xr_pt.sum12, 3) + ' within 12 months, ' + nf(T.xr_pt.long_run, 2) + ' long run</small>', 'end') + '</div><p class="note">Green arrows: significant at 5%; amber: at 10%; grey: not significant. Feedback: inflation → call money rate, p = ' + fp(L('Inflation', 'Call money rate')[3]) + ' (policy reacts to inflation).</p></div>');
+  mlText(s, 'Equations', [
+    EQN(r(sub(i('𝐲'), t), o('='), i('𝐜'), o('+'), mlSum(r(i('j'), o('='), n('1')), i('p')), sub(i('𝐀'), i('j')), sub(i('𝐲'), r(t, o('−'), i('j'))), o('+'), i('𝐁'), sub(i('𝛆'), t)), '(1) Recursive VAR: 𝐲 = (call, lending rate, credit growth, depreciation, inflation)′; 𝐁 lower triangular (Cholesky)'),
+    EQN(r(sub(i('lend'), t), o('='), i('a'), o('+'), sub(i('β'), n('0')), sub(i('call'), t), o('+'), sub(i('β'), n('1')), sub(i('call'), r(t, o('−'), n('1'))), o('+'), i('ρ'), sub(i('lend'), r(t, o('−'), n('1'))), o(','), o('&#8195;'), i('LR'), o('='), fr(r(sub(i('β'), n('0')), o('+'), sub(i('β'), n('1'))), r(n('1'), o('−'), i('ρ')))), '(2) Lending-rate pass-through'),
+    EQN(r(sub(i('π'), t), o('='), i('a'), o('+'), mlSum(r(i('j'), o('='), n('0')), n('12')), sub(i('γ'), i('j')), sub(i('d'), r(t, o('−'), i('j'))), o('+'), i('ρ'), sub(i('π'), r(t, o('−'), n('1'))), o(','), o('&#8195;'), i('LR'), o('='), fr(r(mlSum(i('j'), null), sub(i('γ'), i('j'))), r(n('1'), o('−'), i('ρ')))), '(3) Exchange-rate pass-through to inflation')].join(''));
+  const g = grid(s), H = T.irf.call.mean.map((_, j) => String(j)), lab = { lend: 'Lending rate', pcredit: 'Private credit growth', xr_dep: 'Taka depreciation', infl: 'Inflation' };
+  ['lend', 'pcredit', 'xr_dep', 'infl'].forEach(k => figure(g, { ts: false, title: lab[k] + ': response to a 1-point rise in the call money rate', sub: 'Percentage points, months after the shock; 90% Monte Carlo band', h: 260, source: 'Model estimates (VAR, Cholesky ordering).', render: TH => tsOption(TH, H, [S('Response', T.irf[k].mean, { w: 2.4, color: '#2F6FED' }), S('90% lower', T.irf[k].lo, { w: 1, dash: true, color: '#2F6FED' }), S('90% upper', T.irf[k].hi, { w: 1, dash: true, color: '#2F6FED' })], { y1: 'pp', dec: 3 }) }));
+  tableWrap(s, '<table><thead><tr><th>Cause</th><th>Effect</th><th class="num">F statistic</th><th class="num">p-value</th><th>Verdict</th></tr></thead><tbody>' + T.granger.map(gr => '<tr><th scope="row">' + esc(gr[0]) + '</th><td>' + esc(gr[1]) + '</td><td class="num">' + nf(gr[2], 2) + '</td><td class="num">' + fp(gr[3]) + '</td><td>' + (gr[3] < 0.05 ? 'link present' : gr[3] < 0.1 ? 'weak evidence' : 'no evidence') + '</td></tr>').join('') + '</tbody></table>', tcap('Granger causality along each link'), 'VAR(' + T.p + '), lag chosen by the BIC; the VAR is ' + (T.stable ? 'stable' : 'not stable') + '.');
+  tableWrap(s, '<table><thead><tr><th>Source of shocks</th>' + T.fevd_h.map(h => '<th class="num">' + h + ' months</th>').join('') + '</tr></thead><tbody>' + Object.entries(T.fevd).map(([k, v]) => '<tr><th scope="row">' + esc(k) + '</th>' + v.map(x => '<td class="num">' + nf(x, 1) + '%</td>').join('') + '</tr>').join('') + '</tbody></table>', tcap('What drives inflation: forecast-error variance decomposition'), 'Share of inflation’s forecast-error variance due to each variable’s shocks.');
+  mlText(s, 'Reading the results', '<ul class="ol-list"><li>The <b>interest-rate channel is weak and slow</b>: lending rates move only ' + nf(T.lend_pt.impact, 2) + ' points on impact for each point on the call rate (p = ' + fp(T.lend_pt.impact_p) + '); with persistence of ' + nf(T.lend_pt.persistence, 2) + ', the long-run pass-through of ' + nf(T.lend_pt.long_run, 2) + ' takes years. The call rate does not Granger-cause the lending rate (p = ' + fp(L('Call money rate', 'Lending rate')[3]) + '), consistent with the 2020–2023 lending-rate cap.</li><li>The <b>credit channel</b> works from lending rates to credit (p = ' + fp(L('Lending rate', 'Private credit growth')[3]) + '), but only weakly from credit to inflation (p = ' + fp(L('Private credit growth', 'Inflation')[3]) + ').</li><li>The <b>exchange-rate channel</b> shows significant pass-through (' + nf(T.xr_pt.sum12, 3) + ' within a year, p = ' + fp(T.xr_pt.p) + '; ' + nf(T.xr_pt.long_run, 2) + ' in the long run), but the call rate does not move the Taka (p = ' + fp(L('Call money rate', 'Taka depreciation')[3]) + '): the exchange rate was managed rather than market-driven.</li><li>Causality runs mainly the other way: inflation predicts the call rate (p = ' + fp(L('Inflation', 'Call money rate')[3]) + '), and over two years policy-rate shocks explain under ' + nf(Math.max(1, Math.ceil(T.fevd['Call money rate'][2])), 0) + '% of inflation’s variance.</li><li>Caution: a short sample, identification by ordering, and administered rates mean these estimates describe the historical regime; the 2024 move to market-based lending rates may strengthen transmission.</li></ul>');
+  mlBoxes(s, 'Tests each link of the chain on Bangladesh’s own data instead of assuming it works; separates interest-rate, credit and exchange-rate channels.', 'A recursive ordering (the call rate reacts to nothing within the month); linear, stable relations over 2012–2026; monthly data capture the timing.', 'Results depend on the ordering; regime changes (rate cap, crawling peg) break stability; no expectations or asset-price channel; short sample.', 'Use the repo (policy) rate history and narrative policy shocks, sign restrictions, and a time-varying VAR to capture the 2023–2024 regime changes.');
+  mlRefs(s, [['Bernanke, B. S., & Gertler, M. (1995). Inside the black box: The credit channel of monetary policy transmission. Journal of Economic Perspectives, 9(4), 27–48.', 'https://doi.org/10.1257/jep.9.4.27'], ['Christiano, L. J., Eichenbaum, M., & Evans, C. L. (1999). Monetary policy shocks: What have we learned and to what end? In J. B. Taylor & M. Woodford (Eds.), Handbook of Macroeconomics (Vol. 1A, pp. 65–148). Elsevier.', ''], ['Mishkin, F. S. (1995). Symposium on the monetary transmission mechanism. Journal of Economic Perspectives, 9(4), 3–10.', 'https://doi.org/10.1257/jep.9.4.3'], ['Mishra, P., Montiel, P. J., & Spilimbergo, A. (2012). Monetary transmission in low-income countries: Effectiveness and policy implications. IMF Economic Review, 60(2), 270–302.', ''], ['Taylor, J. B. (1995). The monetary transmission mechanism: An empirical framework. Journal of Economic Perspectives, 9(4), 11–26.', 'https://doi.org/10.1257/jep.9.4.11']]);
+}
+
+/* ======================= v3.16: theoretical models ======================= */
+function mlCtl(host, specs, onChange) {
+  const d = document.createElement('div'); d.className = 'fc5-ctl ml-sl';
+  d.innerHTML = specs.map(sp => sp.options ? '<label>' + esc(sp.label) + ' <select data-k="' + sp.k + '">' + sp.options.map(([v, l]) => '<option value="' + v + '"' + (String(v) === String(sp.v) ? ' selected' : '') + '>' + esc(l) + '</option>').join('') + '</select></label>'
+    : '<label>' + esc(sp.label) + ': <b data-out="' + sp.k + '">' + sp.fmt(sp.v) + '</b><input type="range" data-k="' + sp.k + '" min="' + sp.min + '" max="' + sp.max + '" step="' + sp.step + '" value="' + sp.v + '"></label>').join('');
+  host.append(d);
+  const st = Object.fromEntries(specs.map(sp => [sp.k, sp.v]));
+  const upd = e => { const k = e.target.dataset.k; if (!k) return; const sp = specs.find(x => x.k === k); st[k] = sp.options ? (isNaN(+e.target.value) ? e.target.value : +e.target.value) : +e.target.value; const o = d.querySelector('[data-out="' + k + '"]'); if (o) o.textContent = sp.fmt(st[k]); clearTimeout(d._t); d._t = setTimeout(() => onChange(st), 90); };
+  d.addEventListener('input', upd); d.addEventListener('change', upd);
+  return st;
+}
+const mlPct = (v, d) => nf(v * 100, d == null ? 2 : d) + '%';
+function mlKpis(host, items) { host.insertAdjacentHTML('beforeend', '<div class="ml-kpis">' + items.map(([l, v]) => '<div><span>' + esc(l) + '</span><b>' + v + '</b></div>').join('') + '</div>'); }
+function mlXY(TH, series, xname, yname) {
+  return { animation: false, textStyle: { fontFamily: FONT }, grid: { left: 8, right: 14, top: 34, bottom: 26, containLabel: true }, legend: { top: 0, type: 'scroll', textStyle: { color: TH.muted, fontSize: 10 } }, tooltip: { trigger: 'item', confine: true, valueFormatter: v => Array.isArray(v) ? v.map(x => nf(x, 2)).join(', ') : nf(v, 2) },
+    xAxis: { type: 'value', name: xname, nameLocation: 'middle', nameGap: 22, scale: true, axisLabel: { color: TH.muted, fontSize: 10 }, splitLine: { lineStyle: { color: TH.grid } } }, yAxis: { type: 'value', name: yname, scale: true, axisLabel: { color: TH.muted, fontSize: 10 }, splitLine: { lineStyle: { color: TH.grid } } }, series };
+}
+/* ---------- Solow–Swan ---------- */
+function solowPath(p, k0, Y) {
+  const o = { k: [k0], gY: [], gy: [] }; let k = k0;
+  for (let t = 0; t < Y; t++) { const k1 = ((1 - p.d) * k + p.s * Math.pow(k, p.a)) / ((1 + p.n) * (1 + p.g)); o.gY.push(((1 + p.g) * (1 + p.n) * Math.pow(k1 / k, p.a) - 1) * 100); o.gy.push(((1 + p.g) * Math.pow(k1 / k, p.a) - 1) * 100); k = k1; o.k.push(k); }
+  o.kstar = Math.pow(p.s / ((1 + p.n) * (1 + p.g) - 1 + p.d), 1 / (1 - p.a)); return o;
+}
+function mlSolow(host, T) {
+  const { i, n, o, sub, sup, fr, r } = MX, t = i('t');
+  const s = sec(host, 'Solow–Swan growth model', 'Calibrated to Bangladesh: investment ' + mlPct(T.s, 1) + ' of GDP, population growth ' + mlPct(T.n) + ', labour-augmenting technology growth ' + mlPct(T.g) + ' (growth accounting, FY2010 onwards).', 'ml-solow');
+  mlText(s, 'What it is', '<p>The Solow–Swan model (Solow, 1956; Swan, 1956) explains long-run growth with three forces: capital accumulation from saving, labour-force growth, and technological progress. Because capital has diminishing returns, saving cannot raise growth for ever: an economy converges to a steady state in which output per worker grows at the rate of technology alone.</p><p><b>Why it matters for Bangladesh:</b> it decomposes 30 years of growth into capital, labour and productivity, shows how far the economy is from its steady state, and tells planners what a higher investment rate can and cannot achieve.</p>');
+  mlText(s, 'Equations', [
+    EQN(r(sub(i('Y'), t), o('='), sup(sub(i('K'), t), i('α')), sup(o('('), ''), sub(i('A'), t), sub(i('L'), t), sup(o(')'), r(n('1'), o('−'), i('α')))), '(1) Production'),
+    EQN(r(sub(i('k'), r(t, o('+'), n('1'))), o('='), fr(r(o('('), n('1'), o('−'), i('δ'), o(')'), sub(i('k'), t), o('+'), i('s'), sup(sub(i('k'), t), i('α'))), r(o('('), n('1'), o('+'), i('n'), o(')'), o('('), n('1'), o('+'), i('g'), o(')')))), '(2) Capital per effective worker, k = K/(AL)'),
+    EQN(r(sup(i('k'), o('*')), o('='), sup(o('('), ''), fr(i('s'), r(i('n'), o('+'), i('g'), o('+'), i('δ'))), sup(o(')'), fr(n('1'), r(n('1'), o('−'), i('α'))))), '(3) Steady state (continuous-time form)'),
+    EQN(r(i('λ'), o('='), o('('), n('1'), o('−'), i('α'), o(')'), o('('), i('n'), o('+'), i('g'), o('+'), i('δ'), o(')'), o(','), o('&#8195;'), sub(i('t'), fr(n('1'), n('2'))), o('='), fr(r(i('ln'), n('2')), i('λ'))), '(4) Speed of convergence and half-life'),
+    EQN(r(sub(i('g'), i('Y')), o('='), i('α'), sub(i('g'), i('K')), o('+'), o('('), n('1'), o('−'), i('α'), o(')'), sub(i('g'), i('L')), o('+'), sub(i('g'), i('TFP'))), '(5) Growth accounting')].join(''));
+  mlText(s, 'Derivation, step by step', '<ol class="ol-list"><li>Divide (1) by AL: output per effective worker y = k<sup>α</sup>.</li><li>Capital accumulates by saving and wears out at rate δ: K<sub>t+1</sub> = (1 − δ)K<sub>t</sub> + sY<sub>t</sub>.</li><li>Divide by A<sub>t+1</sub>L<sub>t+1</sub> = (1 + g)(1 + n)A<sub>t</sub>L<sub>t</sub> to get (2).</li><li>In the steady state k<sub>t+1</sub> = k<sub>t</sub>; solving (2) gives k* (approximately (3)).</li><li>Linearising around k* shows the gap closes at rate λ, giving the half-life ln 2/λ.</li><li>Taking logs of (1) and differentiating gives the growth-accounting identity (5); TFP growth is the residual, (1 − α)g.</li></ol>');
+  tableWrap(s, '<table><thead><tr><th>Parameter</th><th class="num">Value</th><th>Source</th></tr></thead><tbody>' + [['Capital share α', nf(T.alpha, 2), 'Assumption, consistent with labour shares of 0.6–0.7 after Gollin (2002)'], ['Depreciation δ', mlPct(T.delta, 0), 'Assumption, standard'], ['Investment rate s', mlPct(T.s, 1), 'BBS national accounts, average of the last five fiscal years'], ['Population growth n', mlPct(T.n), 'World Bank, average of the last five years (labour proxied by population)'], ['TFP growth', mlPct(T.tfp), 'Growth accounting below, FY2010 onwards'], ['Technology growth g = TFP/(1 − α)', mlPct(T.g), 'Derived'], ['Capital–output ratio, ' + T.last, nf(T.ky, 2), 'Perpetual inventory from investment shares'], ['Capital per effective worker relative to steady state', mlPct(T.ratio, 1), 'Derived']].map(r => '<tr><th scope="row">' + esc(r[0]) + '</th><td class="num">' + r[1] + '</td><td>' + esc(r[2]) + '</td></tr>').join('') + '</tbody></table>', tcap('Calibration'), 'Capital is built by the perpetual-inventory method from the investment share and real GDP since FY1994.');
+  const g0 = grid(s), A = T.acc;
+  figure(g0, { ts: false, title: 'Growth accounting by period', sub: 'Contributions to real GDP growth, percentage points', h: 300, source: 'BBS; World Bank; model calculations.', render: TH => ({ animation: !RM, textStyle: { fontFamily: FONT }, grid: { left: 6, right: 10, top: 34, bottom: 8, containLabel: true }, legend: { top: 0, textStyle: { color: TH.muted, fontSize: 10 } }, tooltip: { trigger: 'axis', confine: true }, xAxis: { type: 'category', data: A.map(r => r[0]), axisLabel: { color: TH.muted, fontSize: 10 } }, yAxis: valAxis(TH, 'pp'), series: [['Capital', 2, '#2F6FED'], ['Labour', 3, '#F5A524'], ['TFP', 4, '#12A594']].map(([nm, j, c]) => ({ name: nm, type: 'bar', stack: 'g', data: A.map(r => r[j]), itemStyle: { color: c }, label: { show: true, fontSize: 9, color: '#fff', formatter: q => nf(q.value, 1) } })) }) });
+  const AY = T.acc_years;
+  figure(g0, { title: 'Total factor productivity growth, year by year', sub: '% per year; the residual of growth accounting', h: 300, source: 'BBS; World Bank; model calculations.', render: TH => tsOption(TH, AY.map(r => r[0]), [S('TFP growth', AY.map(r => r[4]), { w: 2, color: '#12A594' }), S('GDP growth', AY.map(r => r[1]), { w: 1.4, dash: true, color: '#111827' })], { y1: '%', dec: 2 }) });
+  tableWrap(s, '<table><thead><tr><th>Period</th><th class="num">GDP growth</th><th class="num">Capital</th><th class="num">Labour</th><th class="num">TFP</th></tr></thead><tbody>' + A.map(r => '<tr><th scope="row">' + esc(r[0]) + '</th>' + r.slice(1).map(v => '<td class="num">' + nf(v, 2) + '</td>').join('') + '</tr>').join('') + '</tbody></table>', tcap('Growth accounting'), 'Percentage points per year; α = ' + nf(T.alpha, 2) + '.');
+  s.insertAdjacentHTML('beforeend', '<h3>Simulator</h3><p class="note">Move the sliders to change the scenario; the baseline stays at the calibration. Both start at the same position relative to their own steady state.</p>');
+  const base = { s: T.s, n: T.n, g: T.g, d: T.delta, a: T.alpha }, out = document.createElement('div');
+  const draw = st => {
+    try { disposeIn(out); } catch (e) { /* none */ }
+    out.innerHTML = '';
+    const p = { s: st.s / 100, n: st.n / 100, g: st.g / 100, d: st.d / 100, a: st.a }, Bp = solowPath(base, 1, 0), Sp = solowPath(p, 1, 0);
+    const b = solowPath(base, T.ratio * Bp.kstar, 30), sc = solowPath(p, T.ratio * Sp.kstar, 30), lam = (1 - p.a) * (p.n + p.g + p.d), fy0 = +T.last.slice(2);
+    mlKpis(out, [['Steady-state GDP growth', nf(((1 + p.n) * (1 + p.g) - 1) * 100, 2) + '%'], ['Average growth, next 5 years', nf(sc.gY.slice(0, 5).reduce((a, v) => a + v, 0) / 5, 2) + '%'], ['Half-life of convergence', nf(Math.log(2) / lam, 1) + ' years'], ['Golden-rule saving rate', mlPct(p.a, 0)], ['Output per worker, steady state vs baseline', nf(Math.pow(sc.kstar / Bp.kstar, p.a) * 100 - 100, 1) + '%']]);
+    const g = grid(out);
+    figure(g, { title: 'GDP growth path: scenario against baseline', sub: '% per year, next 30 years', h: 300, source: 'Model simulation.', render: TH => tsOption(TH, b.gY.map((_, j) => 'FY' + (fy0 + j + 1)), [S('Baseline', b.gY, { w: 2, color: '#111827' }), S('Scenario', sc.gY, { w: 2.4, dash: true, color: '#E5484D' })], { y1: '%', dec: 2 }) });
+    figure(g, { title: 'Output per effective worker relative to the baseline steady state', sub: 'Index, baseline steady state = 100', h: 300, source: 'Model simulation.', render: TH => tsOption(TH, b.k.map((_, j) => 'FY' + (fy0 + j)), [S('Baseline', b.k.map(k => Math.pow(k / Bp.kstar, base.a) * 100), { w: 2, color: '#111827' }), S('Scenario', sc.k.map(k => Math.pow(k / Bp.kstar, p.a) * 100), { w: 2.4, dash: true, color: '#E5484D' })], { y1: 'index', dec: 1 }) });
+    tableWrap(out, '<table><thead><tr><th>Fiscal year</th><th class="num">GDP growth, baseline</th><th class="num">GDP growth, scenario</th><th class="num">Per worker, scenario</th></tr></thead><tbody>' + [0, 1, 2, 3, 4].map(j => '<tr><th scope="row">FY' + (fy0 + j + 1) + '</th><td class="num">' + nf(b.gY[j], 2) + '%</td><td class="num">' + nf(sc.gY[j], 2) + '%</td><td class="num">' + nf(sc.gy[j], 2) + '%</td></tr>').join('') + '</tbody></table>', tcap('Five-year projection'), 'Model-implied long-run growth path; it abstracts from cycles and shocks.');
+  };
+  mlCtl(s, [{ k: 's', label: 'Investment rate', min: 15, max: 45, step: 0.5, v: +(T.s * 100).toFixed(1), fmt: v => v + '%' }, { k: 'n', label: 'Population growth', min: 0, max: 3, step: 0.05, v: +(T.n * 100).toFixed(2), fmt: v => v + '%' }, { k: 'g', label: 'Technology growth', min: 0, max: 6, step: 0.1, v: +(T.g * 100).toFixed(1), fmt: v => v + '%' }, { k: 'd', label: 'Depreciation', min: 2, max: 10, step: 0.5, v: T.delta * 100, fmt: v => v + '%' }, { k: 'a', label: 'Capital share α', min: 0.2, max: 0.6, step: 0.01, v: T.alpha, fmt: v => nf(v, 2) }], draw);
+  s.append(out); draw({ s: T.s * 100, n: T.n * 100, g: T.g * 100, d: T.delta * 100, a: T.alpha });
+  const sens = []; [0.3, 0.4, 0.5].forEach(a => [0.04, 0.05, 0.06].forEach(d => { const p = Object.assign({}, base, { a, d }), k1 = solowPath(p, 1, 0).kstar, pp = solowPath(p, T.ratio * k1, 5); sens.push([a, d, Math.log(2) / ((1 - a) * (p.n + p.g + d)), pp.gY.reduce((x, v) => x + v, 0) / 5]); }));
+  tableWrap(s, '<table><thead><tr><th class="num">α</th><th class="num">δ</th><th class="num">Half-life, years</th><th class="num">Average GDP growth, next 5 years</th></tr></thead><tbody>' + sens.map(r => '<tr><td class="num">' + nf(r[0], 2) + '</td><td class="num">' + mlPct(r[1], 0) + '</td><td class="num">' + nf(r[2], 1) + '</td><td class="num">' + nf(r[3], 2) + '%</td></tr>').join('') + '</tbody></table>', tcap('Checks: sensitivity to the assumed parameters'), 'Validation: the calibrated model implies ' + nf(sens[4][3], 2) + '% average growth over the next five years against ' + nf(T.gdp_growth5, 2) + '% actually recorded over the last five; the gap reflects the 2020 and 2024–2025 shocks, which a long-run model does not contain.');
+  mlBoxes(s, 'Simple, transparent and quantitative; growth accounting attributes past growth; shows that sustained growth needs productivity, not only investment.', 'Exogenous saving and technology; closed economy; one good; competitive markets; labour grows with population; perpetual-inventory capital with δ = 5%.', 'TFP is a residual that absorbs measurement error; informality and the quality of capital are ignored; results depend on α and δ (see checks).', 'Add human capital (Mankiw, Romer & Weil, 1992), sectoral reallocation from agriculture, and an open-economy version with remittance-financed investment.');
+  mlRefs(s, [['Gollin, D. (2002). Getting income shares right. Journal of Political Economy, 110(2), 458–474.', 'https://doi.org/10.1086/338747'], ['Mankiw, N. G., Romer, D., & Weil, D. N. (1992). A contribution to the empirics of economic growth. The Quarterly Journal of Economics, 107(2), 407–437.', 'https://doi.org/10.2307/2118477'], ['Solow, R. M. (1956). A contribution to the theory of economic growth. The Quarterly Journal of Economics, 70(1), 65–94.', 'https://doi.org/10.2307/1884513'], ['Swan, T. W. (1956). Economic growth and capital accumulation. Economic Record, 32(2), 334–361.', 'https://doi.org/10.1111/j.1475-4932.1956.tb00434.x']]);
+}
+/* ---------- Ramsey–Cass–Koopmans ---------- */
+function rckSolve(p) { const ks = Math.pow(p.a / (p.rho + p.d + p.theta * p.g), 1 / (1 - p.a)), cs = Math.pow(ks, p.a) - (p.n + p.g + p.d) * ks; return { ks, cs, ys: Math.pow(ks, p.a), ss: 1 - cs / Math.pow(ks, p.a), rs: p.rho + p.theta * p.g }; }
+function rckPath(p, k0, years) {
+  const Sx = rckSolve(p), dt = 0.05, f = k => Math.pow(k, p.a), fpr = k => p.a * Math.pow(k, p.a - 1);
+  const dk = (k, c) => f(k) - c - (p.n + p.g + p.d) * k, dc = (k, c) => c * (fpr(k) - p.d - p.rho - p.theta * p.g) / p.theta;
+  const run = (c0, rec) => { let k = k0, c = c0; const path = rec ? [[0, k, c]] : null;
+    for (let st = 1; st <= 200 / dt; st++) { const k1 = dk(k, c), c1 = dc(k, c), km = k + 0.5 * dt * k1, cm = c + 0.5 * dt * c1; k += dt * dk(km, cm); c += dt * dc(km, cm);
+      if (rec && st % 5 === 0) path.push([st * dt, k, c]);
+      if (k <= 0.02 * Sx.ks || !isFinite(k)) return { fate: 'high', path }; if (c <= 0 || (k > 1.6 * Sx.ks && c < Sx.cs)) return { fate: 'low', path };
+      if (rec && st * dt >= years) return { fate: 'ok', path }; }
+    return { fate: 'ok', path }; };
+  let lo = 1e-9, hi = f(k0);
+  for (let it = 0; it < 70; it++) { const mid = (lo + hi) / 2; if (run(mid, false).fate === 'high') hi = mid; else lo = mid; }
+  return { S: Sx, path: run((lo + hi) / 2, true).path, c0: (lo + hi) / 2 };
+}
+function mlRck(host, T) {
+  const { i, n, o, sub, sup, fr, r } = MX, t = i('t');
+  const s = sec(host, 'Ramsey–Cass–Koopmans optimal growth model', 'Saving chosen by forward-looking households, with technology, population and capital calibrated to Bangladesh as in the Solow model.', 'ml-rck');
+  mlText(s, 'What it is', '<p>The Ramsey–Cass–Koopmans model (Ramsey, 1928; Cass, 1965; Koopmans, 1965) replaces Solow’s fixed saving rate with households that choose consumption to maximise lifetime welfare. Saving then responds to the return on capital, and the economy travels to its steady state along a unique “saddle path”.</p><p><b>Why it matters for Bangladesh:</b> it asks whether the current investment rate is optimal, and it links the long-run real interest rate to growth and patience, a benchmark against which Bangladesh’s low real rates can be judged.</p>');
+  mlText(s, 'Equations', [
+    EQN(r(i('max'), o('&#8202;'), sup(sub(o('∫'), n('0')), o('∞')), sup(i('e'), r(o('−'), o('('), i('ρ'), o('−'), i('n'), o(')'), t)), fr(sup(sub(i('c'), t), r(n('1'), o('−'), i('θ'))), r(n('1'), o('−'), i('θ'))), i('dt')), '(1) Household welfare'),
+    EQN(r(sub(mlHat(i('k')), t), o('='), i('f'), o('('), sub(i('k'), t), o(')'), o('−'), sub(i('c'), t), o('−'), o('('), i('n'), o('+'), i('g'), o('+'), i('δ'), o(')'), sub(i('k'), t)), '(2) Capital accumulation (k̂ = dk/dt), f(k) = k^α'),
+    EQN(r(fr(sub(mlHat(i('c')), t), sub(i('c'), t)), o('='), fr(r(i('f'), o('′'), o('('), sub(i('k'), t), o(')'), o('−'), i('δ'), o('−'), i('ρ'), o('−'), i('θ'), i('g')), i('θ'))), '(3) Euler equation'),
+    EQN(r(i('f'), o('′'), o('('), sup(i('k'), o('*')), o(')'), o('='), i('ρ'), o('+'), i('δ'), o('+'), i('θ'), i('g'), o(','), o('&#8195;'), sup(i('r'), o('*')), o('='), i('ρ'), o('+'), i('θ'), i('g')), '(4) Steady state and the long-run real interest rate')].join(''));
+  mlText(s, 'Derivation, step by step', '<ol class="ol-list"><li>Write the current-value Hamiltonian H = u(c) + μ[f(k) − c − (n + g + δ)k].</li><li>Optimality in c: u′(c) = μ.</li><li>Co-state equation: μ̇ = (ρ − n)μ − μ[f′(k) − (n + g + δ)].</li><li>Differentiate u′(c) = c<sup>−θ</sup> and combine to get the Euler equation (3).</li><li>Steady state: ċ = 0 gives f′(k*) = ρ + δ + θg; k̇ = 0 gives c* = f(k*) − (n + g + δ)k*.</li><li>The transversality condition rules out every path except the saddle path; it is found numerically by shooting: choose initial consumption c(0) so that the path converges to (k*, c*).</li></ol>');
+  const p0 = { rho: 0.02, theta: 2, a: T.alpha, d: T.delta, n: T.n, g: T.g }, out = document.createElement('div');
+  const draw = st => {
+    try { disposeIn(out); } catch (e) { /* none */ }
+    out.innerHTML = '';
+    const p = Object.assign({}, p0, { rho: st.rho / 100, theta: st.theta }), R = rckPath(p, T.k_now, 60), S_ = R.S, P = R.path, y = k => Math.pow(k, p.a), fy0 = +T.last.slice(2);
+    const s0 = 1 - R.c0 / y(T.k_now);
+    mlKpis(out, [['Optimal saving rate now', mlPct(s0, 1)], ['Optimal steady-state saving', mlPct(S_.ss, 1)], ['Actual investment rate', mlPct(T.s, 1)], ['Model real interest rate r*', mlPct(S_.rs, 1)], ['Actual real interest rate', mlPct(T.real_rate, 1)]]);
+    const g = grid(out), years = P.map(q => q[0]), sv = P.map(q => (1 - q[2] / y(q[1])) * 100);
+    figure(g, { ts: false, title: 'Optimal saving rate along the saddle path', sub: 'Gross saving, % of output, years from ' + T.last, h: 300, source: 'Model simulation.', render: TH => tsOption(TH, years.map(v => nf(v, 0)), [S('Optimal saving rate', sv, { w: 2.4, color: '#2F6FED' }), S('Actual investment rate', years.map(() => T.s * 100), { w: 1.4, dash: true, color: '#111827' })], { y1: '%', dec: 1 }) });
+    const kmax = Math.pow(1 / (p.n + p.g + p.d), 1 / (1 - p.a)), kx = Array.from({ length: 80 }, (_, j) => 0.05 * S_.ks + j * (Math.min(kmax, 2.4 * S_.ks) - 0.05 * S_.ks) / 79);
+    figure(g, { ts: false, title: 'Phase diagram', sub: 'Capital (k) and consumption (c) per effective worker; the economy moves along the saddle path to the steady state', h: 300, source: 'Model simulation.', render: TH => mlXY(TH, [{ name: 'k̇ = 0', type: 'line', showSymbol: false, data: kx.map(k => [k, y(k) - (p.n + p.g + p.d) * k]), lineStyle: { color: '#F5A524', width: 2 } }, { name: 'ċ = 0', type: 'line', showSymbol: false, data: [[S_.ks, 0], [S_.ks, 1.6 * S_.cs]], lineStyle: { color: '#12A594', width: 2 } }, { name: 'Saddle path from today', type: 'line', showSymbol: false, data: P.map(q => [q[1], q[2]]), lineStyle: { color: '#2F6FED', width: 2.4 } }, { name: 'Steady state', type: 'scatter', data: [[S_.ks, S_.cs]], symbolSize: 10, itemStyle: { color: '#E5484D' } }, { name: 'Today', type: 'scatter', data: [[T.k_now, R.c0]], symbolSize: 10, itemStyle: { color: '#111827' } }], 'k', 'c') });
+    const at = yr => P.reduce((a, q) => Math.abs(q[0] - yr) < Math.abs(a[0] - yr) ? q : a, P[0]);
+    tableWrap(out, '<table><thead><tr><th>Fiscal year</th><th class="num">Capital, % of steady state</th><th class="num">Optimal saving rate</th><th class="num">Consumption growth per effective worker</th></tr></thead><tbody>' + [1, 2, 3, 4, 5].map(j => { const a = at(j), b = at(j - 1); return '<tr><th scope="row">FY' + (fy0 + j) + '</th><td class="num">' + nf(a[1] / S_.ks * 100, 1) + '%</td><td class="num">' + nf((1 - a[2] / y(a[1])) * 100, 1) + '%</td><td class="num">' + nf((a[2] / b[2] - 1) * 100, 2) + '%</td></tr>'; }).join('') + '</tbody></table>', tcap('Five-year projection along the saddle path'), 'Total consumption growth adds n + g ≈ ' + nf((p.n + p.g) * 100, 2) + '% per year.');
+  };
+  mlCtl(s, [{ k: 'rho', label: 'Time preference ρ', min: 0.5, max: 8, step: 0.1, v: 2, fmt: v => v + '%' }, { k: 'theta', label: 'Inverse intertemporal elasticity θ', min: 0.5, max: 5, step: 0.1, v: 2, fmt: v => nf(v, 1) }], draw);
+  s.append(out); draw({ rho: 2, theta: 2 });
+  const sens = []; [0.01, 0.02, 0.04].forEach(rho => [1, 2, 4].forEach(theta => { const x = rckSolve(Object.assign({}, p0, { rho, theta })); sens.push([rho, theta, x.ss, x.rs]); }));
+  tableWrap(s, '<table><thead><tr><th class="num">ρ</th><th class="num">θ</th><th class="num">Steady-state saving</th><th class="num">r*</th></tr></thead><tbody>' + sens.map(r => '<tr><td class="num">' + mlPct(r[0], 0) + '</td><td class="num">' + nf(r[1], 0) + '</td><td class="num">' + mlPct(r[2], 1) + '</td><td class="num">' + mlPct(r[3], 1) + '</td></tr>').join('') + '</tbody></table>', tcap('Checks: sensitivity to preferences'), 'Validation and failure test: for any plausible ρ and θ, the model’s long-run real rate r* = ρ + θg is far above Bangladesh’s average real interest rate (' + mlPct(T.real_rate, 1) + ', 2015–2025). With growth this fast, a competitive capital market would pay much more; the gap is consistent with administered rates and financial repression (McKinnon, 1973; Shaw, 1973), which the model assumes away.');
+  mlBoxes(s, 'Saving is optimal, not assumed; links interest rates, growth and patience; the standard core of modern macroeconomics, including DSGE models.', 'One infinitely lived representative household; perfect foresight; competitive markets; closed economy; the same technology as the Solow calibration.', 'No borrowing constraints, inequality or uncertainty; ρ and θ are not estimated here; the shooting solution assumes the economy jumps onto the saddle path.', 'Calibrate ρ and θ from Bangladesh household data, add an open capital account and remittances, and compare optimal and actual consumption paths.');
+  mlRefs(s, [['Cass, D. (1965). Optimum growth in an aggregative model of capital accumulation. The Review of Economic Studies, 32(3), 233–240.', 'https://doi.org/10.2307/2295827'], ['Koopmans, T. C. (1965). On the concept of optimal economic growth. In The econometric approach to development planning (pp. 225–287). North-Holland.', ''], ['McKinnon, R. I. (1973). Money and capital in economic development. Brookings Institution.', ''], ['Ramsey, F. P. (1928). A mathematical theory of saving. The Economic Journal, 38(152), 543–559.', 'https://doi.org/10.2307/2224098'], ['Romer, D. (2019). Advanced macroeconomics (5th ed.). McGraw-Hill.', ''], ['Shaw, E. S. (1973). Financial deepening in economic development. Oxford University Press.', '']]);
+}
+/* ---------- Dynamic AD-AS ---------- */
+function adasSim(p, sh, Hq) {
+  let x = 0, pi = 0, d = 0, u = 0, v = 0; const X = [], P = [], I = [];
+  for (let t = 0; t < Hq; t++) {
+    d = p.rd * d + (t === 0 ? sh.d : 0); u = p.ru * u + (t === 0 ? sh.u : 0); v = p.rv * v + (t === 0 ? sh.v : 0);
+    const den = 1 + p.phix / p.sigma + (p.phip - 1) * p.kappa / p.sigma, num = p.rhox * x - ((p.phip - 1) / p.sigma) * (pi + u) - v / p.sigma + d;
+    x = num / den; pi = pi + p.kappa * x + u; X.push(x); P.push(pi); I.push(p.phip * pi + p.phix * x + v);
+  }
+  return { X, P, I };
+}
+function mlAdas(host, T) {
+  const { i, n, o, sub, sup, fr, r } = MX, t = i('t'), Dp = T.dsge_post || {};
+  const s = sec(host, 'Aggregate demand and aggregate supply (dynamic AD-AS)', 'A quarterly AD-AS model using the site’s estimated DSGE parameters (posterior means), simulated 20 quarters (five years) ahead.', 'ml-adas');
+  mlText(s, 'What it is', '<p>The AD-AS model explains output and inflation together. Aggregate demand (AD) combines spending (the IS curve) with the central bank’s policy rule: higher inflation brings higher real interest rates and lower demand. Aggregate supply (AS) is a Phillips curve: a positive output gap pushes inflation up. Demand, cost-push and policy shocks move the curves; the economy adjusts over time.</p><p><b>Why it matters for Bangladesh:</b> it shows why the 2022–2024 cost-push shocks (food, fuel and the Taka) raised inflation for so long, and how strongly Bangladesh Bank must respond to anchor it.</p>');
+  mlText(s, 'Equations', [
+    EQN(r(sub(i('x'), t), o('='), sub(i('ρ'), i('x')), sub(i('x'), r(t, o('−'), n('1'))), o('−'), fr(n('1'), i('σ')), o('('), sub(i('i'), t), o('−'), sub(i('π'), t), o(')'), o('+'), sub(i('d'), t)), '(1) IS curve: x = output gap, π and i in deviations from target and neutral rate'),
+    EQN(r(sub(i('π'), t), o('='), sub(i('π'), r(t, o('−'), n('1'))), o('+'), i('κ'), sub(i('x'), t), o('+'), sub(i('u'), t)), '(2) AS (accelerationist Phillips curve)'),
+    EQN(r(sub(i('i'), t), o('='), sub(i('φ'), i('π')), sub(i('π'), t), o('+'), sub(i('φ'), i('x')), sub(i('x'), t), o('+'), sub(i('v'), t)), '(3) Policy rule (Taylor rule)'),
+    EQN(r(sub(i('x'), t), o('='), fr(r(sub(i('ρ'), i('x')), sub(i('x'), r(t, o('−'), n('1'))), o('−'), fr(r(sub(i('φ'), i('π')), o('−'), n('1')), i('σ')), sub(i('π'), t), o('−'), fr(sub(i('v'), t), i('σ')), o('+'), sub(i('d'), t)), r(n('1'), o('+'), fr(sub(i('φ'), i('x')), i('σ'))))), '(4) AD curve: (3) substituted into (1)')].join(''));
+  mlText(s, 'Derivation, step by step', '<ol class="ol-list"><li>Substitute the policy rule (3) into the IS curve (1): the real rate gap is (φ<sub>π</sub> − 1)π + φ<sub>x</sub>x + v, which gives the AD curve (4), downward sloping in (x, π) when φ<sub>π</sub> &gt; 1.</li><li>Combine AD (4) with AS (2) and solve the two linear equations for x<sub>t</sub> and π<sub>t</sub> each quarter, given last quarter’s values and the shocks.</li><li>Shocks follow AR(1) processes d<sub>t</sub> = ρ<sub>d</sub>d<sub>t−1</sub> + ε<sub>t</sub> (likewise u, v), with persistence from the DSGE estimation.</li><li>Stability requires φ<sub>π</sub> &gt; 1 (the Taylor principle): otherwise a rise in inflation lowers the real rate, raises demand and feeds further inflation.</li></ol>');
+  const P0 = { sigma: Dp['σ'] || 1, kappa: Dp['κ'] || 0.1, phip: Dp['φπ'] || 1.5, phix: Dp['φy'] || 0.1, rhox: 0.5, rd: Dp['ρd'] || 0.8, ru: Dp['ρu'] || 0.8, rv: Dp['ρv'] || 0.5 };
+  tableWrap(s, '<table><thead><tr><th>Parameter</th><th class="num">Value</th><th>Source</th></tr></thead><tbody>' + [['σ (inverse intertemporal elasticity)', P0.sigma], ['κ (Phillips-curve slope)', P0.kappa], ['φπ (response to inflation)', P0.phip], ['φx (response to the output gap)', P0.phix], ['ρd, ρu, ρv (shock persistence)', [P0.rd, P0.ru, P0.rv].map(v => nf(v, 2)).join(', ')], ['ρx (output persistence)', P0.rhox], ['Shock sizes (one standard deviation)', ['σd ' + nf(Dp['σd'] || 0.2, 2), 'σu ' + nf(Dp['σu'] || 0.3, 2), 'σv ' + nf(Dp['σv'] || 0.3, 2)].join(', ')]].map((r_, j) => '<tr><th scope="row">' + esc(r_[0]) + '</th><td class="num">' + (typeof r_[1] === 'number' ? nf(r_[1], 3) : r_[1]) + '</td><td>' + (j === 5 ? 'Assumption' : 'Site DSGE, Bayesian posterior mean') + '</td></tr>').join('') + '</tbody></table>', tcap('Calibration'), 'The DSGE is forward-looking; this AD-AS version is backward-looking, which makes the dynamics transparent and lets the two be compared (checks below).');
+  const out = document.createElement('div'), sd = { d: Dp['σd'] || 0.2, u: Dp['σu'] || 0.3, v: Dp['σv'] || 0.3 };
+  const draw = st => {
+    try { disposeIn(out); } catch (e) { /* none */ }
+    out.innerHTML = '';
+    const p = Object.assign({}, P0, { phip: st.phip, kappa: st.kappa, rhox: st.rhox }), sh = { d: 0, u: 0, v: 0 }; sh[st.shock] = sd[st.shock] * st.size;
+    const R = adasSim(p, sh, 20), q = R.X.map((_, j) => 'Q' + (j + 1));
+    const explode = p.phip <= 1;
+    mlKpis(out, [['Peak inflation response', nf(R.P.reduce((a, v) => Math.abs(v) > Math.abs(a) ? v : a, 0), 3) + ' pp'], ['Peak output-gap response', nf(R.X.reduce((a, v) => Math.abs(v) > Math.abs(a) ? v : a, 0), 3) + ' pp'], ['Inflation after 5 years', nf(R.P[19], 3) + ' pp'], ['Taylor principle', p.phip > 1 ? 'satisfied' : 'violated']]);
+    if (explode) out.insertAdjacentHTML('beforeend', '<p class="note"><b>Failure: the Taylor principle is violated (φπ ≤ 1).</b> Real interest rates fall as inflation rises, so inflation does not return to target: after five years it is still ' + nf(R.P[19], 2) + ' points above it.</p>');
+    const g = grid(out);
+    figure(g, { ts: false, title: 'Responses over five years', sub: 'Deviations from steady state, percentage points; ' + ({ d: 'demand', u: 'cost-push', v: 'monetary policy' })[st.shock] + ' shock of ' + nf(st.size, 1) + ' standard deviation(s)', h: 300, source: 'Model simulation (site DSGE parameters).', render: TH => tsOption(TH, q, [S('Inflation', R.P, { w: 2.4, color: '#E5484D' }), S('Output gap', R.X, { w: 2.4, color: '#2F6FED' }), S('Policy rate', R.I, { w: 1.8, dash: true, color: '#111827' })], { y1: 'pp', dec: 3 }) });
+    const pis = Array.from({ length: 41 }, (_, j) => -2 + j * 0.1), a = 1 + p.phix / p.sigma, ad = (dd, vv) => pis.map(pi => [(-((p.phip - 1) / p.sigma) * pi - vv / p.sigma + dd) / a, pi]), as = uu => pis.map(pi => [(pi - uu) / p.kappa, pi]).filter(z => Math.abs(z[0]) <= 3);
+    figure(g, { ts: false, title: 'AD and AS in the first quarter', sub: 'Before (solid) and after (dashed) the shock; output gap (x) and inflation (π) in deviations', h: 300, source: 'Model calculations.', render: TH => mlXY(TH, [{ name: 'AD before', type: 'line', showSymbol: false, data: ad(0, 0), lineStyle: { color: '#2F6FED', width: 2 } }, { name: 'AD after', type: 'line', showSymbol: false, data: ad(sh.d, sh.v), lineStyle: { color: '#2F6FED', width: 2, type: 'dashed' } }, { name: 'AS before', type: 'line', showSymbol: false, data: as(0), lineStyle: { color: '#E5484D', width: 2 } }, { name: 'AS after', type: 'line', showSymbol: false, data: as(sh.u), lineStyle: { color: '#E5484D', width: 2, type: 'dashed' } }, { name: 'New equilibrium', type: 'scatter', data: [[R.X[0], R.P[0]]], symbolSize: 10, itemStyle: { color: '#111827' } }], 'output gap x', 'inflation π') });
+    tableWrap(out, '<table><thead><tr><th>Year</th><th class="num">Inflation</th><th class="num">Output gap</th><th class="num">Policy rate</th></tr></thead><tbody>' + [0, 1, 2, 3, 4].map(y_ => { const av = a_ => a_.slice(y_ * 4, y_ * 4 + 4).reduce((s_, v) => s_ + v, 0) / 4; return '<tr><th scope="row">Year ' + (y_ + 1) + '</th><td class="num">' + nf(av(R.P), 3) + '</td><td class="num">' + nf(av(R.X), 3) + '</td><td class="num">' + nf(av(R.I), 3) + '</td></tr>'; }).join('') + '</tbody></table>', tcap('Five-year path, annual averages'), 'Percentage-point deviations from the steady state.');
+  };
+  mlCtl(s, [{ k: 'shock', label: 'Shock', options: [['u', 'Cost-push (food, fuel, Taka)'], ['d', 'Demand'], ['v', 'Monetary policy tightening']], v: 'u', fmt: v => v }, { k: 'size', label: 'Size (standard deviations)', min: 0.5, max: 5, step: 0.5, v: 1, fmt: v => nf(v, 1) }, { k: 'phip', label: 'Policy response to inflation φπ', min: 0.6, max: 3, step: 0.05, v: +P0.phip.toFixed(2), fmt: v => nf(v, 2) }, { k: 'kappa', label: 'Phillips-curve slope κ', min: 0.02, max: 0.3, step: 0.005, v: +P0.kappa.toFixed(3), fmt: v => nf(v, 3) }, { k: 'rhox', label: 'Output persistence ρx', min: 0, max: 0.9, step: 0.05, v: 0.5, fmt: v => nf(v, 2) }], draw);
+  s.append(out); draw({ shock: 'u', size: 1, phip: P0.phip, kappa: P0.kappa, rhox: 0.5 });
+  const tp = [0.8, 1.0, 1.2, 1.5, 2.0, 3.0].map(ph => { const R = adasSim(Object.assign({}, P0, { phip: ph }), { d: 0, u: sd.u, v: 0 }, 20); return [ph, Math.max(...R.P.map(Math.abs)), R.P[19], R.X.reduce((a, v) => a + v, 0), ph <= 1]; });
+  tableWrap(s, '<table><thead><tr><th class="num">φπ</th><th class="num">Largest inflation deviation</th><th class="num">Inflation after 5 years</th><th class="num">Cumulative output gap</th></tr></thead><tbody>' + tp.map(r_ => '<tr><td class="num">' + nf(r_[0], 2) + (r_[4] ? ' <small>(fails)</small>' : '') + '</td><td class="num">' + nf(r_[1], 3) + '</td><td class="num">' + nf(r_[2], 3) + (r_[4] ? ' <small>not returning</small>' : '') + '</td><td class="num">' + nf(r_[3], 2) + '</td></tr>').join('') + '</tbody></table>', tcap('Checks: the Taylor-principle failure test, after a one-standard-deviation cost-push shock'), 'A stronger response anchors inflation faster at the cost of a larger cumulative output loss: the policy trade-off. With φπ at or below 1 the model fails: inflation does not return to target.');
+  const dI = BD.dsge && BD.dsge.irf && BD.dsge.irf['Monetary policy'];
+  if (dI && dI.pi) {
+    const R = adasSim(P0, { d: 0, u: 0, v: sd.v }, Math.min(20, dI.pi.length)), g = grid(s), q = R.P.map((_, j) => 'Q' + (j + 1));
+    figure(g, { ts: false, title: 'Validation: AD-AS against the estimated DSGE', sub: 'Inflation response to a monetary-policy tightening, percentage points', h: 280, source: 'Site DSGE; model simulation.', render: TH => tsOption(TH, q, [S('Backward-looking AD-AS', R.P, { w: 2.2, color: '#2F6FED' }), S('Forward-looking DSGE', dI.pi.slice(0, q.length), { w: 2.2, dash: true, color: '#E5484D' })], { y1: 'pp', dec: 3 }) });
+    figure(g, { ts: false, title: 'Validation: output-gap responses', sub: 'Same policy shock', h: 280, source: 'Site DSGE; model simulation.', render: TH => tsOption(TH, q, [S('Backward-looking AD-AS', R.X, { w: 2.2, color: '#2F6FED' }), S('Forward-looking DSGE', (dI.x || []).slice(0, q.length), { w: 2.2, dash: true, color: '#E5484D' })], { y1: 'pp', dec: 3 }) });
+    s.insertAdjacentHTML('beforeend', '<p class="note">Both models agree on the direction: tightening lowers output and inflation. The DSGE’s inflation response is immediate because firms look ahead; in the backward-looking AD-AS, inflation adjusts gradually through the output gap. The truth for Bangladesh probably lies between (a hybrid Phillips curve).</p>');
+  }
+  mlBoxes(s, 'Shows demand, supply and policy together; transparent dynamics; uses the parameters estimated for Bangladesh; demonstrates the Taylor principle.', 'Linear model; adaptive expectations in the Phillips curve; a simple policy rule; shocks follow AR(1) processes.', 'Backward-looking expectations ignore credibility effects; no exchange-rate channel; ρx is assumed; one aggregate price.', 'A hybrid Phillips curve with forward- and backward-looking terms, an open-economy version with the exchange rate, and estimation on Bangladesh quarterly data.');
+  mlRefs(s, [['Clarida, R., Galí, J., & Gertler, M. (1999). The science of monetary policy: A New Keynesian perspective. Journal of Economic Literature, 37(4), 1661–1707.', 'https://doi.org/10.1257/jel.37.4.1661'], ['Galí, J. (2015). Monetary policy, inflation, and the business cycle (2nd ed.). Princeton University Press.', ''], ['Romer, D. (2019). Advanced macroeconomics (5th ed.). McGraw-Hill.', ''], ['Taylor, J. B. (1993). Discretion versus policy rules in practice. Carnegie-Rochester Conference Series on Public Policy, 39, 195–214.', 'https://doi.org/10.1016/0167-2231(93)90009-L']]);
+}
+/* ---------- IS-LM-BP (Mundell–Fleming) ---------- */
+function islmBase(p) { const A1 = 1 - p.c * (1 - p.t) + p.m, X0 = p.m * 100, G0 = 15, I0 = A1 * 100 + p.b * p.r0 - X0 - G0, M0 = p.k * 100 - p.h * p.r0; return { A1, X0, G0, I0, M0 }; }
+function islmSolve(p, B, x) {
+  const G = B.G0 + x.dG, M = B.M0 * (1 + x.dM / 100), rs = p.r0 + x.drs, psi = x.psi;
+  if (x.regime === 'float') {
+    const sol = rcSolve([[B.A1, p.b, -p.eta], [p.k, -p.h, 0], [-p.m, psi, p.eta]], [B.I0 + G + B.X0, M, psi * rs - B.X0]);
+    return sol ? { Y: sol[0], r: sol[1], e: sol[2], M, G, rs } : null;
+  }
+  const sol = rcSolve([[B.A1, p.b], [-p.m, psi]], [B.I0 + G + B.X0, psi * rs - B.X0]);
+  if (!sol) return null;
+  return { Y: sol[0], r: sol[1], e: 0, M: p.k * sol[0] - p.h * sol[1], G, rs };
+}
+function mlIslm(host, T) {
+  const { i, n, o, sub, sup, fr, r } = MX;
+  const K = T.keynes || {}, P0 = { c: K.mpc_lr || 0.8, t: (T.tax_gdp || 8) / 100, m: K.mpm_lr || 0.2, b: Math.abs(K.inv_r || 0.1), k: 0.4, h: 2, eta: 0.15, r0: 10 };
+  const s = sec(host, 'IS-LM-BP (Mundell–Fleming) open-economy model', 'Goods market, money market and balance of payments together, under floating or fixed exchange rates, with spending propensities from the site’s Keynesian model.', 'ml-islm');
+  mlText(s, 'What it is', '<p>The Mundell–Fleming model (Fleming, 1962; Mundell, 1963) extends IS-LM to an open economy. The IS curve shows goods-market equilibrium, the LM curve money-market equilibrium, and the BP curve balance-of-payments equilibrium. Its famous result: with mobile capital, monetary policy is powerful under floating rates and powerless under a fixed rate, while fiscal policy is the reverse.</p><p><b>Why it matters for Bangladesh:</b> Bangladesh moved from a managed peg to a crawling peg and towards more flexibility, with a largely closed capital account. The model shows how those choices change the power of fiscal and monetary policy.</p>');
+  mlText(s, 'Equations', [
+    EQN(r(i('Y'), o('='), i('c'), o('('), n('1'), o('−'), i('t'), o(')'), i('Y'), o('+'), sub(i('I'), n('0')), o('−'), i('b'), i('r'), o('+'), i('G'), o('+'), sub(i('X'), n('0')), o('+'), i('η'), i('e'), o('−'), i('m'), i('Y')), '(1) IS: goods market (e = log exchange rate, up = depreciation)'),
+    EQN(r(fr(i('M'), i('P')), o('='), i('k'), i('Y'), o('−'), i('h'), i('r')), '(2) LM: money market'),
+    EQN(r(sub(i('X'), n('0')), o('+'), i('η'), i('e'), o('−'), i('m'), i('Y'), o('+'), i('ψ'), o('('), i('r'), o('−'), sup(i('r'), o('*')), o(')'), o('='), n('0')), '(3) BP: net exports plus net capital inflows (ψ = capital mobility)')].join(''));
+  mlText(s, 'Derivation, step by step', '<ol class="ol-list"><li>Collect Y terms in (1): (1 − c(1 − t) + m)Y + br − ηe = I<sub>0</sub> + G + X<sub>0</sub>; the coefficient on Y is the inverse of the open-economy multiplier.</li><li><b>Floating rate:</b> M is set by the central bank and e adjusts; (1)–(3) are three linear equations in Y, r and e.</li><li><b>Fixed rate:</b> e is held constant and the central bank buys or sells reserves, so M adjusts; (1) and (3) give Y and r, then (2) gives the money supply.</li><li>With perfect capital mobility (ψ → ∞), BP forces r = r*: under floating, LM alone fixes Y, so fiscal policy only moves the exchange rate; under a fixed rate, money adjusts and fiscal policy has its full multiplier.</li></ol>');
+  tableWrap(s, '<table><thead><tr><th>Parameter</th><th class="num">Value</th><th>Source</th></tr></thead><tbody>' + [['c (marginal propensity to consume)', P0.c, 'Site Keynesian model, long-run'], ['t (tax rate)', P0.t, 'World Bank, tax revenue % of GDP'], ['m (marginal propensity to import)', P0.m, 'Site Keynesian model, long-run'], ['b (investment response to r, GDP points per pp)', P0.b, 'Site Keynesian model'], ['k (money–income ratio)', P0.k, 'Assumption: broad money about 40% of GDP'], ['h (money-demand response to r)', P0.h, 'Assumption'], ['η (net-export response to a 1% depreciation)', P0.eta, 'Assumption']].map(r_ => '<tr><th scope="row">' + esc(r_[0]) + '</th><td class="num">' + nf(r_[1], 3) + '</td><td>' + esc(r_[2]) + '</td></tr>').join('') + '</tbody></table>', tcap('Calibration'), 'Baseline normalised to GDP = 100, an interest rate of 10% equal to the world rate, and balanced payments.');
+  const B = islmBase(P0), out = document.createElement('div'), PSI = [[0, 'None (closed capital account)'], [0.5, 'Low (Bangladesh today)'], [5, 'Moderate'], [50, 'High'], [10000, 'Perfect']];
+  const draw = st => {
+    try { disposeIn(out); } catch (e) { /* none */ }
+    out.innerHTML = '';
+    const b0 = islmSolve(P0, B, { dG: 0, dM: 0, drs: 0, psi: st.psi, regime: st.regime }), x1 = islmSolve(P0, B, { dG: st.dG, dM: st.dM, drs: st.drs, psi: st.psi, regime: st.regime });
+    if (!b0 || !x1) { out.innerHTML = '<p class="note">No equilibrium for these settings.</p>'; return; }
+    mlKpis(out, [['GDP change', nf(x1.Y - b0.Y, 2) + '% of GDP'], ['Interest rate change', nf(x1.r - b0.r, 2) + ' pp'], ['Exchange-rate change', st.regime === 'float' ? nf(x1.e - b0.e, 2) + '% (+ = depreciation)' : 'held fixed'], ['Money supply change', nf((x1.M / b0.M - 1) * 100, 2) + '%']]);
+    const Ys = Array.from({ length: 41 }, (_, j) => 90 + j * 0.5), cur = (z, G) => ({ IS: Ys.map(Y => [Y, (B.I0 + G + B.X0 + P0.eta * z.e - B.A1 * Y) / P0.b]), LM: Ys.map(Y => [Y, (P0.k * Y - z.M) / P0.h]), BP: st.psi < 1e-6 ? [[(B.X0 + P0.eta * z.e) / P0.m, 0], [(B.X0 + P0.eta * z.e) / P0.m, 20]] : Ys.map(Y => [Y, z.rs + (P0.m * Y - B.X0 - P0.eta * z.e) / st.psi]) });
+    const c0 = cur(b0, B.G0), c1 = cur(x1, B.G0 + st.dG), clip = a => a.filter(q => q[1] > -5 && q[1] < 25), g = grid(out);
+    figure(g, { ts: false, title: 'IS, LM and BP before (solid) and after (dashed)', sub: 'GDP (index, baseline 100) and the interest rate (%)', h: 340, source: 'Model calculations.', render: TH => mlXY(TH, [['IS', '#2F6FED'], ['LM', '#E5484D'], ['BP', '#12A594']].flatMap(([nm, col]) => [{ name: nm, type: 'line', showSymbol: false, data: clip(c0[nm]), lineStyle: { color: col, width: 2 } }, { name: nm + ' after', type: 'line', showSymbol: false, data: clip(c1[nm]), lineStyle: { color: col, width: 2, type: 'dashed' } }]).concat([{ name: 'Equilibrium after', type: 'scatter', data: [[x1.Y, x1.r]], symbolSize: 10, itemStyle: { color: '#111827' } }]), 'GDP (index)', 'interest rate, %') });
+    const cs = [], expts = [['Fiscal expansion: G + 1% of GDP', { dG: 1, dM: 0, drs: 0 }], ['Monetary expansion: M + 1%', { dG: 0, dM: 1, drs: 0 }], ['World interest rate + 1 pp', { dG: 0, dM: 0, drs: 1 }]];
+    expts.forEach(([lab, ex]) => { const row = [lab]; [['float', 0.5], ['float', 10000], ['fixed', 0.5], ['fixed', 10000]].forEach(([rg, ps]) => { const a = islmSolve(P0, B, { dG: 0, dM: 0, drs: 0, psi: ps, regime: rg }), z = islmSolve(P0, B, Object.assign({ psi: ps, regime: rg }, ex)); row.push(a && z ? z.Y - a.Y : null); }); cs.push(row); });
+    tableWrap(out, '<table><thead><tr><th>Policy</th><th class="num">Floating, low mobility</th><th class="num">Floating, perfect mobility</th><th class="num">Fixed, low mobility</th><th class="num">Fixed, perfect mobility</th></tr></thead><tbody>' + cs.map(r_ => '<tr><th scope="row">' + esc(r_[0]) + '</th>' + r_.slice(1).map(v => '<td class="num">' + (v == null ? '–' : nf(v, 3)) + '</td>').join('') + '</tr>').join('') + '</tbody></table>', tcap('Checks: effect on GDP (% of baseline) across regimes and capital mobility'), 'Validation against theory: with perfect mobility, fiscal policy has almost no effect under floating rates and monetary policy has none under a fixed rate, the Mundell–Fleming propositions. The calibration reproduces them.');
+  };
+  mlCtl(s, [{ k: 'regime', label: 'Exchange-rate regime', options: [['float', 'Floating'], ['fixed', 'Fixed (peg)']], v: 'float', fmt: v => v }, { k: 'psi', label: 'Capital mobility', options: PSI.map(([v, l]) => [v, l]), v: 0.5, fmt: v => v }, { k: 'dG', label: 'Government spending change, % of GDP', min: -5, max: 5, step: 0.5, v: 1, fmt: v => (v > 0 ? '+' : '') + v }, { k: 'dM', label: 'Money supply change, %', min: -10, max: 10, step: 1, v: 0, fmt: v => (v > 0 ? '+' : '') + v }, { k: 'drs', label: 'World interest rate change, pp', min: -3, max: 3, step: 0.25, v: 0, fmt: v => (v > 0 ? '+' : '') + v }], draw);
+  s.append(out); draw({ regime: 'float', psi: 0.5, dG: 1, dM: 0, drs: 0 });
+  mlBoxes(s, 'The standard framework for policy in open economies; makes the trade-off between exchange-rate stability and monetary independence explicit (the “trilemma”).', 'Fixed prices (short run); static expectations about the exchange rate; perfect substitutability of bonds when mobility is perfect; linear relations.', 'No price adjustment, no expectations, no remittances or reserves dynamics; k, h and η are assumed; Bangladesh’s regime is in between fixed and floating.', 'Add a crawling-peg regime, imperfect capital mobility estimated from the financial account, and a price block (Dornbusch overshooting).');
+  mlRefs(s, [['Fleming, J. M. (1962). Domestic financial policies under fixed and under floating exchange rates. IMF Staff Papers, 9(3), 369–380.', 'https://doi.org/10.2307/3866091'], ['Mundell, R. A. (1963). Capital mobility and stabilization policy under fixed and flexible exchange rates. The Canadian Journal of Economics and Political Science, 29(4), 475–485.', 'https://doi.org/10.2307/139336'], ['Obstfeld, M., Shambaugh, J. C., & Taylor, A. M. (2005). The trilemma in history: Tradeoffs among exchange rates, monetary policies, and capital mobility. The Review of Economics and Statistics, 87(3), 423–438.', '']]);
+}
+
+/* ======================= v3.17: DSGE checks (identification, robustness, validation, suitability) ======================= */
+function dsgeChecks(body) {
+  const Dg = BD && BD.dsge; if (!Dg || !Dg.bayes || !Dg.bayes.params) return;
+  const s = sec(body, 'DSGE model checks: identification, robustness, failure tests, validation and suitability', 'Computed from the stored Bayesian estimation and the site’s VAR, so they update whenever the model is re-estimated.', 'dsge-checks');
+  const P = Dg.bayes.params.filter(x => x.prior && x.post);
+  const verdict = r => r < 0.5 ? 'well identified: the data dominate' : r < 0.9 ? 'partly identified' : 'weakly identified: the prior dominates';
+  tableWrap(s, '<table><thead><tr><th>Parameter</th><th class="num">Prior mean (sd)</th><th class="num">Posterior mean (sd)</th><th class="num">Posterior sd ÷ prior sd</th><th class="num">Shift, in prior sds</th><th class="num">R-hat</th><th class="num">ESS</th><th>Verdict</th></tr></thead><tbody>' +
+    P.map(x => { const ratio = x.post.sd / x.prior.sd, shift = (x.post.mean - x.prior.mean) / x.prior.sd; return '<tr><th scope="row">' + esc(x.sym + ' ' + x.name) + '</th><td class="num">' + nf(x.prior.mean, 3) + ' (' + nf(x.prior.sd, 3) + ')</td><td class="num">' + nf(x.post.mean, 3) + ' (' + nf(x.post.sd, 3) + ')</td><td class="num">' + nf(ratio, 2) + '</td><td class="num">' + (shift > 0 ? '+' : '') + nf(shift, 2) + '</td><td class="num">' + (x.rhat == null ? '–' : nf(x.rhat, 3)) + '</td><td class="num">' + (x.ess == null ? '–' : nf(x.ess, 0)) + '</td><td>' + verdict(ratio) + '</td></tr>'; }).join('') + '</tbody></table>',
+    tcap('Identification and prior sensitivity'), 'A posterior much narrower than the prior (ratio well below 1) means the data are informative; a ratio near 1 means the result mostly repeats the prior, so it is sensitive to the prior choice. Shift: how far the data moved the parameter from the prior mean.');
+  const rh = P.map(x => x.rhat).filter(v => v != null), es = P.map(x => x.ess).filter(v => v != null), gw = P.filter(x => x.geweke_p != null && x.geweke_p < 0.05).length;
+  const weak = P.filter(x => x.post.sd / x.prior.sd >= 0.9).map(x => x.sym), strong = P.filter(x => x.post.sd / x.prior.sd < 0.5).map(x => x.sym);
+  const phi = P.find(x => x.sym === 'φπ'), taylorOk = phi && phi.post.ci95 && phi.post.ci95[0] > 1;
+  const pm = k => (P.find(x => x.sym === k) || {}).post, betaC = ((Dg.params || []).find(x => x && x.sym === 'β') || {}).v || 0.99, detPost = pm('κ') && pm('φπ') && pm('φy') ? pm('κ').mean * (pm('φπ').mean - 1) + (1 - betaC) * pm('φy').mean : null;
+  const Cal = {}; (Dg.params || []).forEach(x => { if (x && x.sym) Cal[x.sym] = x.v; });
+  const common = P.filter(x => Cal[x.sym] != null);
+  if (common.length) tableWrap(s, '<table><thead><tr><th>Parameter</th><th class="num">Textbook calibration (Galí, 2015)</th><th class="num">Bangladesh posterior</th><th class="num">Difference</th></tr></thead><tbody>' + common.map(x => '<tr><th scope="row">' + esc(x.sym + ' ' + x.name) + '</th><td class="num">' + nf(Cal[x.sym], 3) + '</td><td class="num">' + nf(x.post.mean, 3) + '</td><td class="num">' + ((x.post.mean - Cal[x.sym]) > 0 ? '+' : '') + nf(x.post.mean - Cal[x.sym], 3) + '</td></tr>').join('') + '</tbody></table>', tcap('Heterogeneity: Bangladesh against the textbook benchmark'), 'The sample has only ' + ((Dg.bayes.meta || {}).T || 'about 40') + ' quarters (' + esc((Dg.bayes.meta || {}).sample || '') + '), too few to re-estimate the model on sub-samples reliably; heterogeneity is therefore shown against the benchmark economy rather than over time. Sub-sample heterogeneity for the data-driven models is in the Robustness and Forecast comparison tabs.');
+  const V = BD.var && BD.var.irf, dp = Dg.irf && Dg.irf['Monetary policy'] && Dg.irf['Monetary policy'].pi;
+  let val = '';
+  if (V && V.mean && dp) {
+    const ki = (BD.var.keys || []).indexOf('infl'), kc = (BD.var.keys || []).indexOf('call');
+    if (ki >= 0 && kc >= 0) {
+      const q = a => Array.from({ length: 8 }, (_, h) => (a[3 * h] + a[3 * h + 1] + a[3 * h + 2]) / 3), vm = q(V.mean[ki][kc]), vl = q(V.lo[ki][kc]), vh = q(V.hi[ki][kc]), dq = dp.slice(0, 8);
+      const nm = a => { const m = Math.max(...a.map(Math.abs)) || 1; return a.map(v => v / m); }, g = grid(s), lab = Array.from({ length: 8 }, (_, h) => 'Q' + (h + 1));
+      figure(g, { ts: false, title: 'Validation: inflation after a monetary tightening, DSGE against the VAR', sub: 'Each response scaled by its own largest value, quarters after the shock', h: 290, source: 'Site DSGE (Bayesian) and VAR (Cholesky ordering).', render: TH => tsOption(TH, lab, [S('DSGE (theory-based)', nm(dq), { w: 2.4, color: '#E5484D' }), S('VAR (data-based)', nm(vm), { w: 2.4, color: '#2F6FED' })], { y1: 'scaled', dec: 2 }) });
+      figure(g, { ts: false, title: 'VAR response with its 90% band', sub: 'Inflation response to a one-standard-deviation call-rate shock, percentage points, quarterly averages', h: 290, source: 'Site VAR.', render: TH => tsOption(TH, lab, [S('Response', vm, { w: 2.4, color: '#2F6FED' }), S('90% lower', vl, { w: 1, dash: true, color: '#2F6FED' }), S('90% upper', vh, { w: 1, dash: true, color: '#2F6FED' })], { y1: 'pp', dec: 3 }) });
+      const ds = dq.slice(0, 4).reduce((a, v) => a + v, 0), vs = vm.slice(0, 4).reduce((a, v) => a + v, 0), zero = vl.slice(0, 4).some((v, h) => v <= 0 && vh[h] >= 0);
+      val = 'Validation: in the first year the DSGE predicts inflation ' + (ds < 0 ? 'falling' : 'rising') + ' after a tightening; the data-based VAR finds it ' + (vs < 0 ? 'falling' : 'rising') + (zero ? ', with a 90% band that includes zero' : '') + '. ' + (Math.sign(ds) === Math.sign(vs) && !zero ? 'The two agree.' : 'They do not agree clearly, so the DSGE’s policy effect reflects its theoretical structure more than evidence in the data, consistent with the weak transmission found in the Model library.');
+    }
+  }
+  const pts = ['Convergence: largest R-hat ' + (rh.length ? nf(Math.max(...rh), 3) : '–') + ' (below 1.1 is the usual standard), smallest effective sample size ' + (es.length ? nf(Math.min(...es), 0) : '–') + ', and ' + gw + ' of ' + P.length + ' Geweke tests reject equal means at 5%.',
+    'Identification: ' + (strong.length ? strong.join(', ') + ' are well identified by the data' : 'no parameter is strongly identified') + (weak.length ? '; ' + weak.join(', ') + ' mostly reflect the prior, so results that depend on them are sensitive to the prior choice.' : '.'),
+    'Failure tests: the determinacy condition κ(φπ − 1) + (1 − β)φy > 0 gives ' + nf(Dg.determinacy, 3) + ' at the textbook calibration and ' + (detPost == null ? '–' : nf(detPost, 3)) + ' at the posterior means' + (detPost != null && detPost > 0 ? ', so the estimated model has a unique stable equilibrium' : detPost != null ? ', so the estimated model is indeterminate' : '') + '; the Taylor principle ' + (phi ? (taylorOk ? 'holds with more than 95% posterior probability (95% interval for φπ: ' + nf(phi.post.ci95[0], 2) + '–' + nf(phi.post.ci95[1], 2) + ').' : 'is not established with 95% posterior probability.') : 'cannot be checked.'),
+    val, 'Suitability: the DSGE is a policy-analysis model (scenarios, transmission, the inflation–output trade-off), not the site’s forecasting tool; for forecasts, the Forecast comparison tab ranks ten data-driven models by back-tested accuracy, and the AD-AS simulator gives five-year scenario paths with these estimated parameters.'].filter(Boolean);
+  s.insertAdjacentHTML('beforeend', '<div class="card"><h3>What the checks show</h3><ul class="ol-list">' + pts.map(p => '<li>' + esc(p) + '</li>').join('') + '</ul></div>');
 }
 
 return { extraPlan, countryFill, initCL, routeCL, initSecurity, worldGrowth2, initPlans, renderAds, initBD, initLab, routeBD, addSrcAfter, srcFor, addLabels, gateBlocks, ctlHTML, syncCtl, rerender, renderGeo, initLearnX, initFAQ };

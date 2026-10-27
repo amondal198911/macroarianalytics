@@ -152,7 +152,7 @@ const COURSE = [
       ['1 API gateway', 'FastAPI behind Cloudflare Access (Google sign-in, as this site already uses); per-member rate limit; streamed answers', 'Abuse and cost spikes'],
       ['2 Input guard', 'Block instructions hidden in questions; redact phone numbers, NID numbers and e-mail addresses', 'Prompt injection, data leaks'],
       ['3 Orchestrator', 'State machine: understand → retrieve → call data tools → draft → check; human approval before publishing a note', 'Runaway loops, unreviewed publication'],
-      ['4 Context builder', 'Hybrid search over 6,910 catalogue series and model notes; last turns of the chat; 6,000-token budget', 'Irrelevant or overflowing context'],
+      ['4 Context builder', 'Hybrid search over 6,723 catalogue series and model notes; last turns of the chat; 6,000-token budget', 'Irrelevant or overflowing context'],
       ['5 Model router', 'Small model for “latest inflation?”, strong model for “explain the VECM result”; cached system prompt', 'Paying strong-model prices for easy questions'],
       ['6 Output guard', 'JSON schema; every number must match a tool result; cite series codes and months', 'Hallucinated numbers'],
       ['Observability', 'Trace every step; Ragas faithfulness; LLM-as-judge on a weekly sample; evals in CI; cost per request', 'Silent quality decay'],
@@ -244,7 +244,7 @@ const COURSE = [
       ['7', 'Observability and evals in CI', '6, 8', 'Every request traced; evals run on each push'],
       ['8', 'Model engineering report: fine-tuning data plan and serving plan', '9, 10', 'Memory and cost estimates for the chosen model']]) +
     '<h3>Assessment</h3>' + tbl(['Criterion', 'Weight'], [['Correctness of data and numbers', '20%'], ['Code quality and tests', '15%'], ['API design and security', '15%'], ['Retrieval quality', '15%'], ['Agent accuracy on the evaluation set', '15%'], ['Documentation', '10%'], ['Presentation and trade-off reasoning', '10%']]) +
-    '<p>The labs in modules 7 to 10 are the capstone’s working prototype: the search over 6,910 series, the agent with its trace and evaluation set, the fine-tuning dataset and the serving calculator all run on the site’s real data.</p>',
+    '<p>The labs in modules 7 to 10 are the capstone’s working prototype: the search over 6,723 series, the agent with its trace and evaluation set, the fine-tuning dataset and the serving calculator all run on the site’s real data.</p>',
   ex: () => '', mis: ['Starting with the model instead of the data and the evaluation set.', 'Testing only the happy path: write the refusal and ambiguous cases first.', 'Hiding failures in the presentation: examiners reward honest trade-offs.'],
   ex3: [['Beginner', 'Write ten evaluation questions with exact expected answers from the site.', 'Use the lab’s evaluation set as a model: one question per series, period and operation, plus one refusal.'],
         ['Intermediate', 'Define the JSON schema of the Copilot’s answer.', '{"answer": str, "numbers": [{"value": float, "series": str, "period": str}], "sources": [str], "confidence": "high|medium|low"}'],
@@ -403,6 +403,69 @@ const DEPTH_HTML = tbl(['Tier', 'Where in each module', 'What you can do at the 
   ['Doctoral (PhD)', '“Doctoral depth” section; fourth exercise; quick-check questions 4–5; research papers', 'Derive the theory, quantify trade-offs, and design publishable research']]) +
   '<p>The capstone has an MSc track (a working, evaluated system) and a PhD track (a research study with a benchmark, hypotheses and statistical tests). Doctoral sections add about three hours of study per module.</p>';
 
+/* -------------------- v3.16: interactive SQL lab and the capstone starter kit -------------------- */
+let SQLDB = null;
+const SQLJS = 'https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/';
+async function sqlInit(status) {
+  if (SQLDB) return SQLDB;
+  status('Loading the SQL engine (about 0.7 MB, once)…');
+  await new Promise((res, rej) => { if (window.initSqlJs) return res(); const sc = document.createElement('script'); sc.src = SQLJS + 'sql-wasm.js'; sc.onload = res; sc.onerror = () => rej(new Error('Could not load the SQL engine. Check your connection and try again.')); document.head.append(sc); });
+  const SQL = await window.initSqlJs({ locateFile: f => SQLJS + f }), db = new SQL.Database(), Q = D.sql;
+  db.run('CREATE TABLE macro (' + Q.macro.cols.map((c, j) => c + (j < 2 ? ' TEXT' : ' REAL')).join(', ') + ')');
+  let st = db.prepare('INSERT INTO macro VALUES (' + Q.macro.cols.map(() => '?').join(',') + ')'); Q.macro.rows.forEach(r => st.run(r)); st.free();
+  db.run('CREATE TABLE rates (month TEXT, call REAL)'); st = db.prepare('INSERT INTO rates VALUES (?, ?)'); Q.rates.forEach(r => st.run(r)); st.free();
+  db.run('CREATE TABLE series (key TEXT, month TEXT, value REAL)'); st = db.prepare('INSERT INTO series VALUES (?, ?, ?)'); db.run('BEGIN'); Q.series.forEach(r => st.run(r)); db.run('COMMIT'); st.free();
+  SQLDB = db; return db;
+}
+function labSql(host) {
+  const EX = [['Filter', 'SELECT month, inflation FROM macro WHERE inflation > 9;'], ['Sort', 'SELECT month, remit FROM macro ORDER BY remit DESC LIMIT 5;'], ['Group (complete years)', 'SELECT fy, ROUND(AVG(inflation), 2) AS avg_inflation, ROUND(SUM(remit), 1) AS total_remit, COUNT(remit) AS months\nFROM macro\nGROUP BY fy\nHAVING COUNT(remit) = 12;'], ['Missing values', 'SELECT SUM(iip IS NULL) AS iip_missing, SUM(remit IS NULL) AS remit_missing, SUM(xr IS NULL) AS xr_missing FROM macro;'], ['Calculated column', 'SELECT month, remit, xr, ROUND(remit * xr / 10, 1) AS remit_tk_crore FROM macro;'], ['Left join', 'SELECT m.month, m.inflation, r.call\nFROM macro m LEFT JOIN rates r ON m.month = r.month;'], ['Window function', 'SELECT fy, month, remit, RANK() OVER (PARTITION BY fy ORDER BY remit DESC) AS rank_in_fy\nFROM macro;'], ['Long table', 'SELECT key, COUNT(*) AS months, MIN(month) AS first, MAX(month) AS last\nFROM series GROUP BY key;'], ['Self-join', "SELECT a.month, a.value AS inflation, b.value AS call_rate\nFROM series a LEFT JOIN series b ON b.key = 'call' AND b.month = a.month\nWHERE a.key = 'infl'\nORDER BY a.month DESC LIMIT 12;"]];
+  host.innerHTML = '<div class="lab"><h3>Lab: run SQL on the site’s data in your browser</h3><p class="meta">Tables: <code>macro</code> (the reference table above: month, fy, inflation, food, xr, remit, iip), <code>rates</code> (month, call) and <code>series</code> (key, month, value: 12 indicators since 2010). The engine is SQLite compiled to WebAssembly (sql.js 1.10.3), loaded only when you press Run; nothing leaves your browser.</p><textarea id="sqlq" rows="6" spellcheck="false" aria-label="SQL query" style="width:100%;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--code);color:var(--ink)">' + esc(EX[2][1]) + '</textarea><div class="row"><button type="button" id="sqlgo">Run</button><span id="sqls" class="meta"></span></div><div class="row chips">' + EX.map(([l, q]) => '<button type="button" class="ghost" data-q="' + esc(q) + '">' + esc(l) + '</button>').join('') + '</div><div id="sqlr"></div></div>';
+  const status = t => { $('#sqls').textContent = t; };
+  const run = async () => {
+    const q = $('#sqlq').value, out = $('#sqlr');
+    try {
+      const db = await sqlInit(status), t0 = performance.now(), res = db.exec(q), ms = performance.now() - t0;
+      if (!res.length) { out.innerHTML = '<p class="meta">Query ran; no rows returned.</p>'; status(' ' + nf(ms, 1) + ' ms'); return; }
+      const r = res[res.length - 1], rows = r.values.slice(0, 200);
+      out.innerHTML = tbl(r.columns, rows.map(x => x.map(v => v == null ? 'NULL' : v)), r.columns.map((c, j) => j).filter(j => rows.some(x => typeof x[j] === 'number'))) + (r.values.length > 200 ? '<p class="meta">Showing the first 200 of ' + r.values.length + ' rows.</p>' : '');
+      status(' ' + r.values.length + ' row' + (r.values.length === 1 ? '' : 's') + ' in ' + nf(ms, 1) + ' ms');
+    } catch (e) { out.innerHTML = '<div class="box warn"><b>Error.</b> ' + esc(e.message || String(e)) + '</div>'; status(''); }
+  };
+  $('#sqlgo').onclick = run;
+  host.querySelector('.chips').onclick = e => { const b = e.target.closest('[data-q]'); if (b) { $('#sqlq').value = b.dataset.q; run(); } };
+}
+function zipStore(files) {
+  const enc = new TextEncoder(), T = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; T[n] = c >>> 0; }
+  const crc = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = T[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const parts = [], central = []; let off = 0;
+  files.forEach(([name, text]) => {
+    const nb = enc.encode(name), db = enc.encode(text), c = crc(db), h = new DataView(new ArrayBuffer(30)), cd = new DataView(new ArrayBuffer(46));
+    [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [8, 0, 2], [10, 0, 2], [12, 0x21, 2], [14, c, 4], [18, db.length, 4], [22, db.length, 4], [26, nb.length, 2], [28, 0, 2]].forEach(([o_, v, s_]) => s_ === 4 ? h.setUint32(o_, v, true) : h.setUint16(o_, v, true));
+    [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [10, 0, 2], [12, 0, 2], [14, 0x21, 2], [16, c, 4], [20, db.length, 4], [24, db.length, 4], [28, nb.length, 2], [30, 0, 2], [32, 0, 2], [34, 0, 2], [36, 0, 2], [38, 0, 4], [42, off, 4]].forEach(([o_, v, s_]) => s_ === 4 ? cd.setUint32(o_, v, true) : cd.setUint16(o_, v, true));
+    parts.push(h, nb, db); central.push(cd, nb); off += 30 + nb.length + db.length;
+  });
+  const size = central.reduce((s_, x) => s_ + x.byteLength, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, size, true); e.setUint32(16, off, true);
+  return new Blob(parts.concat(central, [e]), { type: 'application/zip' });
+}
+const csvCell = v => { const s_ = v == null ? '' : String(v); return /[",\n]/.test(s_) ? '"' + s_.replace(/"/g, '""') + '"' : s_; };
+function labKit(host) {
+  const K = D.kit; if (!K) { host.innerHTML = '<p>The starter kit is not in this build.</p>'; return; }
+  const files = Object.keys(K.files).concat(['data/catalogue.csv']).sort();
+  host.innerHTML = '<div class="lab"><h3>Download the capstone starter kit</h3><p>Working, tested code for every milestone, built on this site’s data: a SQLite database, the six core queries and a window function, a FastAPI service with a signed webhook, Docker files, hybrid search over the 6,723-series catalogue, a tool-using agent (rule-based by default, Claude with tools when you add an API key), an evaluation set that runs in CI, fine-tuning data preparation and a test suite. The zip is assembled in your browser from the data on this page.</p><div class="row"><button type="button" id="kitdl">Download macro-copilot-starter.zip</button><span id="kits" class="meta"></span></div>' +
+    code('Quick start', 'python -m venv .venv && source .venv/bin/activate\npip install -r requirements.txt\npython build_db.py\npython agent/agent.py "What is the latest headline inflation?"\npython evals/run_evals.py\npytest -q\nuvicorn app.api:app --reload') +
+    '<details><summary>' + files.length + ' files</summary>' + ul(files.map(f => '<code>' + esc(f) + '</code>')) + '</details></div>';
+  $('#kitdl').onclick = () => {
+    const cat = ['code,label,table,publication,unit,frequency'].concat(D.rag.docs.map(d => d.slice(0, 6).map(csvCell).join(','))).join('\n') + '\n';
+    const all = Object.entries(K.files).map(([n_, t_]) => ['macro-copilot/' + n_, t_]).concat([['macro-copilot/data/catalogue.csv', cat]]).sort((a, b) => a[0] < b[0] ? -1 : 1);
+    const blob = zipStore(all), a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'macro-copilot-starter.zip'; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    $('#kits').textContent = ' ' + all.length + ' files, ' + nf(blob.size / 1024, 0) + ' KB';
+  };
+}
+COURSE.find(m => m.id === 'm2').lab = 'sql';
+COURSE.find(m => m.id === 'm10').lab = 'kit';
+
 /* -------------------- progress (stored only in this browser) -------------------- */
 let PROG = {};
 try { PROG = JSON.parse(localStorage.getItem('learn-progress') || '{}'); } catch (e) { PROG = {}; }
@@ -422,7 +485,7 @@ function overview() {
   return '<h1>Course overview</h1><p class="meta">Four levels · ' + COURSE.length + ' modules · about ' + COURSE.reduce((s, m) => s + (parseInt(m.time, 10) || 0), 0) + ' hours plus the doctoral track · from beginner to doctoral (PhD) depth</p>' +
     '<p>This course teaches the full modern data and AI stack the way a graduate course should: every idea is introduced intuitively, made precise, applied to real Bangladesh data, practised at three levels of difficulty, and checked. Nothing is a toy: the tables, search results and agent answers on these pages are computed from the same data that powers the monitors.</p>' +
     '<h2>How to study each module</h2>' + ul(['Read the outcomes, so you know what you must be able to do.', 'Read the notes from beginner to advanced; stop where it becomes new and work forward from there.', 'Run the worked example yourself and compare your output with the page.', 'Do the three exercises before opening the solutions.', 'Take the quick check; a module is ticked when all answers are right.', 'Use the lab, then try to break it: that is how understanding is tested.']) +
-    '<h2>The depth ladder</h2>' + DEPTH_HTML + '<h2>The path</h2>' + tbl(['#', 'Module', 'Level', 'Hours', 'Lab on real data'], COURSE.map((m, j) => [j + 1, m.title, LV[m.lv], m.time, { rag: 'Hybrid search over 6,910 series', agent: 'Agent with trace and evaluation set', ft: 'Fine-tuning dataset builder and LoRA calculator', inf: 'GPU memory calculator' }[m.lab] || (m.id === 'm2' ? 'Six tasks, checked in pandas and SQL' : m.id === 'm1b' ? 'Forecasting experiment on inflation' : '–')])) +
+    '<h2>The depth ladder</h2>' + DEPTH_HTML + '<h2>The path</h2>' + tbl(['#', 'Module', 'Level', 'Hours', 'Lab on real data'], COURSE.map((m, j) => [j + 1, m.title, LV[m.lv], m.time, { rag: 'Hybrid search over 6,723 series', agent: 'Agent with trace and evaluation set', ft: 'Fine-tuning dataset builder and LoRA calculator', inf: 'GPU memory calculator', sql: 'Six tasks checked in pandas and SQL, plus a live SQL lab', kit: 'Downloadable, tested starter kit' }[m.lab] || (m.id === 'm2' ? 'Six tasks, checked in pandas and SQL' : m.id === 'm1b' ? 'Forecasting experiment on inflation' : '–')])) +
     '<h2>Assessment</h2>' + tbl(['Component', 'Weight'], [['Quick checks (10 modules)', '20%'], ['Exercises at three levels', '30%'], ['Capstone project', '50%']]) +
     '<h2>Prerequisites</h2><p>None for Level 1. From Level 3, basic statistics and comfort with Python help. Labs run in any modern browser; the server parts (API, Docker, fine-tuning) need your own computer or a cloud account, listed in the due list.</p>';
 }
@@ -431,8 +494,8 @@ function due() {
     tbl(['#', 'Item', 'Why not live now', 'What it needs', 'Who', 'Priority'], [
       [1, 'LLM-written answers in the Copilot (replace the rule-based core)', 'Needs a language-model API and a secret key kept off the static page', 'An Anthropic or other LLM API account and key; a Cloudflare Worker to hold the key; a monthly spending cap', 'Owner creates the account; Claude writes the Worker', 'High'],
       [2, 'Live API and webhook endpoints (/series, /hooks/...)', 'GitHub Pages serves files only; it cannot run Python', 'Cloudflare Workers (free tier) or a small server', 'Owner signs up; Claude ports the code', 'High'],
-      [3, 'Capstone starter kit download (tested code)', 'Not yet packaged as a downloadable file on the site', 'One more file uploaded to GitHub', 'Claude prepares; owner uploads', 'High'],
-      [4, 'Interactive SQL in the browser', 'Needs SQLite compiled to WebAssembly (about 1 MB)', 'Add sql.js and the database file', 'Claude', 'Medium'],
+      [3, 'Capstone starter kit download (tested code)', 'Done in version 3.16: download it in the capstone module', '–', 'Done', 'Done'],
+      [4, 'Interactive SQL in the browser', 'Done in version 3.16: SQL lab in module 3', '–', 'Done', 'Done'],
       [5, 'Neural embeddings for search (instead of LSA)', 'Embedding models need an API or a larger build step', 'An embeddings API key, or a heavier GitHub Actions build', 'Owner decides; Claude implements', 'Medium'],
       [6, 'PostgreSQL with pgvector and row-level security', 'Needs a hosted database', 'Supabase or Neon free tier', 'Owner signs up', 'Medium'],
       [7, 'Running Docker images in the cloud', 'Needs a container host', 'Fly.io, Render or Google Cloud Run; small monthly cost', 'Owner', 'Medium'],
@@ -625,7 +688,7 @@ function show() {
   toc(j >= 0 ? id : (id === 'due' ? 'due' : 'overview'));
   if (j >= 0) {
     const m = COURSE[j]; art.innerHTML = moduleHTML(m, j); wireQuiz(m);
-    const host = $('#lab'); if (host) { try { ({ rag: labRag, agent: labAgent, ft: labFt, inf: labInf })[m.lab](host); } catch (e) { host.innerHTML = '<p>The lab could not start: ' + esc(e.message) + '</p>'; console.error(e); } }
+    const host = $('#lab'); if (host) { try { ({ rag: labRag, agent: labAgent, ft: labFt, inf: labInf, sql: labSql, kit: labKit })[m.lab](host); } catch (e) { host.innerHTML = '<p>The lab could not start: ' + esc(e.message) + '</p>'; console.error(e); } }
   } else art.innerHTML = id === 'due' ? due() : overview();
   art.querySelectorAll('button.copy').forEach(b => b.onclick = () => { const t = b.closest('.code').querySelector('code').textContent; (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => { b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy', 1200); }, () => {}); });
   if (window.scrollY > 200) window.scrollTo(0, 0);

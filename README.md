@@ -141,3 +141,55 @@ Firestore rules:
   scikit-learn, which is not installed there, so the course page would not have been built online.
 - Note: bd_build.py and models_build.py are not run by the GitHub workflow; model results are estimated locally and
   shipped in bd_models.json.
+
+## Version 3.14 (27 October 2026)
+- Forecast lab, new "Forecast comparison" tab: five-year forecasts (60 months, 20 quarters, 5 fiscal and calendar years)
+  for 11 monthly series plus quarterly and fiscal-year GDP growth, from up to ten models: random walk with drift, AR (BIC),
+  ARIMA (site specification), ETS with damped trend, Theta, historical mean, VAR, VECM, SARIMAX and an accuracy-weighted
+  ensemble. Custom options: variable, frequency, horizon, history, models on one chart, 80%/95% range for any model.
+- Validation: rolling-origin back-tests at 24 past dates (RMSE, MAE, bias, 80% coverage, Diebold-Mariano with HAC
+  variance, failed-fit rate), most accurate model by horizon and a suitability verdict.
+- Failure tests (Ljung-Box, ARCH-LM, Jarque-Bera, OLS-CUSUM, Chow at April 2020 and July 2022, convergence),
+  robustness (pre-2020 parameters, neighbouring ARIMA orders), heterogeneity (sub-period statistics, Levene and
+  Kruskal-Wallis tests), Monte Carlo simulation (1,000 paths, fiscal-year quantiles), and step-by-step derivations.
+- Monitors (/inflation/, /monitor/): "Published data" badges removed; every chart and table card shows its source at
+  the bottom left; sources shown by default (the Sources button still hides them).
+- models_build.py: new forecast engine (section F), results in bd_models.json under models2.fc5.
+
+## Version 3.15 (27 October 2026)
+- Forecast lab, new "Nowcasting" tab: publication calendar (ragged edge), a seven-level method ladder (naive, own-lag
+  autoregression, single-indicator bridge, all combinations of 1-3 faster-published indicators with pooling and top-5
+  selection, factor-augmented bridge, mixed-frequency dynamic factor model with the Kalman filter and U-MIDAS, ridge and
+  lasso) for 18 monthly indicators and quarterly GDP, validated in pseudo-real time; current nowcasts by method; best
+  combinations; dynamic-factor loadings; a structured literature review (about 30 references).
+- Forecast lab, new "Reality check" tab: choose a variable, a forecast origin (default December 2024, so 2025-2026 are
+  tested), a training window and an evaluation length; models are estimated in the browser on that window only and
+  compared with actual data: bias, mean % error, MAE, MAPE, sMAPE, RMSE, Theil's U, direction accuracy, 80%/95% coverage,
+  largest miss, month-by-month deviations with percentages, annual (calendar and fiscal year) deviations, robustness across
+  other windows and origins, and a plain-language summary.
+- models_build.py: sections G (nowcasting) and H (ARIMA forecasts from every month since January 2023).
+
+## Version 3.16 (27 October 2026)
+Audit fixes (requests not yet 100% implemented) and the planned 3.16 work:
+- Model library complete (12 models): new theoretical models with interactive simulators, derivations, calibration to
+  Bangladesh and checks: Solow-Swan (growth accounting, steady state, convergence), Ramsey-Cass-Koopmans (saddle path by
+  shooting, phase diagram, optimal saving, real-rate gap), dynamic AD-AS (site DSGE posterior, 20-quarter paths,
+  Taylor-principle failure test, validation against the DSGE), IS-LM-BP (fixed/floating, capital mobility, Mundell-Fleming
+  propositions reproduced).
+- New "Monetary transmission mechanism" page: five-variable VAR with 90% Monte Carlo bands, Granger tests along each link,
+  lending-rate and exchange-rate pass-through, variance decomposition of inflation.
+- Model checks for every estimated Model library model (Keynesian, VECM, factor model, SARIMAX, CGE): failure tests,
+  robustness, heterogeneity, simulation (pairs bootstrap, Monte Carlo) and validation.
+- Five-year fiscal-year forecasts on the Projections, ARIMA and SVAR tabs and the VECM, SARIMAX and factor-model pages;
+  DSGE tab points to its 20-quarter scenario paths.
+- Course: interactive SQL lab (sql.js 1.10.3 from jsDelivr, loaded on demand) in module 3; downloadable, tested capstone
+  starter kit (24 files, zipped in the browser) in the capstone module; due list items 3 and 4 done.
+- models_build.py: sections I (model checks), J (monetary transmission), K (theory calibration).
+
+## Version 3.17 (27 October 2026): quality audit
+- Full-site sweep: every main view, every Forecast lab tab, all 12 Model library pages, every monitor page and every
+  course module checked for script errors, undrawn charts and broken values (NaN, undefined): none remaining.
+- DSGE tab: new checks section: identification and prior sensitivity (posterior vs prior spread), MCMC convergence
+  summary, determinacy at the calibration and at the posterior means, Taylor principle, heterogeneity against the
+  textbook calibration, validation against the site's VAR, and a suitability verdict.
+- Course: catalogue size corrected to 6,723 series in two places.
